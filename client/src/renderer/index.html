@@ -403,6 +403,20 @@
           Тоглоом нэмэх
         </button>
       </div>
+
+      <div class="card settings-card mt-8">
+        <h3>🌐 ZeroTier Сүлжээ</h3>
+        <p class="hint">
+          WC3 LAN тоглоом ажиллахын тулд бүх тоглогчид нэг ZeroTier сүлжээнд байх шаардлагатай.<br>
+          <a href="https://my.zerotier.com" style="color:var(--accent)">my.zerotier.com</a>-д нэвтэрч Network үүсгэж, 16 тэмдэгтийн ID-г доор оруулна уу.
+        </p>
+        <div class="form-row" style="display:flex;gap:8px;align-items:center;margin-top:8px">
+          <input type="text" id="input-zerotier-id" class="input" maxlength="16"
+            placeholder="e.g. 8056c2e21c000001" style="font-family:monospace;letter-spacing:1px;flex:1" />
+          <button type="button" id="btn-save-zerotier" class="btn btn-primary">Хадгалах</button>
+        </div>
+        <p id="zerotier-save-msg" class="hint" style="margin-top:6px;color:var(--success,#4caf50)"></p>
+      </div>
     </div>
   </div>
 
@@ -435,6 +449,9 @@
         <div class="card">
           <h3>🎮 Тоглоом</h3>
           <p class="hint" id="room-info-text"></p>
+          <div id="zt-info" class="hint" style="display:none;margin-bottom:8px;font-size:0.78rem">
+            🌐 ZeroTier: <code id="zt-network-id" style="font-size:0.78rem;user-select:all"></code>
+          </div>
           <button type="button" id="btn-launch-wc3" class="btn btn-primary btn-block btn-with-icon">
             <svg class="btn-icon-svg"><use href="#ico-play"/></svg>
             <span>Тоглоом эхлүүлэх</span>

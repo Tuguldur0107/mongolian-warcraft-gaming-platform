@@ -307,10 +307,15 @@ ipcMain.handle('rooms:create', async (event, { name, max_players, game_type, pas
   try {
     room = await apiService.createRoom({ name, max_players, game_type, password });
   } catch (err) { throw apiError(err); }
-  // ZeroTier — суугаагүй байж болно, алдаа гарвал алгасана
+  // ZeroTier — settings-д тохируулсан network ID ашиглана
   try {
-    const networkId = await zerotierService.createNetwork(room.id);
-    if (networkId) await apiService.updateRoomNetwork(room.id, networkId).catch(() => {});
+    const s = migrateSettings(readSettings());
+    const networkId = s.zerotierNetworkId?.trim();
+    if (networkId) {
+      await zerotierService.joinNetwork(networkId);
+      await apiService.updateRoomNetwork(room.id, networkId).catch(() => {});
+      room.zerotier_network_id = networkId;
+    }
   } catch {}
   try { replayService.startWatcher(room.id); } catch {}
   return room;
@@ -433,6 +438,12 @@ ipcMain.handle('settings:selectGameExe', async () => {
   const filePath = result.filePaths[0];
   const suggestedName = path.basename(filePath, path.extname(filePath));
   return { path: filePath, suggestedName };
+});
+
+// ZeroTier Network ID хадгалах
+ipcMain.handle('settings:setZerotierNetwork', (_, networkId) => {
+  writeSettings({ zerotierNetworkId: networkId || '' });
+  return true;
 });
 
 // Тоглоом нэмэх

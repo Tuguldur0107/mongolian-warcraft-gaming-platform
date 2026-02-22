@@ -38,10 +38,11 @@ contextBridge.exposeInMainWorld('api', {
   onRoomKicked: (cb) => ipcRenderer.on('room:kicked', (_, d) => cb(d)),
 
   // Тохируулга
-  getSettings:    () => ipcRenderer.invoke('settings:get'),
-  selectGameExe:  () => ipcRenderer.invoke('settings:selectGameExe'),
-  addGame:        (data) => ipcRenderer.invoke('settings:addGame', data),
-  removeGame:     (id)   => ipcRenderer.invoke('settings:removeGame', id),
+  getSettings:           () => ipcRenderer.invoke('settings:get'),
+  selectGameExe:         () => ipcRenderer.invoke('settings:selectGameExe'),
+  addGame:               (data) => ipcRenderer.invoke('settings:addGame', data),
+  removeGame:            (id)   => ipcRenderer.invoke('settings:removeGame', id),
+  setZerotierNetwork:    (id)   => ipcRenderer.invoke('settings:setZerotierNetwork', id),
 
   // Тоглоом эхлүүлэх
   launchGame: (gameType) => ipcRenderer.invoke('game:launch', gameType),
