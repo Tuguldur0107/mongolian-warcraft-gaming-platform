@@ -276,6 +276,8 @@ document.querySelectorAll('.auth-tab').forEach(btn => {
 async function init() {
   // Өрөөний цонх горим: URL-аас params унших
   if (isRoomMode()) {
+    // Нэвтрэх хуудас харагдахаас урьдчилан сэргийлэх
+    document.getElementById('page-login').classList.remove('active');
     const user = await window.api.getUser();
     if (!user) { window.close(); return; }
     currentUser = user;
@@ -287,8 +289,10 @@ async function init() {
     const gameType= p.get('gameType') || 'DotA';
     const isHost  = p.get('isHost') === '1';
     const hostId  = p.get('hostId') || '';
+    const status  = p.get('status') || '';
+    const ztNetId = p.get('ztNetId') || '';
 
-    _enterRoomUI(id, name, gameType, isHost, hostId);
+    _enterRoomUI(id, name, gameType, isHost, hostId, status, ztNetId);
 
     // Цонх хаагдахад өрөөнөөс гарах
     window.addEventListener('beforeunload', () => {
@@ -624,7 +628,8 @@ function roomCard(r, inProgress) {
 }
 
 function rejoinMyRoom(id, name, gameType, hostId, isHost) {
-  enterRoom(id, name, gameType, isHost, hostId);
+  const cached = roomsCache[id] || {};
+  enterRoom(id, name, gameType, isHost, hostId, cached.status, cached.zerotier_network_id);
 }
 
 async function joinPlayingRoom(id, name, gameType, hostId) {
@@ -667,7 +672,7 @@ document.getElementById('btn-quickmatch').onclick = async () => {
     const result = await window.api.quickMatch(gameType);
     const room = result.room;
     const isHost = !result.joined && String(room.host_id) === String(currentUser?.id);
-    enterRoom(String(room.id), room.name, room.game_type, isHost, String(room.host_id));
+    enterRoom(String(room.id), room.name, room.game_type, isHost, String(room.host_id), room.status, room.zerotier_network_id);
   } catch (err) {
     showToast(`Хурдан тоглолт: ${err.message}`, 'error');
   } finally {
@@ -697,7 +702,7 @@ document.getElementById('btn-submit-room').onclick = async () => {
   if (!name)             { showToast('Өрөөний нэр оруулна уу', 'warning'); return; }
   if (!game_type)        { showToast('Тоглоом сонгоно уу (Тохируулга таб-д тоглоом нэмнэ үү)', 'warning'); return; }
   if (hasPass && !password) { showToast('Нууц үг оруулна уу', 'warning'); return; }
-  try {
+  async function _doCreateRoom() {
     const room = await window.api.createRoom({ name, max_players, game_type, password });
     document.getElementById('create-room-form').style.display = 'none';
     document.getElementById('room-name').value = '';
@@ -705,8 +710,25 @@ document.getElementById('btn-submit-room').onclick = async () => {
     document.getElementById('room-password').value = '';
     document.getElementById('room-password').style.display = 'none';
     showToast(`"${room.name}" өрөө үүслээ`, 'success');
-    enterRoom(room.id, room.name, room.game_type, true);
-  } catch (err) { showToast(`Алдаа: ${err.message}`, 'error'); }
+    enterRoom(room.id, room.name, room.game_type, true, null, room.status, room.zerotier_network_id);
+  }
+  try {
+    await _doCreateRoom();
+  } catch (err) {
+    if (err.message?.includes('аль хэдийн')) {
+      // Хуучин өрөө DB-д үлдсэн — хэрэглэгчээс хаах зөвшөөрөл авах
+      const myRoom = await window.api.getMyRoom().catch(() => null);
+      const oldName = myRoom?.name || 'хуучин өрөө';
+      const ok = await showConfirm('Хуучин өрөө байна', `"${oldName}" гэсэн хуучин өрөөтэй байна. Хаагаад шинэ өрөө үүсгэх үү?`);
+      if (!ok) return;
+      try {
+        if (myRoom) await window.api.closeRoom(myRoom.id);
+        await _doCreateRoom();
+      } catch (err2) { showToast(`Алдаа: ${err2.message}`, 'error'); }
+    } else {
+      showToast(`Алдаа: ${err.message}`, 'error');
+    }
+  }
 };
 
 // ── Өрөөнд нэгдэх ────────────────────────────────────────
@@ -760,13 +782,13 @@ document.getElementById('join-password').addEventListener('keydown', e => {
 
 // ── Өрөөнд орох ──────────────────────────────────────────
 // Үндсэн цонхноос дуудагдана → шинэ цонх нээнэ
-function enterRoom(id, name, gameType, isHost, hostId) {
+function enterRoom(id, name, gameType, isHost, hostId, status, ztNetId) {
   const resolvedHostId = hostId ? String(hostId) : String(currentUser?.id);
-  window.api.openRoomWindow({ id, name, gameType, isHost, hostId: resolvedHostId });
+  window.api.openRoomWindow({ id, name, gameType, isHost, hostId: resolvedHostId, status: status || '', zerotierNetworkId: ztNetId || '' });
 }
 
 // Өрөөний цонхны UI тохируулга (room цонхноос шууд дуудагдана)
-function _enterRoomUI(id, name, gameType, isHost, hostId) {
+function _enterRoomUI(id, name, gameType, isHost, hostId, status, ztNetId) {
   currentRoom = { id, name, gameType, isHost, hostId: hostId || String(currentUser?.id) };
 
   document.getElementById('room-title').textContent = name;
@@ -782,7 +804,7 @@ function _enterRoomUI(id, name, gameType, isHost, hostId) {
   document.getElementById('btn-close-room').classList.remove('hidden');
 
   // Playing горимд орвол "Дахин нэвтрэх", үгүй бол анхны текст
-  if (room?.status === 'playing') {
+  if (status === 'playing') {
     setLaunchBtnRejoin();
   } else {
     resetLaunchBtn(isHost);
@@ -792,10 +814,9 @@ function _enterRoomUI(id, name, gameType, isHost, hostId) {
 
   // ZeroTier Network ID — өрөөний мэдээллээс харуулах
   const ztDiv = document.getElementById('zt-info');
-  const ztId  = room?.zerotier_network_id;
   if (ztDiv) {
-    if (ztId) {
-      document.getElementById('zt-network-id').textContent = ztId;
+    if (ztNetId) {
+      document.getElementById('zt-network-id').textContent = ztNetId;
       ztDiv.style.display = '';
     } else {
       ztDiv.style.display = 'none';

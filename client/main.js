@@ -85,9 +85,32 @@ app.whenReady().then(() => {
   });
 });
 
-app.on('window-all-closed', () => {
+// Апп хаагдахаас өмнө өрөөг цэвэрлэх
+let _quitCleanupDone = false;
+app.on('before-quit', async (e) => {
+  if (_quitCleanupDone) return;
+  e.preventDefault();
+  _quitCleanupDone = true;
+  try {
+    const token = authService.getToken();
+    if (token) {
+      const myRoom = await apiService.getMyRoom();
+      const user   = authService.getUser();
+      if (myRoom) {
+        if (String(myRoom.host_id) === String(user?.id)) {
+          await apiService.closeRoom(myRoom.id);
+        } else {
+          await apiService.leaveRoom(myRoom.id);
+        }
+      }
+    }
+  } catch {}
   zerotierService.disconnect();
   replayService.stopWatcher();
+  app.quit();
+});
+
+app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
 
@@ -300,7 +323,24 @@ ipcMain.handle('update:check', async () => {
   }
 });
 
-ipcMain.handle('auth:logout', () => {
+ipcMain.handle('auth:logout', async () => {
+  // User-ийн өрөөг сервер дээр хаах/гарах
+  try {
+    const myRoom = await apiService.getMyRoom();
+    const user   = authService.getUser();
+    if (myRoom) {
+      if (String(myRoom.host_id) === String(user?.id)) {
+        await apiService.closeRoom(myRoom.id);
+      } else {
+        await apiService.leaveRoom(myRoom.id);
+      }
+    }
+  } catch {}
+  // Өрөөний цонхыг хаах
+  if (roomWindow && !roomWindow.isDestroyed()) {
+    roomWindow.destroy();
+    roomWindow = null;
+  }
   authService.clearToken();
   replayService.stopWatcher();
   zerotierService.disconnect();
@@ -502,12 +542,14 @@ ipcMain.handle('room:openWindow', (event, roomData) => {
   });
   roomWindow.loadFile('src/renderer/index.html', {
     query: {
-      mode: 'room',
-      roomId:   String(roomData.id),
+      mode:    'room',
+      roomId:  String(roomData.id),
       roomName: roomData.name,
       gameType: roomData.gameType,
-      isHost:   roomData.isHost ? '1' : '0',
-      hostId:   String(roomData.hostId || ''),
+      isHost:  roomData.isHost ? '1' : '0',
+      hostId:  String(roomData.hostId || ''),
+      status:  roomData.status || '',
+      ztNetId: roomData.zerotierNetworkId || '',
     },
   });
   roomWindow.on('closed', () => {

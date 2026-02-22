@@ -432,13 +432,30 @@ io.on('connection', (socket) => {
       disconnectTimers[userId] = {
         roomId: String(roomId),
         username,
-        timer: setTimeout(() => {
+        timer: setTimeout(async () => {
           delete disconnectTimers[userId];
           // Хугацаа дуусав — өрөөнөөс бүрмөсөн гарна
           if (roomMembers[roomId]) {
             roomMembers[roomId].delete(username);
             io.to(roomId).emit('room:user_left', { username });
             io.to(roomId).emit('room:members', [...roomMembers[roomId]]);
+          }
+          // Хост байсан бол DB-с өрөөг автоматаар устгах
+          if (dbForMigration && userId) {
+            try {
+              const rr = await dbForMigration.query(
+                `SELECT id, zerotier_network_id FROM rooms
+                 WHERE host_id=$1 AND id=$2 AND status IN ('waiting','playing')`,
+                [userId, roomId]
+              );
+              if (rr.rows[0]) {
+                await dbForMigration.query('DELETE FROM rooms WHERE id=$1', [roomId]);
+                io.to(roomId).emit('room:closed', { reason: 'Өрөөний эзэн гарлаа' });
+                delete roomMessages[roomId];
+                io.emit('rooms:updated');
+                console.log(`[AutoClose] Host timeout → room ${roomId} хаагдлаа`);
+              }
+            } catch (e) { console.error('[AutoClose]', e.message); }
           }
           console.log(`[Rejoin] ${username} grace period дууссан, өрөөнөөс гарлаа`);
         }, REJOIN_GRACE_MS),
