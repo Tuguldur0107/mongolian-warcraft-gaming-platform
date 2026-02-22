@@ -15,6 +15,63 @@ let memNextId  = 1;
 
 const router = express.Router();
 
+// ── Discord Invite Metadata Cache (5 min TTL) ──────────
+const inviteCache = new Map();
+const CACHE_TTL = 5 * 60 * 1000;
+
+function extractInviteCode(url) {
+  const m = url.match(/(?:discord\.gg|discord\.com\/invite)\/([\w-]+)/);
+  return m ? m[1] : null;
+}
+
+async function fetchInviteMeta(inviteCode) {
+  if (!inviteCode) return null;
+  const cached = inviteCache.get(`invite:${inviteCode}`);
+  if (cached && Date.now() - cached.ts < CACHE_TTL) return cached.data;
+  try {
+    const res = await fetch(
+      `https://discord.com/api/v10/invites/${encodeURIComponent(inviteCode)}?with_counts=true`
+    );
+    if (!res.ok) return null;
+    const json = await res.json();
+    const guild = json.guild;
+    if (!guild) return null;
+    const data = {
+      guild_id: guild.id,
+      guild_name: guild.name,
+      guild_icon: guild.icon,
+      member_count: json.approximate_member_count || 0,
+      presence_count: json.approximate_presence_count || 0,
+    };
+    inviteCache.set(`invite:${inviteCode}`, { data, ts: Date.now() });
+    return data;
+  } catch {
+    return null;
+  }
+}
+
+// Widget API fallback — guild_id-аар instant_invite авах оролдлого
+async function fetchWidgetInvite(guildId) {
+  if (!guildId) return null;
+  const cached = inviteCache.get(`widget:${guildId}`);
+  if (cached && Date.now() - cached.ts < CACHE_TTL) return cached.data;
+  try {
+    const res = await fetch(`https://discord.com/api/guilds/${encodeURIComponent(guildId)}/widget.json`);
+    if (!res.ok) return null;
+    const json = await res.json();
+    const data = {
+      guild_id: json.id,
+      guild_name: json.name,
+      instant_invite: json.instant_invite || null,
+      presence_count: json.presence_count || 0,
+    };
+    inviteCache.set(`widget:${guildId}`, { data, ts: Date.now() });
+    return data;
+  } catch {
+    return null;
+  }
+}
+
 // Discord урилгын холбоос шалгах
 function isValidDiscordInvite(url) {
   return /^https?:\/\/(discord\.gg|discord\.com\/invite)\/[\w-]+$/.test(url.trim());
@@ -38,19 +95,73 @@ function isValidDiscordInvite(url) {
     CREATE UNIQUE INDEX IF NOT EXISTS discord_servers_invite_url_unique
     ON discord_servers (LOWER(invite_url))
   `).catch(e => console.error('[Migration] discord_servers unique idx:', e.message));
+  // guild_id, guild_icon баганууд нэмэх
+  await db.query(`ALTER TABLE discord_servers ADD COLUMN IF NOT EXISTS guild_id VARCHAR(30)`)
+    .catch(e => console.error('[Migration] guild_id col:', e.message));
+  await db.query(`ALTER TABLE discord_servers ADD COLUMN IF NOT EXISTS guild_icon VARCHAR(100)`)
+    .catch(e => console.error('[Migration] guild_icon col:', e.message));
 })();
 
-// ── GET / — бүх серверийг авах ────────────────────────────
+// ── GET / — бүх серверийг авах (+ Discord metadata) ──────
 router.get('/', async (req, res) => {
+  let servers;
   if (await dbOk()) {
     try {
       const { rows } = await db.query(
         'SELECT * FROM discord_servers ORDER BY created_at DESC'
       );
-      return res.json(rows);
-    } catch (e) { console.error(e); }
+      servers = rows;
+    } catch (e) { console.error(e); servers = [...memServers].reverse(); }
+  } else {
+    servers = [...memServers].reverse();
   }
-  res.json([...memServers].reverse());
+
+  // Enrich with Discord invite metadata (parallel)
+  const useDb = await dbOk();
+  const enriched = await Promise.all(servers.map(async (s) => {
+    const code = extractInviteCode(s.invite_url);
+    let meta = await fetchInviteMeta(code);
+    let invite_expired = false;
+
+    if (!meta && s.guild_id) {
+      // Invite хүчингүй болсон — widget API-аар шинэ invite олох оролдлого
+      invite_expired = true;
+      const widget = await fetchWidgetInvite(s.guild_id);
+      if (widget?.instant_invite) {
+        // Шинэ invite олдлоо — DB-д шинэчлэх
+        if (useDb) {
+          db.query('UPDATE discord_servers SET invite_url=$1 WHERE id=$2', [widget.instant_invite, s.id]).catch(() => {});
+        } else {
+          const mem = memServers.find(m => m.id === s.id);
+          if (mem) mem.invite_url = widget.instant_invite;
+        }
+        s.invite_url = widget.instant_invite;
+        invite_expired = false;
+        // Шинэ invite code-оор metadata дахин татах
+        const newCode = extractInviteCode(widget.instant_invite);
+        meta = await fetchInviteMeta(newCode);
+      }
+      // Widget-аас icon, нэр авах боломжгүй ч DB-д хадгалсан мэдээлэл ашиглана
+      if (!meta && s.guild_id) {
+        meta = {
+          guild_id: s.guild_id,
+          guild_name: null,
+          guild_icon: s.guild_icon || null,
+          member_count: 0,
+          presence_count: 0,
+        };
+      }
+    }
+
+    // DB-д guild_id хадгалаагүй бөгөөд metadata-аас олдвол шинэчлэх
+    if (meta && !s.guild_id && meta.guild_id && useDb) {
+      db.query('UPDATE discord_servers SET guild_id=$1, guild_icon=$2 WHERE id=$3',
+        [meta.guild_id, meta.guild_icon, s.id]).catch(() => {});
+    }
+
+    return { ...s, discord_meta: meta || null, invite_expired };
+  }));
+  res.json(enriched);
 });
 
 // ── POST / — сервер нэмэх (нэвтэрсэн хэрэглэгч) ─────────
@@ -67,31 +178,39 @@ router.post('/', authMW, async (req, res) => {
   const safeName = name.trim().slice(0, 100);
   const safeUrl  = invite_url.trim();
 
+  // Invite metadata татаж guild_id авах
+  const inviteCode = extractInviteCode(safeUrl);
+  const meta = await fetchInviteMeta(inviteCode);
+  const guildId   = meta?.guild_id || null;
+  const guildIcon = meta?.guild_icon || null;
+
   if (await dbOk()) {
     try {
-      // Давхардсан холбоос шалгах
+      // Давхардсан холбоос шалгах (invite_url эсвэл guild_id-аар)
       const dup = await db.query(
-        'SELECT id FROM discord_servers WHERE LOWER(invite_url) = LOWER($1)',
-        [safeUrl]
+        `SELECT id FROM discord_servers WHERE LOWER(invite_url) = LOWER($1)${guildId ? ' OR guild_id = $2' : ''}`,
+        guildId ? [safeUrl, guildId] : [safeUrl]
       );
       if (dup.rows.length)
         return res.status(409).json({ error: 'Энэ Discord сервер аль хэдийн нэмэгдсэн байна' });
 
       const { rows } = await db.query(
-        `INSERT INTO discord_servers (name, invite_url, description, added_by_id, added_by_username)
-         VALUES ($1,$2,$3,$4,$5) RETURNING *`,
-        [safeName, safeUrl, desc, userId, username]
+        `INSERT INTO discord_servers (name, invite_url, description, added_by_id, added_by_username, guild_id, guild_icon)
+         VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+        [safeName, safeUrl, desc, userId, username, guildId, guildIcon]
       );
       return res.status(201).json(rows[0]);
     } catch (e) { console.error(e); }
   }
   // In-memory давхардал шалгах
-  if (memServers.some(s => s.invite_url.toLowerCase() === safeUrl.toLowerCase()))
+  if (memServers.some(s => s.invite_url.toLowerCase() === safeUrl.toLowerCase()
+    || (guildId && s.guild_id === guildId)))
     return res.status(409).json({ error: 'Энэ Discord сервер аль хэдийн нэмэгдсэн байна' });
 
   const entry = {
     id: memNextId++, name: safeName, invite_url: safeUrl,
     description: desc, added_by_id: userId, added_by_username: username,
+    guild_id: guildId, guild_icon: guildIcon,
     created_at: new Date().toISOString(),
   };
   memServers.push(entry);
@@ -134,6 +253,14 @@ router.patch('/:id', authMW, async (req, res) => {
       if (safeName !== undefined) { fields.push(`name=$${idx++}`);        vals.push(safeName); }
       if (safeUrl  !== undefined) { fields.push(`invite_url=$${idx++}`);  vals.push(safeUrl); }
       if (desc     !== undefined) { fields.push(`description=$${idx++}`); vals.push(desc); }
+      // Invite URL өөрчлөгдвөл guild_id/icon шинэчлэх
+      if (safeUrl) {
+        const newMeta = await fetchInviteMeta(extractInviteCode(safeUrl));
+        if (newMeta) {
+          fields.push(`guild_id=$${idx++}`);   vals.push(newMeta.guild_id);
+          fields.push(`guild_icon=$${idx++}`);  vals.push(newMeta.guild_icon);
+        }
+      }
       if (!fields.length) return res.status(400).json({ error: 'Өөрчлөх утга байхгүй' });
 
       vals.push(id);

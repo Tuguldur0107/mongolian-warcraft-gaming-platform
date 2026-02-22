@@ -416,6 +416,7 @@
         </div>
         <p id="update-check-msg" class="hint mt-8"></p>
       </div>
+    </div>
     <!-- Discord Servers tab -->
     <div id="tab-discord" class="tab">
       <h2>Discord Серверүүд</h2>
@@ -441,7 +442,6 @@
       <div id="discord-servers-list" class="rooms-grid">
         <p class="empty-text">Ачааллаж байна...</p>
       </div>
-    </div>
     </div>
   </div>
 
@@ -527,6 +527,24 @@
       <div class="chat-input-row dm-input-row">
         <input id="dm-input" type="text" placeholder="Хувийн мессеж..." class="input" />
         <button type="button" id="btn-dm-send" class="btn btn-primary btn-icon-only" title="Илгээх">
+          <svg class="btn-icon-svg"><use href="#ico-send"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- DM тусдаа цонх горим (full page) -->
+  <div id="dm-fullpage" class="page dm-fullpage">
+    <div class="dm-window-container">
+      <div class="dm-window-header">
+        <span class="dm-window-icon">💬</span>
+        <h3 id="dm-window-title">DM</h3>
+      </div>
+      <div id="dm-window-messages" class="dm-messages"></div>
+      <div id="dm-window-typing" class="typing-indicator" style="display:none"></div>
+      <div class="chat-input-row dm-input-row">
+        <input id="dm-window-input" type="text" placeholder="Мессеж бичих..." class="input" />
+        <button type="button" id="dm-window-send" class="btn btn-primary btn-icon-only" title="Илгээх">
           <svg class="btn-icon-svg"><use href="#ico-send"/></svg>
         </button>
       </div>

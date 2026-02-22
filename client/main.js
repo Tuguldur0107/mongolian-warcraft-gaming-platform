@@ -30,6 +30,7 @@ autoUpdater.on('error', (err) => {
 
 let mainWindow;
 let roomWindow = null;
+const dmWindows = new Map(); // userId -> BrowserWindow
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -346,6 +347,11 @@ ipcMain.handle('auth:logout', async () => {
     roomWindow.destroy();
     roomWindow = null;
   }
+  // DM цонхнуудыг хаах
+  for (const [, win] of dmWindows) {
+    if (!win.isDestroyed()) win.destroy();
+  }
+  dmWindows.clear();
   authService.clearToken();
   replayService.stopWatcher();
   zerotierService.disconnect();
@@ -562,6 +568,41 @@ ipcMain.handle('room:openWindow', (event, roomData) => {
     // Үндсэн цонхонд өрөөний жагсаалт шинэчлэх мэдэгдэл
     mainWindow?.webContents.send('room:window-closed');
   });
+});
+
+// ── DM тусдаа цонх нээх ────────────────────────────────────
+ipcMain.handle('dm:openWindow', (event, { userId, username }) => {
+  const uid = String(userId);
+  // Аль хэдийн нээлттэй бол focus
+  if (dmWindows.has(uid)) {
+    const existing = dmWindows.get(uid);
+    if (!existing.isDestroyed()) { existing.focus(); return; }
+    dmWindows.delete(uid);
+  }
+  const dmWin = new BrowserWindow({
+    width: 480, height: 560,
+    minWidth: 380, minHeight: 400,
+    title: `${username} — DM`,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+    backgroundColor: '#0d0d1a',
+  });
+  dmWin.loadFile('src/renderer/index.html', {
+    query: { mode: 'dm', dmUserId: uid, dmUsername: username },
+  });
+  dmWin.on('closed', () => {
+    dmWindows.delete(uid);
+    mainWindow?.webContents.send('dm:window-closed', { userId: uid });
+  });
+  dmWindows.set(uid, dmWin);
+});
+
+ipcMain.handle('dm:isWindowOpen', (_, userId) => {
+  const uid = String(userId);
+  return dmWindows.has(uid) && !dmWindows.get(uid).isDestroyed();
 });
 
 // ── Профайл зураг оруулах ──────────────────────────────────

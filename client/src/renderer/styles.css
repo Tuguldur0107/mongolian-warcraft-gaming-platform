@@ -817,9 +817,47 @@ body.light #icon-moon { display: block !important; }
 /* ── Discord Servers ─────────────────────────────────── */
 .discord-server-card { border-left: 3px solid #5865f2; }
 .discord-server-card:hover { border-color: #7289da; }
-.discord-icon { font-size: 1.2rem; }
+.discord-server-card .room-card-header { display: flex; align-items: center; gap: 10px; }
+.discord-guild-icon {
+  width: 42px; height: 42px; border-radius: 50%; object-fit: cover;
+  flex-shrink: 0; background: #36393f;
+}
+.discord-guild-icon-placeholder {
+  display: flex; align-items: center; justify-content: center;
+  width: 42px; height: 42px; border-radius: 50%;
+  background: #36393f; font-size: 1.3rem; flex-shrink: 0;
+}
+.discord-header-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.discord-header-text strong { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.discord-meta-counts { display: flex; gap: 10px; font-size: 0.75rem; color: var(--muted); }
+.discord-members, .discord-online { white-space: nowrap; }
 .discord-card-footer { display: flex; gap: 8px; margin-top: 10px; align-items: center; }
+.discord-expired { opacity: 0.75; border-left-color: #ed4245 !important; }
+.discord-expired-warning { color: #ed4245; font-size: 0.78rem; margin: 4px 0 2px; }
+.btn-disabled { opacity: 0.5; cursor: not-allowed; pointer-events: none; }
+.discord-added-by-link {
+  color: var(--accent); text-decoration: none; cursor: pointer;
+}
+.discord-added-by-link:hover { text-decoration: underline; opacity: 0.85; }
+.btn-ds-dm {
+  background: transparent; border: 1px solid var(--accent);
+  color: var(--accent); font-size: 0.75rem;
+}
+.btn-ds-dm:hover { background: var(--accent); color: #fff; }
 #discord-server-form .input { margin-bottom: 8px; }
+
+/* ── DM тусдаа цонх ───────────────────────────────── */
+.dm-fullpage { display: none; flex-direction: column; height: 100vh; background: var(--bg); }
+.dm-fullpage.active { display: flex; }
+.dm-window-container { display: flex; flex-direction: column; height: 100%; }
+.dm-window-header {
+  display: flex; align-items: center; gap: 8px;
+  padding: 12px 16px; border-bottom: 1px solid var(--border);
+  background: var(--bg2); flex-shrink: 0;
+}
+.dm-window-icon { font-size: 1.1rem; }
+.dm-window-header h3 { font-size: 1rem; margin: 0; color: var(--text); }
+#popup-friend-btn-wrap { display: flex; gap: 8px; margin-top: 10px; }
 
 /* ── Responsive ─────────────────────────────────────── */
 @media (max-width: 900px) {

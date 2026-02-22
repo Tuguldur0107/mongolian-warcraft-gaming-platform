@@ -21,7 +21,8 @@ const memUsers = new Map();
 let memNextId = 1;
 
 function memFindByEmail(email) {
-  for (const u of memUsers.values()) if (u.email === email) return u;
+  const lower = email.toLowerCase();
+  for (const u of memUsers.values()) if (u.email.toLowerCase() === lower) return u;
   return null;
 }
 function memFindByDiscord(discord_id) {
@@ -43,7 +44,8 @@ function makeJWT(user) {
 
 // ── Бүртгэл (email + нууц үг) ────────────────────────────
 router.post('/register', async (req, res) => {
-  const { username, email, password } = req.body;
+  const { username, password } = req.body;
+  const email = (req.body.email || '').trim().toLowerCase();
   if (!username || !email || !password)
     return res.status(400).json({ error: 'Бүх талбарыг бөглөнө үү' });
   if (password.length < 6)
@@ -53,7 +55,7 @@ router.post('/register', async (req, res) => {
 
   if (await dbOk()) {
     try {
-      const exists = await db.query('SELECT id FROM users WHERE email = $1', [email]);
+      const exists = await db.query('SELECT id FROM users WHERE LOWER(email) = $1', [email]);
       if (exists.rows[0]) return res.status(409).json({ error: 'Энэ имэйл бүртгэлтэй байна' });
       const r = await db.query(
         `INSERT INTO users (username, email, password_hash) VALUES ($1,$2,$3) RETURNING *`,
@@ -71,12 +73,13 @@ router.post('/register', async (req, res) => {
 
 // ── Нэвтрэх (email + нууц үг) ────────────────────────────
 router.post('/login', async (req, res) => {
-  const { email, password } = req.body;
+  const { password } = req.body;
+  const email = (req.body.email || '').trim().toLowerCase();
   if (!email || !password) return res.status(400).json({ error: 'Имэйл, нууц үгээ оруулна уу' });
 
   if (await dbOk()) {
     try {
-      const r = await db.query('SELECT * FROM users WHERE email = $1', [email]);
+      const r = await db.query('SELECT * FROM users WHERE LOWER(email) = $1', [email]);
       const user = r.rows[0];
       if (!user || !user.password_hash) return res.status(401).json({ error: 'Имэйл эсвэл нууц үг буруу' });
       const ok = await bcrypt.compare(password, user.password_hash);
@@ -269,12 +272,12 @@ router.put('/avatar', authMW, async (req, res) => {
 
 // ── Нууц үг сэргээх — token үүсгэх ──────────────────────
 router.post('/forgot-password', async (req, res) => {
-  const { email } = req.body;
+  const email = (req.body.email || '').trim().toLowerCase();
   if (!email) return res.status(400).json({ error: 'Имэйл оруулна уу' });
 
   if (await dbOk()) {
     try {
-      const user = await db.query('SELECT id FROM users WHERE email = $1', [email]);
+      const user = await db.query('SELECT id FROM users WHERE LOWER(email) = $1', [email]);
       if (!user.rows[0]) return res.status(404).json({ error: 'Энэ имэйлтэй хэрэглэгч олдсонгүй' });
 
       const token     = crypto.randomBytes(32).toString('hex');

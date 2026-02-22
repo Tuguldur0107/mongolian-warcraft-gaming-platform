@@ -52,6 +52,11 @@ contextBridge.exposeInMainWorld('api', {
   openRoomWindow:    (data) => ipcRenderer.invoke('room:openWindow', data),
   onRoomWindowClosed:(cb)   => ipcRenderer.on('room:window-closed', cb),
 
+  // DM тусдаа цонх
+  openDMWindow:      (data) => ipcRenderer.invoke('dm:openWindow', data),
+  isDMWindowOpen:    (userId) => ipcRenderer.invoke('dm:isWindowOpen', userId),
+  onDMWindowClosed:  (cb)   => ipcRenderer.on('dm:window-closed', (_, data) => cb(data)),
+
   // Профайл зураг
   uploadAvatar: () => ipcRenderer.invoke('auth:uploadAvatar'),
 
