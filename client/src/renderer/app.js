@@ -229,12 +229,14 @@ function setUserUI(user) {
 }
 
 // ── Имэйл нэвтрэх ────────────────────────────────────────
-document.getElementById('btn-email-login').onclick = async () => {
+document.getElementById('btn-email-login').onclick = async (e) => {
+  const btn     = e.currentTarget;
   const email    = document.getElementById('login-email').value.trim();
   const password = document.getElementById('login-password').value;
   const errEl    = document.getElementById('login-error');
   errEl.textContent = '';
   if (!email || !password) { errEl.textContent = 'Бүх талбарыг бөглөнө үү'; return; }
+  btn.disabled = true; btn.textContent = 'Нэвтэрч байна...';
   try {
     const { token, user } = await window.api.emailLogin({ email, password });
     currentUser = user;
@@ -244,6 +246,7 @@ document.getElementById('btn-email-login').onclick = async () => {
     connectSocket();
   } catch (err) {
     errEl.textContent = err.message || 'Нэвтрэхэд алдаа гарлаа';
+    btn.disabled = false; btn.textContent = 'Нэвтрэх';
   }
 };
 
@@ -252,13 +255,15 @@ document.getElementById('login-password').addEventListener('keydown', e => {
 });
 
 // ── Бүртгэл ──────────────────────────────────────────────
-document.getElementById('btn-register').onclick = async () => {
+document.getElementById('btn-register').onclick = async (e) => {
+  const btn      = e.currentTarget;
   const username = document.getElementById('reg-username').value.trim();
   const email    = document.getElementById('reg-email').value.trim();
   const password = document.getElementById('reg-password').value;
   const errEl    = document.getElementById('reg-error');
   errEl.textContent = '';
   if (!username || !email || !password) { errEl.textContent = 'Бүх талбарыг бөглөнө үү'; return; }
+  btn.disabled = true; btn.textContent = 'Бүртгэж байна...';
   try {
     const { token, user } = await window.api.register({ username, email, password });
     currentUser = user;
@@ -268,6 +273,7 @@ document.getElementById('btn-register').onclick = async () => {
     connectSocket();
   } catch (err) {
     errEl.textContent = err.message || 'Бүртгэхэд алдаа гарлаа';
+    btn.disabled = false; btn.textContent = 'Бүртгүүлэх';
   }
 };
 
