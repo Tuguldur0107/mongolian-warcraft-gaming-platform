@@ -81,10 +81,11 @@ contextBridge.exposeInMainWorld('api', {
   markDMRead:    (fromUserId)          => ipcRenderer.invoke('social:markRead', fromUserId),
 
   // Discord Servers
-  getDiscordServers:   ()     => ipcRenderer.invoke('discord:getServers'),
-  addDiscordServer:    (data) => ipcRenderer.invoke('discord:addServer', data),
-  deleteDiscordServer: (id)   => ipcRenderer.invoke('discord:deleteServer', id),
-  openDiscordInvite:   (url)  => ipcRenderer.invoke('discord:openInvite', url),
+  getDiscordServers:   ()         => ipcRenderer.invoke('discord:getServers'),
+  addDiscordServer:    (data)     => ipcRenderer.invoke('discord:addServer', data),
+  editDiscordServer:   (id, data) => ipcRenderer.invoke('discord:editServer', id, data),
+  deleteDiscordServer: (id)       => ipcRenderer.invoke('discord:deleteServer', id),
+  openDiscordInvite:   (url)      => ipcRenderer.invoke('discord:openInvite', url),
 
   // Auto-update
   onUpdateAvailable: (cb) => ipcRenderer.on('update:available', (_, info) => cb(info)),

@@ -647,6 +647,9 @@ ipcMain.handle('discord:getServers', async () => {
 ipcMain.handle('discord:addServer', async (_, data) => {
   try { return await apiService.addDiscordServer(data); } catch (err) { throw apiError(err); }
 });
+ipcMain.handle('discord:editServer', async (_, id, data) => {
+  try { return await apiService.editDiscordServer(id, data); } catch (err) { throw apiError(err); }
+});
 ipcMain.handle('discord:deleteServer', async (_, id) => {
   try { return await apiService.deleteDiscordServer(id); } catch (err) { throw apiError(err); }
 });

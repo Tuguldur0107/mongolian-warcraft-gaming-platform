@@ -2185,7 +2185,12 @@ async function loadDiscordServers() {
             <button type="button" class="btn btn-primary btn-sm btn-discord-join" data-url="${escHtml(s.invite_url)}">
               Нэгдэх →
             </button>
-            ${isOwn ? `<button type="button" class="btn btn-sm btn-danger-soft btn-ds-delete" data-id="${s.id}">Устгах</button>` : ''}
+            ${isOwn ? `
+              <button type="button" class="btn btn-sm btn-ds-edit" data-id="${s.id}"
+                data-name="${escHtml(s.name)}" data-url="${escHtml(s.invite_url)}"
+                data-desc="${escHtml(s.description || '')}">✏️ Засах</button>
+              <button type="button" class="btn btn-sm btn-danger-soft btn-ds-delete" data-id="${s.id}">Устгах</button>
+            ` : ''}
           </div>
         </div>`;
     }).join('');
@@ -2208,6 +2213,23 @@ async function loadDiscordServers() {
         }
       };
     });
+    list.querySelectorAll('.btn-ds-edit').forEach(btn => {
+      btn.onclick = () => {
+        const form = document.getElementById('discord-server-form');
+        const title = form.querySelector('h3');
+        const submitBtn = document.getElementById('btn-ds-submit');
+        document.getElementById('ds-name').value        = btn.dataset.name || '';
+        document.getElementById('ds-invite-url').value  = btn.dataset.url  || '';
+        document.getElementById('ds-description').value = btn.dataset.desc || '';
+        document.getElementById('ds-form-error').textContent = '';
+        form.dataset.editingId = btn.dataset.id;
+        if (title)    title.textContent    = 'Discord сервер засах';
+        if (submitBtn) submitBtn.textContent = 'Хадгалах';
+        form.classList.remove('hidden');
+        document.getElementById('ds-name').focus();
+        form.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      };
+    });
   } catch (err) {
     list.innerHTML = `<p class="empty-text">Серверийн жагсаалт ачаалахад алдаа гарлаа</p>`;
   }
@@ -2215,32 +2237,57 @@ async function loadDiscordServers() {
 
 document.getElementById('btn-add-discord-server').onclick = () => {
   const form = document.getElementById('discord-server-form');
-  form.classList.toggle('hidden');
-  if (!form.classList.contains('hidden')) {
+  const isHidden = form.classList.contains('hidden');
+  if (isHidden) {
+    // Засах горимоос арилгаж нэмэх горимд шилжүүлэх
+    const title = form.querySelector('h3');
+    const submitBtn = document.getElementById('btn-ds-submit');
+    delete form.dataset.editingId;
+    if (title)    title.textContent     = 'Шинэ Discord сервер нэмэх';
+    if (submitBtn) submitBtn.textContent = 'Нэмэх';
+    form.classList.remove('hidden');
     document.getElementById('ds-name').focus();
+  } else {
+    _resetDiscordForm();
   }
 };
 
-document.getElementById('btn-ds-cancel').onclick = () => {
-  document.getElementById('discord-server-form').classList.add('hidden');
+function _resetDiscordForm() {
+  const form = document.getElementById('discord-server-form');
+  const title = form.querySelector('h3');
+  const submitBtn = document.getElementById('btn-ds-submit');
+  form.classList.add('hidden');
+  delete form.dataset.editingId;
+  document.getElementById('ds-name').value        = '';
+  document.getElementById('ds-invite-url').value  = '';
+  document.getElementById('ds-description').value = '';
   document.getElementById('ds-form-error').textContent = '';
-};
+  if (title)    title.textContent     = 'Шинэ Discord сервер нэмэх';
+  if (submitBtn) submitBtn.textContent = 'Нэмэх';
+}
+
+document.getElementById('btn-ds-cancel').onclick = _resetDiscordForm;
 
 document.getElementById('btn-ds-submit').onclick = async () => {
   const name        = document.getElementById('ds-name').value.trim();
   const invite_url  = document.getElementById('ds-invite-url').value.trim();
   const description = document.getElementById('ds-description').value.trim();
   const errEl       = document.getElementById('ds-form-error');
+  const form        = document.getElementById('discord-server-form');
   errEl.textContent = '';
   if (!name)       { errEl.textContent = 'Серверийн нэр оруулна уу';  return; }
   if (!invite_url) { errEl.textContent = 'Discord урилгын холбоос оруулна уу'; return; }
+
+  const editingId = form.dataset.editingId ? Number(form.dataset.editingId) : null;
   try {
-    await window.api.addDiscordServer({ name, invite_url, description });
-    document.getElementById('discord-server-form').classList.add('hidden');
-    document.getElementById('ds-name').value        = '';
-    document.getElementById('ds-invite-url').value  = '';
-    document.getElementById('ds-description').value = '';
-    showToast('Discord сервер нэмэгдлээ! 🎮', 'success');
+    if (editingId) {
+      await window.api.editDiscordServer(editingId, { name, invite_url, description });
+      showToast('Discord сервер шинэчлэгдлээ! ✅', 'success');
+    } else {
+      await window.api.addDiscordServer({ name, invite_url, description });
+      showToast('Discord сервер нэмэгдлээ! 🎮', 'success');
+    }
+    _resetDiscordForm();
     loadDiscordServers();
   } catch (err) {
     errEl.textContent = err.message;

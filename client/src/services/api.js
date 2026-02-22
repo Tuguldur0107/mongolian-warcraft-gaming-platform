@@ -197,6 +197,10 @@ async function addDiscordServer({ name, invite_url, description }) {
   const { data } = await getClient().post('/discord-servers', { name, invite_url, description });
   return data;
 }
+async function editDiscordServer(id, data) {
+  const { data: res } = await getClient().patch(`/discord-servers/${id}`, data);
+  return res;
+}
 async function deleteDiscordServer(id) {
   const { data } = await getClient().delete(`/discord-servers/${id}`);
   return data;
@@ -241,5 +245,6 @@ module.exports = {
   unlinkDiscord,
   getDiscordServers,
   addDiscordServer,
+  editDiscordServer,
   deleteDiscordServer,
 };

@@ -98,6 +98,63 @@ router.post('/', authMW, async (req, res) => {
   res.status(201).json(entry);
 });
 
+// ── PATCH /:id — өөрийнхийг засах ────────────────────────
+router.patch('/:id', authMW, async (req, res) => {
+  const id     = parseInt(req.params.id);
+  const userId = req.user.id;
+  const { name, invite_url, description } = req.body;
+
+  if (name !== undefined && !name?.trim())
+    return res.status(400).json({ error: 'Серверийн нэр оруулна уу' });
+  if (invite_url !== undefined && !isValidDiscordInvite(invite_url))
+    return res.status(400).json({ error: 'Зөвхөн discord.gg эсвэл discord.com/invite холбоос оруулна уу' });
+
+  const safeName = name?.trim().slice(0, 100);
+  const safeUrl  = invite_url?.trim();
+  const desc     = description?.trim().slice(0, 200) ?? undefined;
+
+  if (await dbOk()) {
+    try {
+      const { rows: existing } = await db.query('SELECT added_by_id FROM discord_servers WHERE id=$1', [id]);
+      if (!existing.length) return res.status(404).json({ error: 'Олдсонгүй' });
+      if (existing[0].added_by_id !== userId)
+        return res.status(403).json({ error: 'Зөвхөн өөрийн оруулсан серверийг засаж болно' });
+
+      // Давхардал шалгах (өөрийнхөөс бусад)
+      if (safeUrl) {
+        const dup = await db.query(
+          'SELECT id FROM discord_servers WHERE LOWER(invite_url)=LOWER($1) AND id<>$2', [safeUrl, id]);
+        if (dup.rows.length)
+          return res.status(409).json({ error: 'Энэ Discord холбоос аль хэдийн бүртгэлтэй байна' });
+      }
+
+      const fields = [];
+      const vals   = [];
+      let   idx    = 1;
+      if (safeName !== undefined) { fields.push(`name=$${idx++}`);        vals.push(safeName); }
+      if (safeUrl  !== undefined) { fields.push(`invite_url=$${idx++}`);  vals.push(safeUrl); }
+      if (desc     !== undefined) { fields.push(`description=$${idx++}`); vals.push(desc); }
+      if (!fields.length) return res.status(400).json({ error: 'Өөрчлөх утга байхгүй' });
+
+      vals.push(id);
+      const { rows } = await db.query(
+        `UPDATE discord_servers SET ${fields.join(',')} WHERE id=$${idx} RETURNING *`, vals);
+      return res.json(rows[0]);
+    } catch (e) { console.error(e); }
+  }
+  // In-memory
+  const entry = memServers.find(s => s.id === id);
+  if (!entry) return res.status(404).json({ error: 'Олдсонгүй' });
+  if (entry.added_by_id !== userId)
+    return res.status(403).json({ error: 'Зөвхөн өөрийн оруулсан серверийг засаж болно' });
+  if (safeUrl && memServers.some(s => s.id !== id && s.invite_url.toLowerCase() === safeUrl.toLowerCase()))
+    return res.status(409).json({ error: 'Энэ Discord холбоос аль хэдийн бүртгэлтэй байна' });
+  if (safeName !== undefined) entry.name        = safeName;
+  if (safeUrl  !== undefined) entry.invite_url  = safeUrl;
+  if (desc     !== undefined) entry.description = desc;
+  res.json(entry);
+});
+
 // ── DELETE /:id — өөрийнхийг устгах ──────────────────────
 router.delete('/:id', authMW, async (req, res) => {
   const id     = parseInt(req.params.id);
