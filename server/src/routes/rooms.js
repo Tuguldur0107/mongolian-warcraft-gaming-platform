@@ -169,8 +169,22 @@ router.post('/:id/join', strictAuth, async (req, res) => {
          WHERE rp.user_id = $1 AND r.status IN ('waiting','playing') LIMIT 1`,
         [userId]
       );
-      if (already.rows[0])
-        return res.status(409).json({ error: 'Та аль хэдийн өрөөнд байна. Эхлээд гарна уу.' });
+      if (already.rows[0]) {
+        // Яг тэр өрөөнд аль хэдийн байгаа → амжилт буцаана (idempotent)
+        if (String(already.rows[0].id) === String(id)) {
+          const rr2 = await db.query('SELECT * FROM rooms WHERE id=$1', [id]);
+          return res.json({ message: 'Өрөөнд нэгдлээ', room: rr2.rows[0] });
+        }
+        // Өөр өрөөнд байна → автоматаар гарч, шинэ өрөөнд нэгдэнэ
+        const oldId = already.rows[0].id;
+        await db.query('DELETE FROM room_players WHERE room_id=$1 AND user_id=$2', [oldId, userId]);
+        const oldRoom = await db.query('SELECT host_id FROM rooms WHERE id=$1', [oldId]);
+        if (String(oldRoom.rows[0]?.host_id) === String(userId)) {
+          await db.query('DELETE FROM rooms WHERE id=$1', [oldId]);
+          if (_io) _io.to(String(oldId)).emit('room:closed', { reason: 'Өрөөний эзэн гарлаа' });
+        }
+        emitRoomsUpdated();
+      }
 
       const rr = await db.query('SELECT * FROM rooms WHERE id = $1', [id]);
       const room = rr.rows[0];
@@ -187,7 +201,10 @@ router.post('/:id/join', strictAuth, async (req, res) => {
       await db.query('INSERT INTO room_players (room_id,user_id) VALUES ($1,$2) ON CONFLICT DO NOTHING', [id, userId]);
       emitRoomsUpdated();
       return res.json({ message: 'Өрөөнд нэгдлээ', room });
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      console.error('[Join]', e);
+      return res.status(500).json({ error: 'Серверийн алдаа гарлаа' });
+    }
   }
 
   // In-memory

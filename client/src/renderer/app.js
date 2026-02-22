@@ -4,6 +4,8 @@ const SERVER = 'https://mongolian-warcraft-gaming-platform-production.up.railway
 let socket = null;
 let currentRoom = null;
 let currentUser = null;
+// Өрөөний мэдээлэл кэш (roomCard onclick-д ашиглана)
+let roomsCache = {}; // id → room object
 
 // ── Чат төлөв ─────────────────────────────────────────────
 const dmConversations = {};
@@ -507,6 +509,8 @@ async function loadRooms() {
   playing.innerHTML = '';
   try {
     const rooms = await window.api.getRooms();
+    roomsCache = {};
+    rooms.forEach(r => { roomsCache[String(r.id)] = r; });
     const waitRooms = rooms.filter(r => r.status === 'waiting');
     const playRooms = rooms.filter(r => r.status === 'playing');
     waiting.innerHTML = waitRooms.length
@@ -530,11 +534,11 @@ function roomCard(r, inProgress) {
 
   let joinBtn;
   if (isMyRoom) {
-    joinBtn = `<button class="btn btn-sm btn-primary" onclick="rejoinMyRoom('${r.id}','${r.name}','${r.game_type}','${r.host_id}',${String(r.host_id) === myId})">↩ Буцах</button>`;
+    joinBtn = `<button class="btn btn-sm btn-primary room-action-btn" data-action="rejoin" data-id="${r.id}" data-host="${r.host_id}" data-ishost="${String(r.host_id) === myId}">↩ Буцах</button>`;
   } else if (inProgress) {
-    joinBtn = `<button class="btn btn-sm btn-primary btn-with-icon" onclick="joinPlayingRoom('${r.id}','${r.name}','${r.game_type}','${r.host_id}')"><svg class="btn-icon-svg" style="width:13px;height:13px"><use href="#ico-join"/></svg> Нэгдэх</button>`;
+    joinBtn = `<button class="btn btn-sm btn-primary btn-with-icon room-action-btn" data-action="join-playing" data-id="${r.id}" data-host="${r.host_id}"><svg class="btn-icon-svg" style="width:13px;height:13px"><use href="#ico-join"/></svg> Нэгдэх</button>`;
   } else {
-    joinBtn = `<button class="btn btn-primary btn-sm" onclick="joinRoom('${r.id}','${r.name}','${r.game_type}',${r.has_password},'${r.host_id}')">Нэгдэх</button>`;
+    joinBtn = `<button class="btn btn-primary btn-sm room-action-btn" data-action="join" data-id="${r.id}" data-host="${r.host_id}" data-pass="${r.has_password}">Нэгдэх</button>`;
   }
 
   return `
@@ -565,6 +569,25 @@ async function joinPlayingRoom(id, name, gameType, hostId) {
 }
 
 document.getElementById('btn-refresh').onclick = loadRooms;
+
+// Өрөөний товч event delegation (data-attribute ашиглан)
+document.addEventListener('click', e => {
+  const btn = e.target.closest('.room-action-btn');
+  if (!btn) return;
+  const id     = btn.dataset.id;
+  const hostId = btn.dataset.host;
+  const room   = roomsCache[id];
+  if (!room) return;
+  const action = btn.dataset.action;
+  if (action === 'join') {
+    joinRoom(id, room.name, room.game_type, room.has_password, hostId);
+  } else if (action === 'join-playing') {
+    joinPlayingRoom(id, room.name, room.game_type, hostId);
+  } else if (action === 'rejoin') {
+    const isHost = btn.dataset.ishost === 'true';
+    rejoinMyRoom(id, room.name, room.game_type, hostId, isHost);
+  }
+});
 
 // Хурдан тоглолт
 document.getElementById('btn-quickmatch').onclick = async () => {
