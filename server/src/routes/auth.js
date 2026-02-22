@@ -93,21 +93,36 @@ router.post('/login', async (req, res) => {
 
 // ── Discord OAuth2 эхлүүлэх ──────────────────────────────
 router.get('/discord', (req, res) => {
+  // state-д QR sessionId болон link userId хоёуланг encode хийнэ
+  let stateVal = req.query.state || '';
+  if (req.query.link) {
+    // "link:userId" эсвэл "link:userId:qrState" хэлбэрт хадгалана
+    stateVal = `link:${req.query.link}${stateVal ? ':' + stateVal : ''}`;
+  }
+
   const params = new URLSearchParams({
     client_id:     process.env.DISCORD_CLIENT_ID,
     redirect_uri:  process.env.DISCORD_REDIRECT_URI,
     response_type: 'code',
     scope:         'identify',
   });
-  if (req.query.state)  params.set('state',  req.query.state);
-  if (req.query.link)   params.set('link',   req.query.link);   // linking mode
+  if (stateVal) params.set('state', stateVal);
   res.redirect(`https://discord.com/api/oauth2/authorize?${params}`);
 });
 
 // ── Discord callback ──────────────────────────────────────
 router.get('/discord/callback', async (req, res) => {
-  const { code, state, link } = req.query;
+  const { code, state: rawState } = req.query;
   if (!code) return res.status(400).send('Code байхгүй байна');
+
+  // state decode: "link:userId[:qrState]" эсвэл "qrState" эсвэл хоосон
+  let link  = null;
+  let state = rawState || '';
+  if (rawState && rawState.startsWith('link:')) {
+    const parts = rawState.slice(5).split(':');
+    link  = parts[0];
+    state = parts[1] || '';
+  }
 
   try {
     const tokenRes = await axios.post(

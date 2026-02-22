@@ -1,7 +1,7 @@
 {
-  "name": "wc3-dota-platform-server",
+  "name": "mongolian-warcraft-gaming-platform-server",
   "version": "1.0.0",
-  "description": "WC3/DotA Gaming Platform Backend",
+  "description": "Mongolian Warcraft Gaming Platform Backend",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",

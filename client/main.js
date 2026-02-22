@@ -18,7 +18,7 @@ function createWindow() {
     height: 700,
     minWidth: 800,
     minHeight: 600,
-    title: 'WC3/DotA Platform',
+    title: 'Mongolian Warcraft Gaming Platform',
     icon: path.join(__dirname, 'src/renderer/icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -391,7 +391,7 @@ ipcMain.handle('room:openWindow', (event, roomData) => {
     height: 660,
     minWidth: 720,
     minHeight: 520,
-    title: `${roomData.name} — WC3/DotA Platform`,
+    title: `${roomData.name} — Mongolian Warcraft Gaming Platform`,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,

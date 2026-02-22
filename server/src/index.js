@@ -41,7 +41,7 @@ app.use('/stats', statsRoutes);
 app.use('/social', socialRoutes);
 
 app.get('/', (req, res) => {
-  res.json({ status: 'ok', message: 'WC3/DotA Platform Server ажиллаж байна' });
+  res.json({ status: 'ok', message: 'Mongolian Warcraft Gaming Platform Server ажиллаж байна' });
 });
 
 // Rooms router-т io дамжуулах (kick/close event илгээхэд хэрэг)
