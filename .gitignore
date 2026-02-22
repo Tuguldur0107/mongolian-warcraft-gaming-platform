@@ -1,35 +1,47 @@
-# Claude Code
+# ── Claude Code дотоод файл ───────────────────────────────
 .claude/
 
-# Screenshots
-*.png
-*.jpg
-*.docx
-
-# Dependencies
+# ── Хамаарал (npm install-аар сэргээгдэнэ) ───────────────
 node_modules/
 client/node_modules/
 server/node_modules/
 
-# Environment variables (нууц мэдээлэл)
+# ── Нууц мэдээлэл (.env.example файлууд git-д байх ёстой) ─
+.env
 server/.env
 client/.env
+# .env.example файлуудыг ignore хийхгүй — template учраас
 
-# Electron build output
+# ── Build / compile output ────────────────────────────────
+# Electron packaged app
 client/dist/
 client/out/
+# TypeScript compile output (цаашид server TypeScript болбол)
+server/dist/
 
-# Logs
+# ── Log файлууд ───────────────────────────────────────────
 *.log
 npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
-# OS
+# ── OS тусгай файлууд ────────────────────────────────────
 .DS_Store
 Thumbs.db
+desktop.ini
 
-# IDE
+# ── IDE тохиргоо (хувийн, repo-д оруулах шаардлагагүй) ───
 .vscode/
 .idea/
+*.swp
+*.swo
 
-# Replays (хэрэглэгчийн файл)
+# ── Зураг файлууд (root хавтасны screenshot-ууд) ─────────
+# client/src/renderer/icon.png зэрэг кодын зургийг ХАСАХГҮЙ
+/*.png
+/*.jpg
+/*.jpeg
+/*.docx
+
+# ── WC3 replay файлууд (хэрэглэгчийн орон нутгийн файл) ──
 *.w3g
