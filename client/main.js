@@ -306,9 +306,12 @@ ipcMain.handle('auth:changePassword', async (_, { oldPassword, newPassword }) =>
 // Update суулгаж restart хийх
 ipcMain.handle('update:install', () => {
   _isInstallingUpdate = true; // before-quit cleanup алгасах
-  // isSilent=false: NSIS installer UI гаргана (UAC зөвшөөрөл авна)
+  // Цонхыг нуухын тулд UAC dialog харагдана
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.hide();
+  if (roomWindow && !roomWindow.isDestroyed()) roomWindow.hide();
+  // isSilent=true: per-user install тул UAC шаардахгүй, чимээгүй суулгана
   // isForceRunAfter=true: суулгасны дараа апп дахин нээнэ
-  autoUpdater.quitAndInstall(false, true);
+  setTimeout(() => autoUpdater.quitAndInstall(true, true), 300);
 });
 
 // App хувилбар буцаах
