@@ -31,8 +31,6 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "installerIcon": "src/renderer/icon.png",
-      "uninstallerIcon": "src/renderer/icon.png",
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "Mongolian Warcraft Platform"
