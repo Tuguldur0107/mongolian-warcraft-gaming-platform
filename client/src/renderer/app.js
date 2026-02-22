@@ -78,6 +78,12 @@ async function connectSocket() {
       showDMNotification(`${byUsername} найз болохыг зөвшөөрлөө`);
     }
   });
+
+  // Өрөөнд урих
+  socket.on('room:invited', ({ fromUsername, fromUserId, roomId, roomName }) => {
+    showRoomInvite(fromUsername, roomId, roomName);
+  });
+
   socket.on('disconnect', () => console.log('Socket салгагдлаа'));
 
   // Өрөөний чат
@@ -88,9 +94,17 @@ async function connectSocket() {
 
   // Онлайн тоглогчид (лобби)
   socket.on('lobby:online_users', (users) => {
+    const prevOnlineIds = new Set(onlineUserIds);
     onlineUserIds = new Set(users.map(u => String(typeof u === 'object' ? u.userId : u)));
     renderOnlineUsers(users);
-    renderFriendsTab(); // Найзуудын онлайн статусыг шинэчлэх
+    renderFriendsTab();
+    // Найз онлайн болсон мэдэгдэл
+    myFriends.forEach(f => {
+      const uid = String(f.id);
+      if (!prevOnlineIds.has(uid) && onlineUserIds.has(uid)) {
+        showDMNotification(`${f.username} онлайн боллоо`);
+      }
+    });
   });
 
   // Нийтийн лобби чат
@@ -161,6 +175,7 @@ async function connectSocket() {
   // Тоглолт эхэлсэн (эзэн биш тоглогчдод)
   socket.on('room:started', () => {
     appendSysMsg('▶ Тоглолт эхэллээ!');
+    socket.emit('room:game_started'); // статусыг 'in_game' болгох
   });
 }
 
@@ -596,6 +611,7 @@ document.getElementById('btn-launch-wc3').onclick = async () => {
       try {
         await window.api.startRoom(currentRoom.id);
         appendSysMsg('▶ Тоглолт эхэллээ!');
+        if (socket) socket.emit('room:game_started');
       } catch {}
     }
   } catch (err) {
@@ -847,6 +863,40 @@ function showDMNotification(text) {
   toast.textContent = `💬 ${text}`;
   document.body.appendChild(toast);
   setTimeout(() => toast.remove(), 3000);
+}
+
+// Өрөөний урилгын notification
+function showRoomInvite(fromUsername, roomId, roomName) {
+  const existing = document.getElementById('room-invite-toast');
+  if (existing) existing.remove();
+
+  const toast = document.createElement('div');
+  toast.id = 'room-invite-toast';
+  toast.className = 'invite-toast';
+  toast.innerHTML = `
+    <div class="invite-toast-title">📨 Өрөөнд урилаа</div>
+    <div style="font-size:0.83rem">${escHtml(fromUsername)}: <b>${escHtml(roomName)}</b></div>
+    <div class="invite-toast-btns">
+      <button id="invite-accept-btn" class="btn btn-primary btn-sm">Нэгдэх</button>
+      <button id="invite-decline-btn" class="btn btn-sm btn-secondary">Татгалзах</button>
+    </div>
+  `;
+  document.body.appendChild(toast);
+
+  document.getElementById('invite-accept-btn').onclick = async () => {
+    toast.remove();
+    try {
+      await window.api.joinRoom(roomId, null);
+      // Өрөөний мэдээллийг авах шаардлагатай — энгийн байдлаар redirect
+      const rooms = await window.api.getRooms();
+      const room  = rooms.find(r => String(r.id) === String(roomId));
+      if (room) enterRoom(room.id, room.name, room.game_type, false, room.host_id);
+    } catch (err) {
+      showDMNotification(`Нэгдэхэд алдаа: ${err.message}`);
+    }
+  };
+  document.getElementById('invite-decline-btn').onclick = () => toast.remove();
+  setTimeout(() => { if (document.getElementById('room-invite-toast') === toast) toast.remove(); }, 30000);
 }
 
 // ── Нийгмийн өгөгдөл ачаалах ──────────────────────────────
@@ -1126,8 +1176,16 @@ function renderOnlineTab(others) {
   dmList.innerHTML = others.map(u => {
     const uid    = typeof u === 'object' ? String(u.userId) : '';
     const uname  = typeof u === 'object' ? u.username : u;
+    const status = typeof u === 'object' ? (u.status || 'online') : 'online';
     const unread = dmConversations[uid]?.unread || 0;
     const badge  = `<span class="dm-unread" style="${unread > 0 ? '' : 'display:none'}">${unread}</span>`;
+
+    // Статус badge
+    const statusBadge = status === 'in_room'
+      ? `<span class="status-in-room">🟡 Өрөөнд</span>`
+      : status === 'in_game'
+      ? `<span class="status-in-game">🔴 Тоглоомд</span>`
+      : ``;
 
     const isBlocked = blockedIds.has(uid);
     const isFriend  = friendIds.has(uid);
@@ -1139,9 +1197,14 @@ function renderOnlineTab(others) {
       const friendBtn = isFriend
         ? ''
         : `<button class="btn btn-sm btn-add-friend add-friend-btn" title="Найз нэмэх">+</button>`;
+      // Урих товч: зөвхөн та өрөөнд байгаа үед
+      const inviteBtn = currentRoom
+        ? `<button class="btn btn-sm invite-btn" title="Өрөөнд урих">📨</button>`
+        : '';
       actionBtns = `
         <button class="btn btn-sm dm-btn dm-open-btn">DM</button>
         ${friendBtn}
+        ${inviteBtn}
         <button class="btn btn-sm btn-block-user block-user-btn" title="Хаах">🚫</button>
       `;
     }
@@ -1149,6 +1212,7 @@ function renderOnlineTab(others) {
     return `<li data-user-id="${uid}" data-username="${escHtml(uname)}" class="online-user-item">
       <span class="dm-status-dot"></span>
       <span class="dm-username">${escHtml(uname)}</span>
+      ${statusBadge}
       ${badge}
       <div class="dm-action-btns">${actionBtns}</div>
     </li>`;
@@ -1168,6 +1232,19 @@ function renderOnlineTab(others) {
 
     const blockBtn = li.querySelector('.block-user-btn');
     if (blockBtn) blockBtn.addEventListener('click', e => { e.stopPropagation(); blockUserClick(uid, uname); });
+
+    const inviteBtn = li.querySelector('.invite-btn');
+    if (inviteBtn) inviteBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      if (currentRoom && socket) {
+        socket.emit('room:invite', {
+          toUserId: uid,
+          roomId: currentRoom.id,
+          roomName: currentRoom.name,
+        });
+        showDMNotification(`${uname}-д урилга илгээлээ`);
+      }
+    });
   });
 }
 
@@ -1386,6 +1463,48 @@ function gameTypeColor(name) {
   let h = 0;
   for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
   return _gameColors[h % _gameColors.length];
+}
+
+// ── Хэрэглэгч хайх ───────────────────────────────────────
+let _searchTimer = null;
+const userSearchInput = document.getElementById('user-search-input');
+if (userSearchInput) {
+  userSearchInput.addEventListener('input', () => {
+    clearTimeout(_searchTimer);
+    const q = userSearchInput.value.trim();
+    const resultsEl = document.getElementById('user-search-results');
+    if (!q || q.length < 2) {
+      if (resultsEl) resultsEl.innerHTML = '';
+      return;
+    }
+    _searchTimer = setTimeout(async () => {
+      try {
+        const results = await window.api.searchUsers(q);
+        if (!resultsEl) return;
+        if (!results.length) {
+          resultsEl.innerHTML = '<div class="search-result-item" style="color:var(--text2)">Олдсонгүй</div>';
+          return;
+        }
+        const friendIds  = new Set(myFriends.map(f => String(f.id)));
+        const blockedIds = new Set(blockedUsers.map(b => String(b.id)));
+        resultsEl.innerHTML = results.map(u => {
+          const uid    = String(u.id);
+          const isFriend  = friendIds.has(uid);
+          const isBlocked = blockedIds.has(uid);
+          const addBtn = (!isFriend && !isBlocked)
+            ? `<button class="btn btn-sm btn-add-friend search-add-btn" data-id="${uid}" data-name="${escHtml(u.username)}">+ Найз</button>`
+            : (isFriend ? '<span style="font-size:0.75rem;color:var(--green)">✓ Найз</span>' : '');
+          return `<div class="search-result-item">
+            <span class="result-username">${escHtml(u.username)}</span>
+            ${addBtn}
+          </div>`;
+        }).join('');
+        resultsEl.querySelectorAll('.search-add-btn').forEach(btn => {
+          btn.addEventListener('click', () => addFriendClick(btn.dataset.id, btn.dataset.name));
+        });
+      } catch {}
+    }, 500);
+  });
 }
 
 // ── Эхлүүлэх ─────────────────────────────────────────────

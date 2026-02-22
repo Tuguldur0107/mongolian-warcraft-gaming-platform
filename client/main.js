@@ -489,6 +489,9 @@ ipcMain.handle('social:unblock',       async (_, targetUserId) => {
   try { return await apiService.unblockUser(targetUserId); } catch (err) { throw apiError(err); }
 });
 ipcMain.handle('social:blocked',       async () => apiService.getBlockedUsers());
+ipcMain.handle('social:search',        async (_, query) => {
+  try { return await apiService.searchUsers(query); } catch { return []; }
+});
 
 // DM түүх & уншаагүй тоо
 ipcMain.handle('social:dmHistory', async (_, userId) => {

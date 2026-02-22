@@ -89,7 +89,7 @@ function checkRateLimit(socket) {
 // ── Socket.io — Чат & өрөөний event ─────────────────────
 // roomId → Set of usernames
 const roomMembers = {};
-// socketId → { username, userId } (лобби дахь онлайн тоглогчид)
+// socketId → { username, userId, status } (лобби дахь онлайн тоглогчид)
 const onlineUsers = new Map();
 // String(userId) → socketId (private мессеж илгээхэд хэрэг)
 const userSockets = new Map();
@@ -121,7 +121,7 @@ io.on('connection', (socket) => {
     const userId   = String(socket.user.id);
     socket.data.username = username;
     socket.data.userId   = userId;
-    onlineUsers.set(socket.id, { username, userId });
+    onlineUsers.set(socket.id, { username, userId, status: 'online' });
     if (userId) {
       userSockets.set(userId, socket.id);
       socket.join(`user:${userId}`);
@@ -176,6 +176,7 @@ io.on('connection', (socket) => {
   // Өрөөнд нэгдэх
   socket.on('room:join', ({ roomId }) => {
     const username = socket.user.username;
+    const userId   = String(socket.user.id);
     socket.join(roomId);
     socket.data.roomId   = roomId;
     socket.data.username = username;
@@ -183,11 +184,30 @@ io.on('connection', (socket) => {
     if (!roomMembers[roomId]) roomMembers[roomId] = new Set();
     roomMembers[roomId].add(username);
 
+    // Онлайн статус шинэчлэх
+    if (onlineUsers.has(socket.id)) {
+      onlineUsers.set(socket.id, { username, userId, status: 'in_room' });
+      io.emit('lobby:online_users', [...onlineUsers.values()]);
+    }
+
     socket.to(roomId).emit('room:user_joined', { username });
     io.to(roomId).emit('room:members', [...roomMembers[roomId]]);
     // Өрөөний чатын түүх илгээх (хожуу нэгдсэн тоглогчид)
     socket.emit('room:history', roomMessages[roomId] || []);
     console.log(`[Socket] ${username} → өрөө ${roomId}`);
+  });
+
+  // Өрөөний урилга
+  socket.on('room:invite', ({ toUserId, roomId, roomName }) => {
+    const toSocketId = userSockets.get(String(toUserId));
+    if (toSocketId) {
+      io.to(toSocketId).emit('room:invited', {
+        fromUsername: socket.user.username,
+        fromUserId:   String(socket.user.id),
+        roomId,
+        roomName,
+      });
+    }
   });
 
   // Өрөөний чат мессеж
@@ -204,6 +224,16 @@ io.on('connection', (socket) => {
     roomMessages[roomId].push(msg);
     if (roomMessages[roomId].length > 100) roomMessages[roomId].shift();
     io.to(String(roomId)).emit('chat:message', msg);
+  });
+
+  // Тоглолт эхлэхэд статус 'in_game' болгох
+  socket.on('room:game_started', () => {
+    const username = socket.user.username;
+    const userId   = String(socket.user.id);
+    if (onlineUsers.has(socket.id)) {
+      onlineUsers.set(socket.id, { username, userId, status: 'in_game' });
+      io.emit('lobby:online_users', [...onlineUsers.values()]);
+    }
   });
 
   // Typing indicator (DM)
@@ -224,12 +254,18 @@ io.on('connection', (socket) => {
   // Өрөөнөөс гарах
   socket.on('room:leave', ({ roomId }) => {
     const username = socket.user.username;
+    const userId   = String(socket.user.id);
     socket.leave(roomId);
     socket.data.roomId = null;
     if (roomMembers[roomId]) {
       roomMembers[roomId].delete(username);
       io.to(roomId).emit('room:user_left', { username });
       io.to(roomId).emit('room:members', [...roomMembers[roomId]]);
+    }
+    // Онлайн статус шинэчлэх
+    if (onlineUsers.has(socket.id)) {
+      onlineUsers.set(socket.id, { username, userId, status: 'online' });
+      io.emit('lobby:online_users', [...onlineUsers.values()]);
     }
   });
 

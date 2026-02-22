@@ -120,6 +120,11 @@ async function changePassword(oldPassword, newPassword) {
   return data;
 }
 
+async function searchUsers(query) {
+  const { data } = await getClient().get('/social/search', { params: { q: query } });
+  return data;
+}
+
 async function getDMHistory(userId, beforeId = null) {
   const params = beforeId ? { before: beforeId } : {};
   const { data } = await getClient().get(`/social/messages/${userId}`, { params });
@@ -139,6 +144,7 @@ async function markDMRead(fromUserId) {
 module.exports = {
   SERVER_URL,
   changePassword,
+  searchUsers,
   getDMHistory,
   getUnreadCount,
   markDMRead,

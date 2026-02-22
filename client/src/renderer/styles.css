@@ -581,3 +581,38 @@ body.light #icon-moon { display: block !important; }
   padding: 2px 12px;
   font-style: italic;
 }
+
+/* ── User search box ────────────────────────────────── */
+.search-box { padding: 8px; }
+.input-sm { padding: 6px 10px; font-size: 0.82rem; width: 100%; }
+.search-result-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border);
+}
+.search-result-item:hover { background: var(--bg2); }
+.search-result-item .result-username { flex: 1; font-size: 0.85rem; }
+
+/* ── Online status badges ───────────────────────────── */
+.status-in-room  { font-size: 0.7rem; color: #faa61a; margin-left: 4px; }
+.status-in-game  { font-size: 0.7rem; color: #f04747; margin-left: 4px; }
+.status-online   { font-size: 0.7rem; color: #43b581; margin-left: 4px; }
+
+/* ── Room invite notification ───────────────────────── */
+.invite-toast {
+  position: fixed;
+  bottom: 80px;
+  right: 20px;
+  background: var(--card);
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  padding: 12px 16px;
+  z-index: 9999;
+  box-shadow: 0 4px 16px var(--shadow);
+  max-width: 320px;
+}
+.invite-toast-title { font-size: 0.9rem; font-weight: 600; margin-bottom: 6px; }
+.invite-toast-btns { display: flex; gap: 8px; margin-top: 8px; }

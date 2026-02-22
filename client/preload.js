@@ -63,6 +63,7 @@ contextBridge.exposeInMainWorld('api', {
   blockUser:           (targetUserId) => ipcRenderer.invoke('social:block', targetUserId),
   unblockUser:         (targetUserId) => ipcRenderer.invoke('social:unblock', targetUserId),
   getBlockedUsers:     ()             => ipcRenderer.invoke('social:blocked'),
+  searchUsers:         (query)        => ipcRenderer.invoke('social:search', query),
 
   // DM түүх
   getDMHistory:  (userId)              => ipcRenderer.invoke('social:dmHistory', userId),

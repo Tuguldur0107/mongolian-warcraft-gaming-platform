@@ -323,6 +323,24 @@ router.get('/blocked', authMW, async (req, res) => {
   res.json(ids.map(id => ({ id: parseInt(id), username: `Хэрэглэгч#${id}`, avatar_url: null })));
 });
 
+// ── GET /social/search — Хэрэглэгч хайх ───────────────────
+router.get('/search', authMW, async (req, res) => {
+  const { q } = req.query;
+  if (!q || q.trim().length < 2) return res.status(400).json({ error: 'Хамгийн багадаа 2 тэмдэгт оруулна уу' });
+  if (await dbOk()) {
+    try {
+      const r = await db.query(
+        `SELECT id, username, avatar_url FROM users
+         WHERE LOWER(username) LIKE LOWER($1) AND id != $2
+         ORDER BY username LIMIT 20`,
+        [`%${q.trim()}%`, req.user.id]
+      );
+      return res.json(r.rows);
+    } catch (e) { console.error(e); }
+  }
+  res.json([]);
+});
+
 // ── GET /social/messages/:userId — DM түүх ─────────────────
 router.get('/messages/:userId', authMW, async (req, res) => {
   const myId     = req.user.id;
