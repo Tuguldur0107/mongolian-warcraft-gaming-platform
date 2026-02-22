@@ -79,8 +79,11 @@ router.get('/ranking', async (req, res) => {
 router.post('/result', auth.optional, async (req, res) => {
   const { room_id, winner_team, duration_minutes, replay_path, players } = req.body;
 
-  if (!winner_team || !players) {
+  if (!winner_team || !Array.isArray(players) || players.length === 0) {
     return res.status(400).json({ error: 'Мэдээлэл дутуу байна' });
+  }
+  if (![1, 2].includes(Number(winner_team))) {
+    return res.status(400).json({ error: 'winner_team 1 эсвэл 2 байх ёстой' });
   }
 
   try {
@@ -92,8 +95,11 @@ router.post('/result', auth.optional, async (req, res) => {
     );
 
     // Тоглогчдын win/loss шинэчлэх
+    const ALLOWED_COLUMNS = ['wins', 'losses'];
     for (const player of players) {
+      if (!player.discord_id || typeof player.discord_id !== 'string') continue;
       const column = player.team === winner_team ? 'wins' : 'losses';
+      if (!ALLOWED_COLUMNS.includes(column)) continue; // SQL injection хамгаалалт
       await db.query(
         `UPDATE users SET ${column} = ${column} + 1 WHERE discord_id = $1`,
         [player.discord_id]

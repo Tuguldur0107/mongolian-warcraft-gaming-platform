@@ -47,3 +47,10 @@ CREATE TABLE IF NOT EXISTS game_results (
   discord_posted   BOOLEAN DEFAULT FALSE,
   played_at        TIMESTAMP DEFAULT NOW()
 );
+
+-- Indexes (query performance сайжруулах)
+CREATE INDEX IF NOT EXISTS idx_rooms_status       ON rooms(status);
+CREATE INDEX IF NOT EXISTS idx_room_players_user  ON room_players(user_id);
+CREATE INDEX IF NOT EXISTS idx_room_players_room  ON room_players(room_id);
+CREATE INDEX IF NOT EXISTS idx_users_discord_id   ON users(discord_id);
+CREATE INDEX IF NOT EXISTS idx_users_wins         ON users(wins DESC);

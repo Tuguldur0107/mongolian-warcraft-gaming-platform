@@ -26,10 +26,11 @@ function optionalAuth(req, res, next) {
     try {
       req.user = jwt.verify(token, process.env.JWT_SECRET);
     } catch {
-      req.user = { id: 1, discord_id: '000', username: 'Тоглогч' };
+      // Token буруу — нэвтрээгүй хэрэглэгч (id:0 нь DB-д байхгүй)
+      req.user = { id: 0, discord_id: null, username: 'Тоглогч' };
     }
   } else {
-    req.user = { id: 1, discord_id: '000', username: 'Тоглогч' };
+    req.user = { id: 0, discord_id: null, username: 'Тоглогч' };
   }
   next();
 }

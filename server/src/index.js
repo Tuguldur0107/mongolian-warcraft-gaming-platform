@@ -3,6 +3,7 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
+const rateLimit = require('express-rate-limit');
 
 const authRoutes   = require('./routes/auth');
 const roomRoutes   = require('./routes/rooms');
@@ -20,7 +21,18 @@ const PORT = process.env.PORT || 3000;
 
 // Middleware
 app.use(cors({ origin: process.env.CLIENT_URL || '*' }));
-app.use(express.json({ limit: '5mb' })); // base64 зураг байршуулахад хэрэг
+app.use(express.json({ limit: '5mb' }));
+
+// Rate limiting — auth endpoint brute force хамгаалалт
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 минут
+  max: 20,                   // 15 минутад 20 оролдлого
+  message: { error: 'Хэт олон оролдлого. 15 минутын дараа дахин оролдоно уу.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use('/auth/login', authLimiter);
+app.use('/auth/register', authLimiter); // base64 зураг байршуулахад хэрэг
 
 // REST Routes
 app.use('/auth', authRoutes);
@@ -50,22 +62,28 @@ io.on('connection', (socket) => {
 
   // Лоббид бүртгүүлэх (апп нээгдэхэд дуудагдана)
   socket.on('lobby:register', ({ username, userId }) => {
-    socket.data.username = username;
-    socket.data.userId = String(userId || '');
-    onlineUsers.set(socket.id, { username, userId: socket.data.userId });
-    if (socket.data.userId) {
-      userSockets.set(socket.data.userId, socket.id);
-      // Хувийн мэдэгдэл хүлээн авахад хэрэглэгчийн өрөөнд нэгдэнэ
-      socket.join(`user:${socket.data.userId}`);
+    if (!username || typeof username !== 'string') return;
+    const safeName = username.trim().slice(0, 32);
+    const safeId   = String(userId || '').slice(0, 32);
+    socket.data.username = safeName;
+    socket.data.userId   = safeId;
+    onlineUsers.set(socket.id, { username: safeName, userId: safeId });
+    if (safeId) {
+      userSockets.set(safeId, socket.id);
+      socket.join(`user:${safeId}`);
     }
     io.emit('lobby:online_users', [...onlineUsers.values()]);
-    console.log(`[Socket] ${username} онлайн (нийт: ${onlineUsers.size})`);
+    console.log(`[Socket] ${safeName} онлайн (нийт: ${onlineUsers.size})`);
   });
 
   // Нийтийн лобби чат (бүх хэрэглэгчид харна)
   socket.on('lobby:chat', ({ username, text }) => {
-    if (!text?.trim()) return;
-    const msg = { username, text: text.trim(), time: new Date().toISOString() };
+    if (!text?.trim() || !username) return;
+    const msg = {
+      username: String(username).trim().slice(0, 32),
+      text: text.trim().slice(0, 500),
+      time: new Date().toISOString(),
+    };
     io.emit('lobby:chat', msg);
   });
 
@@ -108,9 +126,13 @@ io.on('connection', (socket) => {
 
   // Өрөөний чат мессеж
   socket.on('chat:message', ({ roomId, username, text }) => {
-    if (!text?.trim()) return;
-    const msg = { username, text: text.trim(), time: new Date().toISOString() };
-    io.to(roomId).emit('chat:message', msg);
+    if (!text?.trim() || !roomId) return;
+    const msg = {
+      username: String(username || socket.data.username || 'Тоглогч').trim().slice(0, 32),
+      text: text.trim().slice(0, 500),
+      time: new Date().toISOString(),
+    };
+    io.to(String(roomId)).emit('chat:message', msg);
   });
 
   // Өрөөнөөс гарах

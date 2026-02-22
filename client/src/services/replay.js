@@ -63,6 +63,10 @@ async function parseReplay(filePath) {
 
     // Хожсон багийг тодорхойлох
     const winnerTeam = getWinnerTeam(replay);
+    if (winnerTeam === null) {
+      console.warn('Хожсон баг тодорхойлж чадсангүй, үр дүн илгээхгүй');
+      return;
+    }
 
     const result = {
       room_id: currentRoomId,
@@ -86,17 +90,30 @@ async function parseReplay(filePath) {
 
 // Хожсон багийг тодорхойлох
 function getWinnerTeam(replay) {
-  // w3gjs-ийн leaveevents дотроос disconnect reason-ийг шалгах
-  const leavers = replay.players.filter(
-    (p) => p.leaving?.reason === 'disconnected'
-  );
+  const players = replay.players || [];
 
-  if (leavers.length > 0) {
-    const losingTeam = leavers[0].teamid;
-    return losingTeam === 1 ? 2 : 1;
+  // 1. w3gjs winner талбар шууд байвал ашиглах
+  const winner = players.find(p => p.won === true);
+  if (winner) return winner.teamid;
+
+  // 2. 'lost' шалтгаанаар гарсан тоглогчдыг олох
+  const losers = players.filter(p =>
+    p.leaving?.reason === 'lost' ||
+    p.leaving?.reason === 'disconnected'
+  );
+  if (losers.length > 0) {
+    // Хамгийн олон тоглогч гарсан баг хожигдсон
+    const teamCount = {};
+    for (const p of losers) {
+      teamCount[p.teamid] = (teamCount[p.teamid] || 0) + 1;
+    }
+    const losingTeam = Object.entries(teamCount)
+      .sort((a, b) => b[1] - a[1])[0][0];
+    return Number(losingTeam) === 1 ? 2 : 1;
   }
 
-  return 1; // Default
+  // 3. Default — тодорхойлж чадахгүй үед null буцаах
+  return null;
 }
 
 // Replay watcher зогсоох
