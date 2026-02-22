@@ -56,6 +56,18 @@ if (dbForMigration) {
       END IF;
     END $$
   `).catch(e => console.error('[Migration] team column:', e.message));
+
+  // game_players table migration
+  dbForMigration.query(`
+    CREATE TABLE IF NOT EXISTS game_players (
+      id             SERIAL PRIMARY KEY,
+      game_result_id INTEGER REFERENCES game_results(id) ON DELETE CASCADE,
+      user_id        INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      team           INTEGER NOT NULL,
+      is_winner      BOOLEAN NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_game_players_user ON game_players(user_id);
+  `).catch(e => console.error('[Migration] game_players table:', e.message));
 }
 
 // Rooms router-т io дамжуулах (kick/close event илгээхэд хэрэг)

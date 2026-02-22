@@ -318,12 +318,17 @@ ipcMain.handle('rooms:leave', async (event, roomId) => {
 });
 
 // Статистик
-ipcMain.handle('stats:player', async (event, discordId) => {
+ipcMain.handle('stats:player', async (_, discordId) => {
   return apiService.getPlayerStats(discordId);
 });
-
-ipcMain.handle('stats:ranking', async () => {
-  return apiService.getRanking();
+ipcMain.handle('stats:playerById', async (_, userId) => {
+  return apiService.getPlayerStatsById(userId);
+});
+ipcMain.handle('stats:history', async (_, userId, page) => {
+  return apiService.getGameHistory(userId, page);
+});
+ipcMain.handle('stats:ranking', async (_, { sort, page } = {}) => {
+  return apiService.getRanking({ sort, page });
 });
 
 // Replay watcher — тоглоом дуусахад renderer руу мэдэгдэх

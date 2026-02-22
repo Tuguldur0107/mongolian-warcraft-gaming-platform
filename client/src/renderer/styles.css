@@ -616,3 +616,58 @@ body.light #icon-moon { display: block !important; }
 }
 .invite-toast-title { font-size: 0.9rem; font-weight: 600; margin-bottom: 6px; }
 .invite-toast-btns { display: flex; gap: 8px; margin-top: 8px; }
+
+/* ── Ranking controls ───────────────────────────────── */
+.ranking-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.ranking-controls { display: flex; gap: 8px; align-items: center; }
+.ranking-self { background: rgba(114,137,218,0.12); font-weight: 600; }
+.ranking-row:hover { background: var(--bg2); }
+
+/* ── Pagination ─────────────────────────────────────── */
+.pagination {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: center;
+  padding: 10px 0 4px;
+}
+.pagination-info { font-size: 0.82rem; color: var(--text2); }
+
+/* ── Game history table (profile) ───────────────────── */
+#game-history-table { width: 100%; font-size: 0.82rem; }
+#game-history-table th, #game-history-table td { padding: 5px 8px; text-align: left; }
+#game-history-table thead tr { border-bottom: 1px solid var(--border); }
+
+/* ── User Profile Popup ─────────────────────────────── */
+.user-profile-box {
+  width: 360px;
+  max-width: 95vw;
+  position: relative;
+}
+.modal-close-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  font-size: 0.9rem;
+  line-height: 1;
+  padding: 4px 8px;
+}
+.profile-popup-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 10px;
+}
+.popup-avatar {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  object-fit: cover;
+  display: none;
+}
+.stats-row-sm { display: flex; gap: 10px; font-size: 0.78rem; margin-top: 4px; flex-wrap: wrap; }
+.stat-win  { color: var(--green); }
+.stat-loss { color: var(--red); }
+.history-table-sm { width: 100%; font-size: 0.78rem; }
+.history-table-sm th, .history-table-sm td { padding: 4px 6px; }
+

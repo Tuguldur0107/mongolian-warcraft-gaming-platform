@@ -279,13 +279,23 @@
 
     <!-- Ranking tab -->
     <div id="tab-ranking" class="tab">
-      <h2>🏆 Шилдэг тоглогчид</h2>
+      <div class="ranking-header">
+        <h2>🏆 Шилдэг тоглогчид</h2>
+        <div class="ranking-controls">
+          <select id="ranking-sort" class="input input-sm">
+            <option value="wins">Хожлоор</option>
+            <option value="winrate">Win%-ээр</option>
+            <option value="total_games">Нийт тоглолтоор</option>
+          </select>
+        </div>
+      </div>
       <table id="ranking-table">
         <thead>
           <tr><th>#</th><th>Тоглогч</th><th>Хожил</th><th>Хожигдол</th><th>Win%</th></tr>
         </thead>
         <tbody id="ranking-body"></tbody>
       </table>
+      <div id="ranking-pagination" class="pagination hidden"></div>
     </div>
 
     <!-- Profile tab -->
@@ -309,6 +319,19 @@
           </div>
           <button type="button" id="btn-link-discord" class="btn btn-discord hidden">Discord холбох</button>
         </div>
+      </div>
+
+      <div class="card mt-16">
+        <h3>📋 Тоглоомын түүх</h3>
+        <table id="game-history-table">
+          <thead>
+            <tr><th>Огноо</th><th>Төрөл</th><th>Өрөө</th><th>Баг</th><th>Үр дүн</th><th>Хугацаа</th></tr>
+          </thead>
+          <tbody id="game-history-body">
+            <tr><td colspan="6" class="empty-text">Ачааллаж байна...</td></tr>
+          </tbody>
+        </table>
+        <div id="game-history-pagination" class="pagination hidden"></div>
       </div>
 
       <div class="card mt-16">
@@ -429,6 +452,30 @@
           <svg class="btn-icon-svg"><use href="#ico-send"/></svg>
         </button>
       </div>
+    </div>
+  </div>
+
+  <!-- Хэрэглэгчийн профайл popup modal -->
+  <div id="user-profile-modal" class="modal hidden">
+    <div class="modal-box user-profile-box">
+      <button type="button" id="btn-close-user-profile" class="btn btn-icon-only btn-sm modal-close-btn" title="Хаах">✕</button>
+      <div class="profile-popup-header">
+        <img id="popup-avatar" src="" alt="" class="popup-avatar" />
+        <div>
+          <h3 id="popup-username"></h3>
+          <div class="stats-row-sm">
+            <span id="popup-wins" class="stat-win">0 хожил</span>
+            <span id="popup-losses" class="stat-loss">0 хожигдол</span>
+            <span id="popup-winrate">0%</span>
+          </div>
+        </div>
+      </div>
+      <h4 class="mt-8">Сүүлийн 5 тоглоом</h4>
+      <table id="popup-history-table" class="history-table-sm">
+        <thead><tr><th>Огноо</th><th>Баг</th><th>Үр дүн</th></tr></thead>
+        <tbody id="popup-history-body"></tbody>
+      </table>
+      <div id="popup-friend-btn-wrap" class="mt-8"></div>
     </div>
   </div>
 

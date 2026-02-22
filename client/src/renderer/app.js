@@ -1290,29 +1290,145 @@ function renderOnlineTab(others) {
 }
 
 // ── Ranking ───────────────────────────────────────────────
-async function loadRanking() {
-  const tbody = document.getElementById('ranking-body');
+let rankingPage = 1;
+let rankingSort = 'wins';
+
+async function loadRanking(page = rankingPage, sort = rankingSort) {
+  rankingPage = page;
+  rankingSort = sort;
+  const tbody    = document.getElementById('ranking-body');
+  const pagDiv   = document.getElementById('ranking-pagination');
+  const sortSel  = document.getElementById('ranking-sort');
+  if (sortSel) sortSel.value = sort;
   tbody.innerHTML = '<tr><td colspan="5" class="empty-text">Ачааллаж байна...</td></tr>';
   try {
-    const rows = await window.api.getRanking();
-    if (!rows.length) {
+    const currentUser = await window.api.getUser();
+    const data = await window.api.getRanking({ sort, page });
+    const players = data?.players || [];
+    const totalPages = data?.totalPages || 0;
+    const offset = (page - 1) * 20;
+
+    if (!players.length) {
       tbody.innerHTML = '<tr><td colspan="5" class="empty-text">Одоогоор мэдээлэл байхгүй</td></tr>';
+      pagDiv.classList.add('hidden');
       return;
     }
-    tbody.innerHTML = rows.map((p, i) => `
-      <tr>
-        <td>${i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}</td>
+
+    tbody.innerHTML = players.map((p, i) => {
+      const rank = offset + i + 1;
+      const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : rank;
+      const isSelf = currentUser && String(p.id) === String(currentUser.id);
+      return `<tr class="ranking-row${isSelf ? ' ranking-self' : ''}" data-userid="${p.id}" data-username="${p.username}" style="cursor:pointer">
+        <td>${medal}</td>
         <td>${p.username}</td>
         <td style="color:var(--green)">${p.wins}</td>
         <td style="color:var(--red)">${p.losses}</td>
         <td>${p.winrate}%</td>
-      </tr>`).join('');
+      </tr>`;
+    }).join('');
+
+    // Pagination
+    if (totalPages > 1) {
+      pagDiv.classList.remove('hidden');
+      pagDiv.innerHTML = renderPagination(page, totalPages, (p) => loadRanking(p, sort));
+    } else {
+      pagDiv.classList.add('hidden');
+    }
+
+    // Row click → profile popup
+    tbody.querySelectorAll('.ranking-row').forEach(row => {
+      row.addEventListener('click', () => openUserProfile(Number(row.dataset.userid)));
+    });
   } catch {
     tbody.innerHTML = '<tr><td colspan="5" class="empty-text">Серверт холбогдож чадсангүй</td></tr>';
+    pagDiv.classList.add('hidden');
   }
 }
 
+function renderPagination(current, total, onPage) {
+  let html = '';
+  if (current > 1)
+    html += `<button class="btn btn-sm pagination-btn" data-page="${current - 1}">‹</button>`;
+  html += `<span class="pagination-info">${current} / ${total}</span>`;
+  if (current < total)
+    html += `<button class="btn btn-sm pagination-btn" data-page="${current + 1}">›</button>`;
+
+  setTimeout(() => {
+    document.querySelectorAll('.pagination-btn').forEach(btn => {
+      btn.addEventListener('click', () => onPage(Number(btn.dataset.page)));
+    });
+  }, 0);
+  return html;
+}
+
+// ── User Profile Popup ────────────────────────────────────
+async function openUserProfile(userId) {
+  const modal = document.getElementById('user-profile-modal');
+  const currentUser = await window.api.getUser();
+  modal.classList.remove('hidden');
+
+  // Reset
+  document.getElementById('popup-username').textContent = '...';
+  document.getElementById('popup-wins').textContent     = '';
+  document.getElementById('popup-losses').textContent   = '';
+  document.getElementById('popup-winrate').textContent  = '';
+  document.getElementById('popup-history-body').innerHTML = '<tr><td colspan="3" class="empty-text">Ачааллаж байна...</td></tr>';
+  document.getElementById('popup-friend-btn-wrap').innerHTML = '';
+
+  const avatarEl = document.getElementById('popup-avatar');
+  avatarEl.src = ''; avatarEl.style.display = 'none';
+
+  try {
+    const [stats, history] = await Promise.all([
+      window.api.getPlayerStatsById(userId),
+      window.api.getGameHistory(userId, 1),
+    ]);
+
+    document.getElementById('popup-username').textContent = stats.username;
+    document.getElementById('popup-wins').textContent     = `${stats.wins} хожил`;
+    document.getElementById('popup-losses').textContent   = `${stats.losses} хожигдол`;
+    document.getElementById('popup-winrate').textContent  = stats.winrate;
+    if (stats.avatar_url) { avatarEl.src = stats.avatar_url; avatarEl.style.display = 'block'; }
+
+    const games = history?.games || [];
+    const tbody = document.getElementById('popup-history-body');
+    if (games.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="3" class="empty-text">Тоглоом байхгүй</td></tr>';
+    } else {
+      tbody.innerHTML = games.slice(0, 5).map(g => {
+        const date   = new Date(g.played_at).toLocaleDateString('mn-MN');
+        const result = g.is_winner ? '<span style="color:var(--green)">Хожив</span>' : '<span style="color:var(--red)">Хожигдов</span>';
+        return `<tr><td>${date}</td><td>${g.team}</td><td>${result}</td></tr>`;
+      }).join('');
+    }
+
+    // Friend button (don't show for self)
+    if (currentUser && String(userId) !== String(currentUser.id)) {
+      const wrap = document.getElementById('popup-friend-btn-wrap');
+      const btn  = document.createElement('button');
+      btn.className   = 'btn btn-sm btn-primary';
+      btn.textContent = 'Найз болох';
+      btn.onclick = async () => {
+        try {
+          await window.api.sendFriendRequest(userId);
+          btn.textContent = '✓ Хүсэлт илгээгдлээ';
+          btn.disabled = true;
+        } catch {}
+      };
+      wrap.appendChild(btn);
+    }
+  } catch {
+    document.getElementById('popup-username').textContent = 'Алдаа гарлаа';
+  }
+}
+
+document.getElementById('btn-close-user-profile').onclick = () => {
+  document.getElementById('user-profile-modal').classList.add('hidden');
+};
+
 // ── Profile ───────────────────────────────────────────────
+let gameHistoryPage = 1;
+
 async function loadProfile() {
   try {
     const user = await window.api.getUser();
@@ -1344,7 +1460,54 @@ async function loadProfile() {
       linkedEl.style.display  = 'none';
       linkBtnEl.style.display = 'block';
     }
+
+    // Тоглоомын түүх ачааллах
+    gameHistoryPage = 1;
+    await loadGameHistory(user.id, 1);
   } catch {}
+}
+
+async function loadGameHistory(userId, page) {
+  gameHistoryPage = page;
+  const tbody  = document.getElementById('game-history-body');
+  const pagDiv = document.getElementById('game-history-pagination');
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="6" class="empty-text">Ачааллаж байна...</td></tr>';
+  try {
+    const data  = await window.api.getGameHistory(userId, page);
+    const games = data?.games || [];
+
+    if (games.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" class="empty-text">Одоогоор тоглоом байхгүй</td></tr>';
+      pagDiv.classList.add('hidden');
+      return;
+    }
+
+    tbody.innerHTML = games.map(g => {
+      const date     = new Date(g.played_at).toLocaleDateString('mn-MN');
+      const result   = g.is_winner
+        ? '<span style="color:var(--green)">Хожив</span>'
+        : '<span style="color:var(--red)">Хожигдов</span>';
+      const duration = g.duration_minutes ? `${g.duration_minutes} мин` : '—';
+      return `<tr>
+        <td>${date}</td>
+        <td>${g.game_type || '—'}</td>
+        <td>${g.room_name || '—'}</td>
+        <td>${g.team}</td>
+        <td>${result}</td>
+        <td>${duration}</td>
+      </tr>`;
+    }).join('');
+
+    if ((data.totalPages || 0) > 1) {
+      pagDiv.classList.remove('hidden');
+      pagDiv.innerHTML = renderPagination(page, data.totalPages, (p) => loadGameHistory(userId, p));
+    } else {
+      pagDiv.classList.add('hidden');
+    }
+  } catch {
+    tbody.innerHTML = '<tr><td colspan="6" class="empty-text">Серверт холбогдож чадсангүй</td></tr>';
+  }
 }
 
 document.getElementById('btn-link-discord').onclick = () => window.api.linkDiscord();
@@ -1546,6 +1709,12 @@ if (userSearchInput) {
       } catch {}
     }, 500);
   });
+}
+
+// Ranking sort сонголт өөрчлөгдөхөд дахин ачааллах
+const rankingSortEl = document.getElementById('ranking-sort');
+if (rankingSortEl) {
+  rankingSortEl.addEventListener('change', () => loadRanking(1, rankingSortEl.value));
 }
 
 // ── Эхлүүлэх ─────────────────────────────────────────────

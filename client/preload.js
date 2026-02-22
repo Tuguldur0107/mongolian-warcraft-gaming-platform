@@ -25,8 +25,10 @@ contextBridge.exposeInMainWorld('api', {
   kickPlayer: (roomId, userId) => ipcRenderer.invoke('rooms:kick', roomId, userId),
 
   // Stats
-  getPlayerStats: (discordId) => ipcRenderer.invoke('stats:player', discordId),
-  getRanking: () => ipcRenderer.invoke('stats:ranking'),
+  getPlayerStats:   (discordId) => ipcRenderer.invoke('stats:player', discordId),
+  getPlayerStatsById: (userId)  => ipcRenderer.invoke('stats:playerById', userId),
+  getGameHistory:   (userId, page) => ipcRenderer.invoke('stats:history', userId, page),
+  getRanking:       (opts)      => ipcRenderer.invoke('stats:ranking', opts),
 
   // Тоглоом дуусах event
   onGameResult: (cb) => ipcRenderer.on('game:result', (_, data) => cb(data)),

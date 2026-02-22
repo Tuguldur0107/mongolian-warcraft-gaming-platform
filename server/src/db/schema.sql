@@ -49,6 +49,16 @@ CREATE TABLE IF NOT EXISTS game_results (
   played_at        TIMESTAMP DEFAULT NOW()
 );
 
+-- Тоглоомын тоглогчид (game history)
+CREATE TABLE IF NOT EXISTS game_players (
+  id             SERIAL PRIMARY KEY,
+  game_result_id INTEGER REFERENCES game_results(id) ON DELETE CASCADE,
+  user_id        INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  team           INTEGER NOT NULL,
+  is_winner      BOOLEAN NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_game_players_user ON game_players(user_id);
+
 -- Хувийн мессеж (DM)
 CREATE TABLE IF NOT EXISTS messages (
   id          SERIAL PRIMARY KEY,

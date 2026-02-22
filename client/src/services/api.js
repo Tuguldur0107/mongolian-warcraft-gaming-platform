@@ -68,8 +68,18 @@ async function getPlayerStats(discordId) {
   return data;
 }
 
-async function getRanking() {
-  const { data } = await getClient().get('/stats/ranking');
+async function getPlayerStatsById(userId) {
+  const { data } = await getClient().get(`/stats/player/id/${userId}`);
+  return data;
+}
+
+async function getRanking({ sort = 'wins', page = 1 } = {}) {
+  const { data } = await getClient().get('/stats/ranking', { params: { sort, page } });
+  return data;
+}
+
+async function getGameHistory(userId, page = 1) {
+  const { data } = await getClient().get(`/stats/history/${userId}`, { params: { page } });
   return data;
 }
 
@@ -164,7 +174,9 @@ module.exports = {
   kickPlayer,
   updateRoomNetwork,
   getPlayerStats,
+  getPlayerStatsById,
   getRanking,
+  getGameHistory,
   postGameResult,
   getFriends,
   getPendingRequests,
