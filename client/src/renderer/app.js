@@ -1959,13 +1959,27 @@ function showUpdateBar(message, showInstallBtn, percent = null) {
        </span>`
     : '';
   const btnHtml = showInstallBtn
-    ? `<button onclick="window.api.installUpdate()" style="
+    ? `<button id="btn-install-update" style="
          background:#fff;color:#1565c0;border:none;border-radius:6px;
          padding:4px 14px;font-weight:700;cursor:pointer;font-size:13px;">
          ↺ Дахин эхлүүлэх
        </button>`
     : '';
   bar.innerHTML = `<span>🔄 ${message}</span>${progressHtml}${btnHtml}`;
+  if (showInstallBtn) {
+    const btn = bar.querySelector('#btn-install-update');
+    if (btn) btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      btn.textContent = 'Суулгаж байна...';
+      try {
+        await window.api.installUpdate();
+      } catch (e) {
+        btn.disabled = false;
+        btn.textContent = '↺ Дахин эхлүүлэх';
+        showToast('Алдаа: ' + (e?.message || 'Шинэчлэл суулгах боломжгүй'), 'error', 5000);
+      }
+    });
+  }
 }
 
 // ── Toast notifications ───────────────────────────────────
@@ -2131,17 +2145,33 @@ document.addEventListener('keydown', (e) => {
 });
 
 // ── Discord Servers ───────────────────────────────────────
+// "Сервер нэмэх" товч — жагсаалтын эхэнд тод card байрлуулна
+function _discordAddCard() {
+  return `
+    <div class="room-card discord-server-card" id="discord-add-card"
+         style="border:2px dashed var(--accent);cursor:pointer;text-align:center;padding:18px;opacity:0.85;"
+         title="Сервер нэмэх">
+      <div style="font-size:2rem;margin-bottom:6px">➕</div>
+      <strong style="color:var(--accent)">Сервер нэмэх</strong>
+      <p class="meta hint" style="margin-top:4px">Discord серверийнхаа урилга холбоосыг нэмнэ үү</p>
+    </div>`;
+}
+
 async function loadDiscordServers() {
   const list = document.getElementById('discord-servers-list');
   if (!list) return;
   list.innerHTML = '<p class="empty-text">Ачааллаж байна...</p>';
   try {
     const servers = await window.api.getDiscordServers();
+    const addCard = _discordAddCard();
     if (!servers.length) {
-      list.innerHTML = '<p class="empty-text">Одоогоор Discord сервер байхгүй байна. Эхний сервераа нэмээрэй!</p>';
+      list.innerHTML = addCard;
+      list.querySelector('#discord-add-card').addEventListener('click', () => {
+        document.getElementById('btn-add-discord-server').click();
+      });
       return;
     }
-    list.innerHTML = servers.map(s => {
+    list.innerHTML = addCard + servers.map(s => {
       const isOwn = currentUser && String(s.added_by_id) === String(currentUser.id);
       return `
         <div class="room-card discord-server-card">
@@ -2160,6 +2190,9 @@ async function loadDiscordServers() {
         </div>`;
     }).join('');
 
+    list.querySelector('#discord-add-card')?.addEventListener('click', () => {
+      document.getElementById('btn-add-discord-server').click();
+    });
     list.querySelectorAll('.btn-discord-join').forEach(btn => {
       btn.onclick = () => window.api.openDiscordInvite(btn.dataset.url);
     });
