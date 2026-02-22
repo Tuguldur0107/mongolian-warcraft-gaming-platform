@@ -126,7 +126,7 @@ async function connectSocket() {
     _roomsRefreshTimer = setTimeout(() => {
       const lobbyTab = document.getElementById('tab-lobby');
       if (lobbyTab?.classList.contains('active')) loadRooms();
-    }, 2000);
+    }, 300);
   });
 
   // Онлайн тоглогчид (лобби)
