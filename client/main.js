@@ -280,7 +280,9 @@ ipcMain.handle('auth:changePassword', async (_, { oldPassword, newPassword }) =>
 
 // Update суулгаж restart хийх
 ipcMain.handle('update:install', () => {
-  autoUpdater.quitAndInstall();
+  // isSilent=true: NSIS installer далдуур ажиллана
+  // isForceRunAfter=true: суулгасны дараа апп дахин нээнэ
+  autoUpdater.quitAndInstall(true, true);
 });
 
 // App хувилбар буцаах
