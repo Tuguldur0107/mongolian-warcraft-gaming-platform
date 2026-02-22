@@ -77,4 +77,10 @@ contextBridge.exposeInMainWorld('api', {
   getDMHistoryBefore: (userId, before) => ipcRenderer.invoke('social:dmHistory:before', userId, before),
   getUnreadCount: ()                   => ipcRenderer.invoke('social:unread'),
   markDMRead:    (fromUserId)          => ipcRenderer.invoke('social:markRead', fromUserId),
+
+  // Auto-update
+  onUpdateAvailable: (cb) => ipcRenderer.on('update:available', (_, info) => cb(info)),
+  onUpdateProgress:  (cb) => ipcRenderer.on('update:progress',  (_, pct)  => cb(pct)),
+  onUpdateDownloaded:(cb) => ipcRenderer.on('update:downloaded', (_, info) => cb(info)),
+  installUpdate:     ()   => ipcRenderer.invoke('update:install'),
 });

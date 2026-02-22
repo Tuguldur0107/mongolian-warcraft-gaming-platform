@@ -20,11 +20,15 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         },
         {
           "target": "portable",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ]
     },
@@ -39,11 +43,17 @@
       "**/*",
       "!dist/**",
       "!node_modules/.cache"
-    ]
+    ],
+    "publish": {
+      "provider": "github",
+      "owner": "Tuguldur0107",
+      "repo": "mongolian-warcraft-gaming-platform"
+    }
   },
   "dependencies": {
     "axios": "^1.6.0",
     "chokidar": "^3.5.3",
+    "electron-updater": "^6.8.3",
     "qrcode": "^1.5.4",
     "socket.io-client": "^4.7.2",
     "w3gjs": "^2.3.1"

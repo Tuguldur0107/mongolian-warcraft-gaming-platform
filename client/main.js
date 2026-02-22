@@ -3,11 +3,29 @@ const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
 const QRCode = require('qrcode');
+const { autoUpdater } = require('electron-updater');
 
 const authService = require('./src/services/auth');
 const replayService = require('./src/services/replay');
 const zerotierService = require('./src/services/zerotier');
 const apiService = require('./src/services/api');
+
+// ── Auto-updater тохиргоо ─────────────────────────────────
+autoUpdater.autoDownload    = true;   // суллагдмагц дэвсгэрт татна
+autoUpdater.autoInstallOnAppQuit = false; // гараар restart хийнэ
+
+autoUpdater.on('update-available',  (info) => {
+  mainWindow?.webContents.send('update:available', { version: info.version });
+});
+autoUpdater.on('download-progress', (p) => {
+  mainWindow?.webContents.send('update:progress', Math.round(p.percent));
+});
+autoUpdater.on('update-downloaded', (info) => {
+  mainWindow?.webContents.send('update:downloaded', { version: info.version });
+});
+autoUpdater.on('error', (err) => {
+  console.error('[AutoUpdater]', err.message);
+});
 
 let mainWindow;
 let roomWindow = null;
@@ -54,6 +72,12 @@ app.whenReady().then(() => {
   // Апп эхлэхдээ argv-д deep link байгаа эсэх шалгах (Windows)
   const deepLinkUrl = process.argv.find(a => a.startsWith('wc3platform://'));
   if (deepLinkUrl) handleDeepLink(deepLinkUrl);
+
+  // Апп бэлэн болсноос 5 секундийн дараа update шалгах
+  // (dev горимд алгасах)
+  if (app.isPackaged) {
+    setTimeout(() => autoUpdater.checkForUpdates().catch(() => {}), 5000);
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -252,6 +276,11 @@ ipcMain.handle('auth:changePassword', async (_, { oldPassword, newPassword }) =>
     );
     return data;
   } catch (err) { throw apiError(err); }
+});
+
+// Update суулгаж restart хийх
+ipcMain.handle('update:install', () => {
+  autoUpdater.quitAndInstall();
 });
 
 ipcMain.handle('auth:logout', () => {

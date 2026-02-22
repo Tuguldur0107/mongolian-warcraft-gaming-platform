@@ -317,6 +317,17 @@ async function init() {
 
   // Өрөөний цонх хаагдахад lobby шинэчлэх
   window.api.onRoomWindowClosed(() => loadRooms());
+
+  // ── Auto-update мэдэгдлүүд ─────────────────────────────
+  window.api.onUpdateAvailable(({ version }) => {
+    showUpdateBar(`v${version} шинэ хувилбар байна. Татаж байна...`, null);
+  });
+  window.api.onUpdateProgress((pct) => {
+    showUpdateBar(`Шинэ хувилбар татаж байна... ${pct}%`, null, pct);
+  });
+  window.api.onUpdateDownloaded(({ version }) => {
+    showUpdateBar(`v${version} бэлэн боллоо!`, true);
+  });
 }
 
 function setUserUI(user) {
@@ -1808,6 +1819,35 @@ function showGameResult(data) {
 document.getElementById('btn-close-result').onclick = () => {
   document.getElementById('result-modal').style.display = 'none';
 };
+
+// ── Update notification bar ───────────────────────────────
+function showUpdateBar(message, showInstallBtn, percent = null) {
+  let bar = document.getElementById('update-bar');
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.id = 'update-bar';
+    bar.style.cssText = `
+      position:fixed; top:0; left:0; right:0; z-index:9999;
+      background:#1565c0; color:#fff; font-size:13px;
+      display:flex; align-items:center; justify-content:center; gap:12px;
+      padding:8px 16px; box-shadow:0 2px 8px rgba(0,0,0,.4);
+    `;
+    document.body.appendChild(bar);
+  }
+  const progressHtml = (percent !== null)
+    ? `<span style="background:rgba(255,255,255,.25);border-radius:8px;width:120px;height:6px;display:inline-block;overflow:hidden;vertical-align:middle">
+         <span style="display:block;height:100%;width:${percent}%;background:#90caf9;transition:width .3s"></span>
+       </span>`
+    : '';
+  const btnHtml = showInstallBtn
+    ? `<button onclick="window.api.installUpdate()" style="
+         background:#fff;color:#1565c0;border:none;border-radius:6px;
+         padding:4px 14px;font-weight:700;cursor:pointer;font-size:13px;">
+         ↺ Дахин эхлүүлэх
+       </button>`
+    : '';
+  bar.innerHTML = `<span>🔄 ${message}</span>${progressHtml}${btnHtml}`;
+}
 
 // ── Toast notifications ───────────────────────────────────
 function showToast(message, type = 'info', duration = 3000) {
