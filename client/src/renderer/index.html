@@ -306,7 +306,7 @@
       <div class="ranking-header">
         <h2>🏆 Шилдэг тоглогчид</h2>
         <div class="ranking-controls">
-          <select id="ranking-sort" class="input input-sm">
+          <select id="ranking-sort" class="input input-sm" title="Эрэмблэх">
             <option value="wins">Хожлоор</option>
             <option value="winrate">Win%-ээр</option>
             <option value="total_games">Нийт тоглолтоор</option>
@@ -408,26 +408,26 @@
         <h3>🌐 ZeroTier Сүлжээ</h3>
         <p class="hint">
           WC3 LAN тоглоом ажиллахын тулд бүх тоглогчид нэг ZeroTier сүлжээнд байх шаардлагатай.<br>
-          <a href="https://my.zerotier.com" style="color:var(--accent)">my.zerotier.com</a>-д нэвтэрч Network үүсгэж, 16 тэмдэгтийн ID-г доор оруулна уу.
+          <a href="https://my.zerotier.com" class="link-accent">my.zerotier.com</a>-д нэвтэрч Network үүсгэж, 16 тэмдэгтийн ID-г доор оруулна уу.
         </p>
-        <div class="form-row" style="display:flex;gap:8px;align-items:center;margin-top:8px">
-          <input type="text" id="input-zerotier-id" class="input" maxlength="16"
-            placeholder="e.g. 8056c2e21c000001" style="font-family:monospace;letter-spacing:1px;flex:1" />
+        <div class="form-row settings-form-row">
+          <input type="text" id="input-zerotier-id" class="input input-mono" maxlength="16"
+            placeholder="e.g. 8056c2e21c000001" />
           <button type="button" id="btn-save-zerotier" class="btn btn-primary">Хадгалах</button>
         </div>
-        <p id="zerotier-save-msg" class="hint" style="margin-top:6px;color:var(--success,#4caf50)"></p>
+        <p id="zerotier-save-msg" class="hint msg-save"></p>
       </div>
 
       <div class="card settings-card mt-8">
         <h3>🔄 Програмын шинэчлэл</h3>
-        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
-          <span class="hint" style="margin:0">Одоогийн хувилбар: <strong id="app-version">...</strong></span>
+        <div class="update-header-row">
+          <span class="hint hint-no-margin">Одоогийн хувилбар: <strong id="app-version">...</strong></span>
           <button type="button" id="btn-check-update" class="btn btn-primary btn-with-icon">
             <svg class="btn-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
             Шинэчлэл шалгах
           </button>
         </div>
-        <p id="update-check-msg" class="hint" style="margin-top:8px"></p>
+        <p id="update-check-msg" class="hint mt-8"></p>
       </div>
     </div>
   </div>
@@ -438,7 +438,7 @@
       <div class="chat-panel">
         <div class="room-header">
           <button type="button" id="btn-leave-room" class="btn btn-sm btn-danger">
-            <svg class="btn-icon-svg" style="width:13px;height:13px"><use href="#ico-leave"/></svg>
+            <svg class="btn-icon-svg icon-sm"><use href="#ico-leave"/></svg>
             Гарах
           </button>
           <h2 id="room-title">Өрөө</h2>
@@ -461,15 +461,15 @@
         <div class="card">
           <h3>🎮 Тоглоом</h3>
           <p class="hint" id="room-info-text"></p>
-          <div id="zt-info" class="hint" style="display:none;margin-bottom:8px;font-size:0.78rem">
-            🌐 ZeroTier: <code id="zt-network-id" style="font-size:0.78rem;user-select:all"></code>
+          <div id="zt-info" class="hint">
+            🌐 ZeroTier: <code id="zt-network-id"></code>
           </div>
           <button type="button" id="btn-launch-wc3" class="btn btn-primary btn-block btn-with-icon">
             <svg class="btn-icon-svg"><use href="#ico-play"/></svg>
             <span>Тоглоом эхлүүлэх</span>
           </button>
-          <button type="button" id="btn-close-room" class="btn btn-danger btn-block mt-8" style="display:none">
-            <svg class="btn-icon-svg" style="width:13px;height:13px"><use href="#ico-close"/></svg>
+          <button type="button" id="btn-close-room" class="btn btn-danger btn-block btn-with-icon mt-8">
+            <svg class="btn-icon-svg"><use href="#ico-close"/></svg>
             Өрөөг хаах
           </button>
         </div>
@@ -510,7 +510,7 @@
         </button>
       </div>
       <div id="dm-messages" class="dm-messages"></div>
-      <div id="dm-typing-indicator" class="typing-indicator" style="display:none"></div>
+      <div id="dm-typing-indicator" class="typing-indicator"></div>
       <div class="chat-input-row dm-input-row">
         <input id="dm-input" type="text" placeholder="Хувийн мессеж..." class="input" />
         <button type="button" id="btn-dm-send" class="btn btn-primary btn-icon-only" title="Илгээх">
@@ -526,8 +526,8 @@
       <h3 id="confirm-title">Баталгаажуулах</h3>
       <p id="confirm-message"></p>
       <div class="confirm-actions">
-        <button id="confirm-cancel" class="btn">Цуцлах</button>
-        <button id="confirm-ok" class="btn btn-danger">Тийм</button>
+        <button type="button" id="confirm-cancel" class="btn">Цуцлах</button>
+        <button type="button" id="confirm-ok" class="btn btn-danger">Тийм</button>
       </div>
     </div>
   </div>

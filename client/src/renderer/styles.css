@@ -796,6 +796,19 @@ body.light #icon-moon { display: block !important; }
 .confirm-box p  { color: var(--text2); font-size: 0.9rem; margin-bottom: 16px; }
 .confirm-actions { display: flex; gap: 8px; justify-content: flex-end; }
 
+/* ── Settings utility ───────────────────────────────── */
+.link-accent        { color: var(--accent); }
+.settings-form-row  { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+.input-mono         { font-family: monospace; letter-spacing: 1px; flex: 1; }
+.msg-save           { margin-top: 6px; color: var(--success, #4caf50); }
+.update-header-row  { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+.hint-no-margin     { margin: 0; }
+.icon-sm            { width: 13px; height: 13px; }
+#zt-info            { display: none; margin-bottom: 8px; font-size: 0.78rem; }
+#zt-info code       { font-size: 0.78rem; user-select: all; }
+#btn-close-room     { display: none; }
+#dm-typing-indicator { display: none; }
+
 /* ── Responsive ─────────────────────────────────────── */
 @media (max-width: 900px) {
   .rooms-grid { grid-template-columns: 1fr !important; }
