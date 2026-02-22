@@ -4,15 +4,16 @@
 :root {
   --bg:      #0d0d1a;
   --bg2:     #1a1a2e;
-  --card:    #16213e;
+  /* Card болон header-г тунгалаг болгов — background зураг харагдана */
+  --card:    rgba(16, 22, 48, 0.82);
   --accent:  #7289da;
   --accent2: #5865f2;
   --text:    #e0e0e0;
   --text2:   #a0a0b0;
   --green:   #43b581;
   --red:     #f04747;
-  --border:  #2a2a4a;
-  --shadow:  rgba(0,0,0,0.4);
+  --border:  rgba(60, 60, 100, 0.7);
+  --shadow:  rgba(0,0,0,0.55);
   --login-bg1: #1a1a3e;
   --login-bg2: #0d0d1a;
 }
@@ -36,12 +37,26 @@ body.light {
 
 body {
   font-family: 'Segoe UI', sans-serif;
-  background: var(--bg);
+  /* ── Үндсэн background зураг ── */
+  background-image: url('bg.png');
+  background-size: cover;
+  background-position: center top;
+  background-attachment: fixed;
+  background-repeat: no-repeat;
+  /* Зураг дээр бараан overlay — текст болон UI уншигдахаар */
+  background-color: rgba(5, 5, 18, 0.72);
+  background-blend-mode: darken;
   color: var(--text);
   height: 100vh;
   overflow: hidden;
   user-select: none;
-  transition: background 0.2s, color 0.2s;
+  transition: background-color 0.2s, color 0.2s;
+}
+
+/* Light горимд арай тунгалаг overlay */
+body.light {
+  background-color: rgba(220, 230, 255, 0.55);
+  background-blend-mode: lighten;
 }
 
 /* ── Pages ─────────────────────────────────────────── */
@@ -52,18 +67,22 @@ body {
 #page-login {
   justify-content: center;
   align-items: center;
-  background: radial-gradient(ellipse at center, var(--login-bg1) 0%, var(--login-bg2) 70%);
+  /* Нэвтрэх хуудасны gradient-г арилгав — body-н bg зураг харагдана */
+  background: transparent;
   overflow-y: auto;
 }
 .login-box {
   text-align: center;
   padding: 36px 48px;
-  background: var(--card);
+  /* Тунгалаг нэвтрэх хайрцаг — backdrop blur-тай */
+  background: rgba(12, 14, 40, 0.78);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   border-radius: 20px;
-  border: 1px solid var(--border);
+  border: 1px solid rgba(114, 137, 218, 0.25);
   max-width: 420px;
   width: 90%;
-  box-shadow: 0 20px 60px var(--shadow);
+  box-shadow: 0 20px 60px rgba(0,0,0,0.6);
   margin: 20px 0;
   transition: background 0.2s, border-color 0.2s;
 }
@@ -110,7 +129,10 @@ header {
   align-items: center;
   padding: 0 16px;
   height: 52px;
-  background: var(--bg2);
+  /* Тунгалаг header — background зураг доор харагдана */
+  background: rgba(13, 13, 35, 0.80);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   border-bottom: 1px solid var(--border);
   gap: 10px;
   flex-shrink: 0;
