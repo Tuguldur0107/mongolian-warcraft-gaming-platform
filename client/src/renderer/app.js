@@ -774,19 +774,17 @@ function _enterRoomUI(id, name, gameType, isHost, hostId) {
 
   showPage('page-room');
 
-  // ZeroTier Network ID харуулах
-  window.api.getSettings().then(s => {
-    const ztId  = s?.zerotierNetworkId?.trim();
-    const ztDiv = document.getElementById('zt-info');
-    if (ztDiv) {
-      if (ztId) {
-        document.getElementById('zt-network-id').textContent = ztId;
-        ztDiv.style.display = '';
-      } else {
-        ztDiv.style.display = 'none';
-      }
+  // ZeroTier Network ID — өрөөний мэдээллээс харуулах
+  const ztDiv = document.getElementById('zt-info');
+  const ztId  = room?.zerotier_network_id;
+  if (ztDiv) {
+    if (ztId) {
+      document.getElementById('zt-network-id').textContent = ztId;
+      ztDiv.style.display = '';
+    } else {
+      ztDiv.style.display = 'none';
     }
-  }).catch(() => {});
+  }
 
   if (socket && currentUser) {
     socket.emit('room:join', { roomId: id });
@@ -1801,28 +1799,9 @@ async function loadSettings() {
     configuredGames = settings.games || [];
     renderGamesList();
     populateRoomTypeSelect();
-    // ZeroTier Network ID
-    const ztInput = document.getElementById('input-zerotier-id');
-    if (ztInput && settings.zerotierNetworkId) {
-      ztInput.value = settings.zerotierNetworkId;
-    }
   } catch {}
 }
 
-// ZeroTier Network ID хадгалах
-document.getElementById('btn-save-zerotier').onclick = async () => {
-  const id  = document.getElementById('input-zerotier-id').value.trim();
-  const msg = document.getElementById('zerotier-save-msg');
-  if (id && !/^[0-9a-f]{16}$/i.test(id)) {
-    msg.style.color = 'var(--danger, #f44336)';
-    msg.textContent = '⚠ 16 тэмдэгтийн hex ID оруулна уу (жишээ: 8056c2e21c000001)';
-    return;
-  }
-  await window.api.setZerotierNetwork(id);
-  msg.style.color = 'var(--success, #4caf50)';
-  msg.textContent = id ? `✓ "${id}" хадгалагдлаа` : '✓ ZeroTier ID арилгагдлаа';
-  setTimeout(() => { msg.textContent = ''; }, 3000);
-};
 
 function renderGamesList() {
   const ul = document.getElementById('games-list');

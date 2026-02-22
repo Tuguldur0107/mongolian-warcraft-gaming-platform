@@ -97,6 +97,7 @@ router.get('/', optAuth, async (req, res) => {
       const r = await db.query(`
         SELECT r.id, r.name, r.host_id, u.username AS host_name,
           r.max_players, r.game_type, r.status, r.has_password,
+          r.zerotier_network_id,
           COUNT(rp.user_id) AS player_count,
           JSON_AGG(JSON_BUILD_OBJECT('id', u2.id::text, 'name', u2.username)
             ORDER BY rp.joined_at) FILTER (WHERE u2.username IS NOT NULL) AS members
@@ -121,6 +122,7 @@ router.get('/mine', optAuth, async (req, res) => {
       const r = await db.query(`
         SELECT r.id, r.name, r.host_id, u.username AS host_name,
           r.max_players, r.game_type, r.status, r.has_password,
+          r.zerotier_network_id,
           COUNT(rp2.user_id) AS player_count,
           JSON_AGG(JSON_BUILD_OBJECT('id', u2.id::text, 'name', u2.username)
             ORDER BY rp2.joined_at) FILTER (WHERE u2.username IS NOT NULL) AS members
@@ -171,8 +173,8 @@ router.post('/', strictAuth, async (req, res) => {
       const room = r.rows[0];
       await db.query('INSERT INTO room_players (room_id, user_id) VALUES ($1,$2)', [room.id, userId]);
 
-      // ZeroTier network автоматаар үүсгэх
-      const ztNetId = await ztCreateNetwork(name);
+      // ZeroTier: Central API → үгүй бол default network ашиглана
+      const ztNetId = (await ztCreateNetwork(name)) || process.env.ZEROTIER_DEFAULT_NETWORK || null;
       if (ztNetId) {
         await db.query('UPDATE rooms SET zerotier_network_id=$1 WHERE id=$2', [ztNetId, room.id]);
         room.zerotier_network_id = ztNetId;
