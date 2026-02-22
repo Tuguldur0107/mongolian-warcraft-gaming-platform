@@ -25,6 +25,7 @@ autoUpdater.on('update-downloaded', (info) => {
 });
 autoUpdater.on('error', (err) => {
   console.error('[AutoUpdater]', err.message);
+  mainWindow?.webContents.send('update:error', err.message);
 });
 
 let mainWindow;
@@ -280,9 +281,9 @@ ipcMain.handle('auth:changePassword', async (_, { oldPassword, newPassword }) =>
 
 // Update суулгаж restart хийх
 ipcMain.handle('update:install', () => {
-  // isSilent=true: NSIS installer далдуур ажиллана
+  // isSilent=false: NSIS installer UI гаргана (UAC зөвшөөрөл авна)
   // isForceRunAfter=true: суулгасны дараа апп дахин нээнэ
-  autoUpdater.quitAndInstall(true, true);
+  autoUpdater.quitAndInstall(false, true);
 });
 
 // App хувилбар буцаах

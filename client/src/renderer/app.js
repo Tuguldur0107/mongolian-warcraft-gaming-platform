@@ -346,6 +346,10 @@ async function init() {
     showUpdateBar(`v${version} бэлэн боллоо!`, true);
     setUpdateMsg(`v${version} татагдлаа! Дээрх "Суулгаж дахин эхлүүлэх" дарна уу.`, 'success');
   });
+  window.api.onUpdateError?.((msg) => {
+    setUpdateMsg(`Шинэчлэлийн алдаа: ${msg}`, 'error');
+    showToast(`Шинэчлэлийн алдаа: ${msg}`, 'error', 6000);
+  });
 
   // ── Хувилбар харуулах + гараар шалгах ─────────────────
   window.api.getAppVersion?.().then(v => {
