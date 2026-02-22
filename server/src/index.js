@@ -4,6 +4,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
+const jwt = require('jsonwebtoken');
 
 const authRoutes   = require('./routes/auth');
 const roomRoutes   = require('./routes/rooms');
@@ -49,6 +50,42 @@ setIO(io);
 // Social router-т io дамжуулах (friend request мэдэгдэлд хэрэг)
 socialRoutes.setIO(io);
 
+// ── XSS хамгаалалт ───────────────────────────────────────
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+// ── Socket rate limiting ──────────────────────────────────
+function checkRateLimit(socket) {
+  const now = Date.now();
+  // 30 секундийн хоригтой эсэх
+  if (socket.data.rateLimitUntil && now < socket.data.rateLimitUntil) {
+    return true;
+  }
+  // 500ms cooldown
+  if (socket.data.lastMessageTime && now - socket.data.lastMessageTime < 500) {
+    return true;
+  }
+  // 1 минутад 30 мессеж хязгаар
+  if (!socket.data.messageWindowStart || now - socket.data.messageWindowStart > 60000) {
+    socket.data.messageCount = 0;
+    socket.data.messageWindowStart = now;
+  }
+  socket.data.messageCount = (socket.data.messageCount || 0) + 1;
+  if (socket.data.messageCount > 30) {
+    socket.data.rateLimitUntil = now + 30000;
+    socket.data.messageCount = 0;
+    console.log(`[RateLimit] ${socket.user?.username || socket.id} хаагдлаа (30 секунд)`);
+    return true;
+  }
+  socket.data.lastMessageTime = now;
+  return false;
+}
+
 // ── Socket.io — Чат & өрөөний event ─────────────────────
 // roomId → Set of usernames
 const roomMembers = {};
@@ -57,31 +94,44 @@ const onlineUsers = new Map();
 // String(userId) → socketId (private мессеж илгээхэд хэрэг)
 const userSockets = new Map();
 
+// ── Socket.io JWT middleware ──────────────────────────────
+io.use((socket, next) => {
+  const token = socket.handshake.auth?.token;
+  if (!token) return next(new Error('Authentication required'));
+  try {
+    socket.user = jwt.verify(token, process.env.JWT_SECRET);
+    next();
+  } catch {
+    next(new Error('Invalid token'));
+  }
+});
+
 io.on('connection', (socket) => {
-  console.log(`[Socket] холбогдлоо: ${socket.id}`);
+  console.log(`[Socket] холбогдлоо: ${socket.id} (${socket.user?.username})`);
 
   // Лоббид бүртгүүлэх (апп нээгдэхэд дуудагдана)
-  socket.on('lobby:register', ({ username, userId }) => {
-    if (!username || typeof username !== 'string') return;
-    const safeName = username.trim().slice(0, 32);
-    const safeId   = String(userId || '').slice(0, 32);
-    socket.data.username = safeName;
-    socket.data.userId   = safeId;
-    onlineUsers.set(socket.id, { username: safeName, userId: safeId });
-    if (safeId) {
-      userSockets.set(safeId, socket.id);
-      socket.join(`user:${safeId}`);
+  // JWT-ийн мэдээллийг ашиглана — client-ийн утгыг хэрэглэхгүй
+  socket.on('lobby:register', () => {
+    const username = socket.user.username;
+    const userId   = String(socket.user.id);
+    socket.data.username = username;
+    socket.data.userId   = userId;
+    onlineUsers.set(socket.id, { username, userId });
+    if (userId) {
+      userSockets.set(userId, socket.id);
+      socket.join(`user:${userId}`);
     }
     io.emit('lobby:online_users', [...onlineUsers.values()]);
-    console.log(`[Socket] ${safeName} онлайн (нийт: ${onlineUsers.size})`);
+    console.log(`[Socket] ${username} онлайн (нийт: ${onlineUsers.size})`);
   });
 
   // Нийтийн лобби чат (бүх хэрэглэгчид харна)
-  socket.on('lobby:chat', ({ username, text }) => {
-    if (!text?.trim() || !username) return;
+  socket.on('lobby:chat', ({ text }) => {
+    if (!text?.trim()) return;
+    if (checkRateLimit(socket)) return;
     const msg = {
-      username: String(username).trim().slice(0, 32),
-      text: text.trim().slice(0, 500),
+      username: socket.user.username,
+      text: escapeHtml(text.trim().slice(0, 500)),
       time: new Date().toISOString(),
     };
     io.emit('lobby:chat', msg);
@@ -90,13 +140,15 @@ io.on('connection', (socket) => {
   // Хувийн мессеж (private message)
   socket.on('private:message', ({ toUserId, text }) => {
     if (!text?.trim()) return;
-    const { username, userId } = socket.data;
+    if (checkRateLimit(socket)) return;
+    const userId   = String(socket.user.id);
+    const username = socket.user.username;
     // Хүлээн авагч илгээгчийг хаасан эсэх шалгах
-    if (socialRoutes.isUserBlocked(String(toUserId), String(userId))) return;
+    if (socialRoutes.isUserBlocked(String(toUserId), userId)) return;
     const msg = {
       fromUsername: username,
-      fromUserId: userId,
-      text: text.trim(),
+      fromUserId:   userId,
+      text: escapeHtml(text.trim()),
       time: new Date().toISOString(),
     };
     const toSocketId = userSockets.get(String(toUserId));
@@ -108,35 +160,35 @@ io.on('connection', (socket) => {
   });
 
   // Өрөөнд нэгдэх
-  socket.on('room:join', ({ roomId, username }) => {
+  socket.on('room:join', ({ roomId }) => {
+    const username = socket.user.username;
     socket.join(roomId);
-    socket.data.roomId = roomId;
-    if (username) socket.data.username = username;
+    socket.data.roomId   = roomId;
+    socket.data.username = username;
 
     if (!roomMembers[roomId]) roomMembers[roomId] = new Set();
-    roomMembers[roomId].add(socket.data.username || username);
+    roomMembers[roomId].add(username);
 
-    // Бусдад мэдэгдэх
-    socket.to(roomId).emit('room:user_joined', { username: socket.data.username || username });
-    // Өрөөний гишүүдийн жагсаалт илгээх
+    socket.to(roomId).emit('room:user_joined', { username });
     io.to(roomId).emit('room:members', [...roomMembers[roomId]]);
-
-    console.log(`[Socket] ${socket.data.username} → өрөө ${roomId}`);
+    console.log(`[Socket] ${username} → өрөө ${roomId}`);
   });
 
   // Өрөөний чат мессеж
-  socket.on('chat:message', ({ roomId, username, text }) => {
+  socket.on('chat:message', ({ roomId, text }) => {
     if (!text?.trim() || !roomId) return;
+    if (checkRateLimit(socket)) return;
     const msg = {
-      username: String(username || socket.data.username || 'Тоглогч').trim().slice(0, 32),
-      text: text.trim().slice(0, 500),
+      username: socket.user.username,
+      text: escapeHtml(text.trim().slice(0, 500)),
       time: new Date().toISOString(),
     };
     io.to(String(roomId)).emit('chat:message', msg);
   });
 
   // Өрөөнөөс гарах
-  socket.on('room:leave', ({ roomId, username }) => {
+  socket.on('room:leave', ({ roomId }) => {
+    const username = socket.user.username;
     socket.leave(roomId);
     socket.data.roomId = null;
     if (roomMembers[roomId]) {
@@ -148,7 +200,9 @@ io.on('connection', (socket) => {
 
   // Унтрах үед
   socket.on('disconnect', () => {
-    const { roomId, username, userId } = socket.data;
+    const { roomId } = socket.data;
+    const username = socket.user?.username || socket.data.username;
+    const userId   = String(socket.user?.id || socket.data.userId || '');
     if (roomId && username && roomMembers[roomId]) {
       roomMembers[roomId].delete(username);
       io.to(roomId).emit('room:user_left', { username });
@@ -157,7 +211,7 @@ io.on('connection', (socket) => {
     onlineUsers.delete(socket.id);
     if (userId) userSockets.delete(userId);
     io.emit('lobby:online_users', [...onlineUsers.values()]);
-    console.log(`[Socket] салгагдлаа: ${socket.id}`);
+    console.log(`[Socket] салгагдлаа: ${socket.id} (${username})`);
   });
 });
 

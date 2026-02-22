@@ -75,8 +75,8 @@ router.get('/ranking', async (req, res) => {
   res.json([]);
 });
 
-// Replay parse хийсний дараа үр дүн хадгалах
-router.post('/result', auth.optional, async (req, res) => {
+// Replay parse хийсний дараа үр дүн хадгалах (зөвхөн өрөөний эзэн)
+router.post('/result', auth, async (req, res) => {
   const { room_id, winner_team, duration_minutes, replay_path, players } = req.body;
 
   if (!winner_team || !Array.isArray(players) || players.length === 0) {
@@ -84,6 +84,31 @@ router.post('/result', auth.optional, async (req, res) => {
   }
   if (![1, 2].includes(Number(winner_team))) {
     return res.status(400).json({ error: 'winner_team 1 эсвэл 2 байх ёстой' });
+  }
+
+  // room_id байгаа бол room membership болон host шалгах
+  if (room_id) {
+    try {
+      // Тухайн хэрэглэгч өрөөний гишүүн эсэх
+      const membership = await db.query(
+        'SELECT 1 FROM room_players WHERE room_id=$1 AND user_id=$2',
+        [room_id, req.user.id]
+      );
+      if (!membership.rows[0])
+        return res.status(403).json({ error: 'Энэ өрөөний гишүүн биш байна' });
+
+      // Зөвхөн эзэн үр дүн бичих эрхтэй
+      const room = await db.query('SELECT host_id, status FROM rooms WHERE id=$1', [room_id]);
+      if (!room.rows[0])
+        return res.status(404).json({ error: 'Өрөө олдсонгүй' });
+      if (String(room.rows[0].host_id) !== String(req.user.id))
+        return res.status(403).json({ error: 'Зөвхөн өрөөний эзэн үр дүн бичих эрхтэй' });
+      if (room.rows[0].status !== 'playing')
+        return res.status(400).json({ error: 'Тоглолт эхлээгүй өрөөнд үр дүн бичих боломжгүй' });
+    } catch (err) {
+      console.error(err);
+      return res.status(500).json({ error: 'Серверийн алдаа' });
+    }
   }
 
   try {
@@ -97,13 +122,19 @@ router.post('/result', auth.optional, async (req, res) => {
     // Тоглогчдын win/loss шинэчлэх
     const ALLOWED_COLUMNS = ['wins', 'losses'];
     for (const player of players) {
-      if (!player.discord_id || typeof player.discord_id !== 'string') continue;
       const column = player.team === winner_team ? 'wins' : 'losses';
-      if (!ALLOWED_COLUMNS.includes(column)) continue; // SQL injection хамгаалалт
-      await db.query(
-        `UPDATE users SET ${column} = ${column} + 1 WHERE discord_id = $1`,
-        [player.discord_id]
-      );
+      if (!ALLOWED_COLUMNS.includes(column)) continue;
+      if (player.user_id) {
+        await db.query(
+          `UPDATE users SET ${column} = ${column} + 1 WHERE id = $1`,
+          [player.user_id]
+        );
+      } else if (player.discord_id && typeof player.discord_id === 'string') {
+        await db.query(
+          `UPDATE users SET ${column} = ${column} + 1 WHERE discord_id = $1`,
+          [player.discord_id]
+        );
+      }
     }
 
     // Өрөөний статус дуусгах

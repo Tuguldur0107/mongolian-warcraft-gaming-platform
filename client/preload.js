@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('api', {
   getQR:        () => ipcRenderer.invoke('auth:qr'),
   logout:       () => ipcRenderer.invoke('auth:logout'),
   getUser:      () => ipcRenderer.invoke('auth:getUser'),
+  getToken:     () => ipcRenderer.invoke('auth:getToken'),
   onAuthSuccess:(cb) => ipcRenderer.on('auth:success', (_, user) => cb(user)),
 
   // Rooms

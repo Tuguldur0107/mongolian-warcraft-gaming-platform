@@ -261,7 +261,8 @@ ipcMain.handle('auth:logout', () => {
   return true;
 });
 
-ipcMain.handle('auth:getUser', () => authService.getUser());
+ipcMain.handle('auth:getUser',  () => authService.getUser());
+ipcMain.handle('auth:getToken', () => authService.getToken());
 
 // Өрөөнүүд
 ipcMain.handle('rooms:list', async () => apiService.getRooms());

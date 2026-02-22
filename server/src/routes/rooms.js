@@ -2,6 +2,7 @@ const express = require('express');
 const bcrypt  = require('bcrypt');
 const auth    = require('../middleware/auth');
 const optAuth = auth.optional;
+const strictAuth = auth; // strict — token заавал шаардана
 
 let db;
 try { db = require('../config/db'); } catch { db = null; }
@@ -99,7 +100,7 @@ router.get('/mine', optAuth, async (req, res) => {
 });
 
 // ── POST /rooms — шинэ өрөө үүсгэх ──────────────────────
-router.post('/', optAuth, async (req, res) => {
+router.post('/', strictAuth, async (req, res) => {
   const { name, max_players = 10, game_type = '', password } = req.body;
   if (!name) return res.status(400).json({ error: 'Өрөөний нэр шаардлагатай' });
   if (!game_type) return res.status(400).json({ error: 'Тоглоомын төрөл шаардлагатай' });
@@ -148,7 +149,7 @@ router.post('/', optAuth, async (req, res) => {
 });
 
 // ── POST /rooms/:id/join ──────────────────────────────────
-router.post('/:id/join', optAuth, async (req, res) => {
+router.post('/:id/join', strictAuth, async (req, res) => {
   const { id } = req.params;
   const { password } = req.body;
   const userId = req.user.id;
@@ -200,7 +201,7 @@ router.post('/:id/join', optAuth, async (req, res) => {
 });
 
 // ── POST /rooms/:id/leave ─────────────────────────────────
-router.post('/:id/leave', optAuth, async (req, res) => {
+router.post('/:id/leave', strictAuth, async (req, res) => {
   const { id } = req.params;
   const userId = req.user.id;
 
@@ -228,7 +229,7 @@ router.post('/:id/leave', optAuth, async (req, res) => {
 });
 
 // ── DELETE /rooms/:id — өрөөг хаах (эзэн л хийж болно) ──
-router.delete('/:id', optAuth, async (req, res) => {
+router.delete('/:id', strictAuth, async (req, res) => {
   const { id } = req.params;
   const userId = req.user.id;
 
@@ -253,7 +254,7 @@ router.delete('/:id', optAuth, async (req, res) => {
 });
 
 // ── POST /rooms/:id/kick/:userId — тоглогч kick ──────────
-router.post('/:id/kick/:targetId', optAuth, async (req, res) => {
+router.post('/:id/kick/:targetId', strictAuth, async (req, res) => {
   const { id, targetId } = req.params;
   const userId = req.user.id;
 
@@ -280,7 +281,7 @@ router.post('/:id/kick/:targetId', optAuth, async (req, res) => {
 });
 
 // ── POST /rooms/:id/start ─────────────────────────────────
-router.post('/:id/start', optAuth, async (req, res) => {
+router.post('/:id/start', strictAuth, async (req, res) => {
   const { id } = req.params;
   const userId = req.user.id;
 

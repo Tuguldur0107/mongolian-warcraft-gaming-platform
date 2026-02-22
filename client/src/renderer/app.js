@@ -41,17 +41,20 @@ function isRoomMode() {
   return new URLSearchParams(window.location.search).get('mode') === 'room';
 }
 
-function connectSocket() {
+async function connectSocket() {
   if (socket) socket.disconnect();
-  socket = io(SERVER, { transports: ['websocket'] });
+  const token = await window.api.getToken().catch(() => null);
+  socket = io(SERVER, {
+    transports: ['websocket'],
+    auth: { token },
+  });
 
   socket.on('connect', () => {
     console.log('Socket холбогдлоо');
     if (currentUser) {
-      socket.emit('lobby:register', {
-        username: currentUser.username,
-        userId: currentUser.id,
-      });
+      // JWT middleware-ийн ачаар username/userId-г серверт дахин илгээх шаардлагагүй
+      // Гэхдээ lobby-д бүртгүүлэхийн тулд event илгээнэ
+      socket.emit('lobby:register');
     }
   });
 
@@ -184,7 +187,7 @@ async function init() {
     window.addEventListener('beforeunload', () => {
       if (currentRoom) {
         if (socket) {
-          socket.emit('room:leave', { roomId: currentRoom.id, username: currentUser.username });
+          socket.emit('room:leave', { roomId: currentRoom.id });
         }
         window.api.leaveRoom(currentRoom.id).catch(() => {});
       }
@@ -512,7 +515,7 @@ function _enterRoomUI(id, name, gameType, isHost, hostId) {
   showPage('page-room');
 
   if (socket && currentUser) {
-    socket.emit('room:join', { roomId: id, username: currentUser.username });
+    socket.emit('room:join', { roomId: id });
   }
   appendSysMsg(`"${name}" өрөөнд нэгдлээ.`);
 }
@@ -521,7 +524,7 @@ function _enterRoomUI(id, name, gameType, isHost, hostId) {
 document.getElementById('btn-leave-room').onclick = async () => {
   if (!currentRoom) return;
   if (socket && currentUser) {
-    socket.emit('room:leave', { roomId: currentRoom.id, username: currentUser.username });
+    socket.emit('room:leave', { roomId: currentRoom.id });
   }
   try { await window.api.leaveRoom(currentRoom.id); } catch {}
   currentRoom = null;
@@ -590,7 +593,7 @@ function sendMessage() {
   const input = document.getElementById('chat-input');
   const text  = input.value.trim();
   if (!text || !currentRoom || !socket) return;
-  socket.emit('chat:message', { roomId: currentRoom.id, username: currentUser.username, text });
+  socket.emit('chat:message', { roomId: currentRoom.id, text });
   input.value = '';
 }
 
@@ -668,7 +671,7 @@ function sendLobbyMessage() {
   const input = document.getElementById('lobby-chat-input');
   const text  = input.value.trim();
   if (!text || !socket || !currentUser) return;
-  socket.emit('lobby:chat', { username: currentUser.username, text });
+  socket.emit('lobby:chat', { text });
   input.value = '';
 }
 
