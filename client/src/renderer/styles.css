@@ -49,6 +49,7 @@ body {
   color: var(--text);
   height: 100vh;
   overflow: hidden;
+  -webkit-user-select: none;
   user-select: none;
   transition: background-color 0.2s, color 0.2s;
 }
@@ -76,8 +77,8 @@ body.light {
   padding: 36px 48px;
   /* Тунгалаг нэвтрэх хайрцаг — backdrop blur-тай */
   background: rgba(12, 14, 40, 0.78);
-  backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
   border-radius: 20px;
   border: 1px solid rgba(114, 137, 218, 0.25);
   max-width: 420px;
@@ -131,8 +132,8 @@ header {
   height: 52px;
   /* Тунгалаг header — background зураг доор харагдана */
   background: rgba(13, 13, 35, 0.80);
-  backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
   border-bottom: 1px solid var(--border);
   gap: 10px;
   flex-shrink: 0;
@@ -716,6 +717,7 @@ body.light #icon-moon { display: block !important; }
   font-family: monospace;
   font-size: 0.82rem;
   word-break: break-all;
+  -webkit-user-select: all;
   user-select: all;
   cursor: text;
 }
@@ -808,7 +810,7 @@ body.light #icon-moon { display: block !important; }
 .hint-no-margin     { margin: 0; }
 .icon-sm            { width: 13px; height: 13px; }
 #zt-info            { display: none; margin-bottom: 8px; font-size: 0.78rem; }
-#zt-info code       { font-size: 0.78rem; user-select: all; }
+#zt-info code       { font-size: 0.78rem; -webkit-user-select: all; user-select: all; }
 #btn-close-room     { display: none; }
 #dm-typing-indicator { display: none; }
 
