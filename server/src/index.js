@@ -68,6 +68,18 @@ if (dbForMigration) {
     );
     CREATE INDEX IF NOT EXISTS idx_game_players_user ON game_players(user_id);
   `).catch(e => console.error('[Migration] game_players table:', e.message));
+
+  // password_resets table migration
+  dbForMigration.query(`
+    CREATE TABLE IF NOT EXISTS password_resets (
+      id         SERIAL PRIMARY KEY,
+      user_id    INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      token      VARCHAR(64) UNIQUE NOT NULL,
+      expires_at TIMESTAMP NOT NULL,
+      used       BOOLEAN DEFAULT FALSE,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+  `).catch(e => console.error('[Migration] password_resets table:', e.message));
 }
 
 // Rooms router-т io дамжуулах (kick/close event илгээхэд хэрэг)

@@ -2,6 +2,7 @@ const express = require('express');
 const axios   = require('axios');
 const jwt     = require('jsonwebtoken');
 const bcrypt  = require('bcrypt');
+const crypto  = require('crypto');
 const authMW  = require('../middleware/auth');
 
 let db;
@@ -264,6 +265,87 @@ router.put('/avatar', authMW, async (req, res) => {
   if (u) u.avatar_url = avatar_url;
   const updated = { ...req.user, avatar_url };
   res.json({ ok: true, avatar_url, token: makeJWT(updated) });
+});
+
+// ── Нууц үг сэргээх — token үүсгэх ──────────────────────
+router.post('/forgot-password', async (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ error: 'Имэйл оруулна уу' });
+
+  if (await dbOk()) {
+    try {
+      const user = await db.query('SELECT id FROM users WHERE email = $1', [email]);
+      if (!user.rows[0]) return res.status(404).json({ error: 'Энэ имэйлтэй хэрэглэгч олдсонгүй' });
+
+      const token     = crypto.randomBytes(32).toString('hex');
+      const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 минут
+
+      await db.query(
+        'INSERT INTO password_resets (user_id, token, expires_at) VALUES ($1, $2, $3)',
+        [user.rows[0].id, token, expiresAt]
+      );
+      return res.json({ ok: true, resetToken: token, expiresIn: '30 минут' });
+    } catch (e) { console.error(e); }
+  }
+  res.status(500).json({ error: 'Серверийн алдаа' });
+});
+
+// ── Нууц үг сэргээх — шинэ нууц үгтэй token ашиглах ────
+router.post('/reset-password', async (req, res) => {
+  const { token, newPassword } = req.body;
+  if (!token || !newPassword) return res.status(400).json({ error: 'Token болон шинэ нууц үг шаардлагатай' });
+  if (newPassword.length < 6) return res.status(400).json({ error: 'Нууц үг хамгийн багадаа 6 тэмдэгт' });
+
+  if (await dbOk()) {
+    try {
+      const r = await db.query(
+        'SELECT * FROM password_resets WHERE token=$1 AND used=FALSE AND expires_at > NOW()',
+        [token]
+      );
+      if (!r.rows[0]) return res.status(400).json({ error: 'Token буруу эсвэл хугацаа дууссан' });
+
+      const hash = await bcrypt.hash(newPassword, 10);
+      await db.query('UPDATE users SET password_hash=$1 WHERE id=$2', [hash, r.rows[0].user_id]);
+      await db.query('UPDATE password_resets SET used=TRUE WHERE id=$1', [r.rows[0].id]);
+      return res.json({ ok: true });
+    } catch (e) { console.error(e); }
+  }
+  res.status(500).json({ error: 'Серверийн алдаа' });
+});
+
+// ── Username өөрчлөх ──────────────────────────────────────
+router.put('/username', authMW, async (req, res) => {
+  const { username } = req.body;
+  if (!username || username.trim().length < 2 || username.trim().length > 20)
+    return res.status(400).json({ error: 'Username 2-20 тэмдэгт байх ёстой' });
+
+  const clean = username.trim();
+  if (await dbOk()) {
+    try {
+      await db.query('UPDATE users SET username=$1 WHERE id=$2', [clean, req.user.id]);
+      const user = { ...req.user, username: clean };
+      return res.json({ ok: true, token: makeJWT(user), username: clean });
+    } catch (e) { console.error(e); }
+  }
+  // In-memory fallback
+  const u = memFindById(req.user.id);
+  if (u) u.username = clean;
+  return res.json({ ok: true, token: makeJWT({ ...req.user, username: clean }), username: clean });
+});
+
+// ── Discord холболт салгах ────────────────────────────────
+router.put('/unlink-discord', authMW, async (req, res) => {
+  if (await dbOk()) {
+    try {
+      const user = await db.query('SELECT password_hash FROM users WHERE id=$1', [req.user.id]);
+      if (!user.rows[0]?.password_hash)
+        return res.status(400).json({ error: 'Эхлээд нууц үг тохируулна уу. Discord-г салгасны дараа нэвтрэх аргагүй болно.' });
+
+      await db.query('UPDATE users SET discord_id=NULL WHERE id=$1', [req.user.id]);
+      return res.json({ ok: true });
+    } catch (e) { console.error(e); }
+  }
+  res.status(500).json({ error: 'Серверийн алдаа' });
 });
 
 // ── Өөрийн мэдээлэл ──────────────────────────────────────

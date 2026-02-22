@@ -11,6 +11,18 @@ function getClient() {
   });
 }
 
+// Хэрэглэгчид ойлгомжтой алдааны мессеж
+function friendlyError(err) {
+  if (!err.response) {
+    if (err.code === 'ECONNREFUSED' || err.code === 'ECONNRESET')
+      return 'Серверт холбогдох боломжгүй байна. Интернэт холболтоо шалгана уу.';
+    if (err.code === 'ETIMEDOUT')
+      return 'Серверээс хариу ирсэнгүй. Дахин оролдоно уу.';
+    return 'Сүлжээний алдаа гарлаа. Интернэт холболтоо шалгана уу.';
+  }
+  return err.response.data?.error || err.response.data?.message || 'Алдаа гарлаа';
+}
+
 async function getRooms() {
   const { data } = await getClient().get('/rooms');
   return data;
@@ -156,8 +168,29 @@ async function markDMRead(fromUserId) {
   return data;
 }
 
+async function forgotPassword(email) {
+  const { data } = await getClient().post('/auth/forgot-password', { email });
+  return data;
+}
+
+async function resetPassword(token, newPassword) {
+  const { data } = await getClient().post('/auth/reset-password', { token, newPassword });
+  return data;
+}
+
+async function changeUsername(username) {
+  const { data } = await getClient().put('/auth/username', { username });
+  return data;
+}
+
+async function unlinkDiscord() {
+  const { data } = await getClient().put('/auth/unlink-discord');
+  return data;
+}
+
 module.exports = {
   SERVER_URL,
+  friendlyError,
   changePassword,
   quickMatch,
   searchUsers,
@@ -188,4 +221,8 @@ module.exports = {
   unblockUser,
   getBlockedUsers,
   updateAvatar,
+  forgotPassword,
+  resetPassword,
+  changeUsername,
+  unlinkDiscord,
 };

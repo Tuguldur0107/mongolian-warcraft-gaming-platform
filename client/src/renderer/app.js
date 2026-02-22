@@ -51,6 +51,7 @@ async function connectSocket() {
 
   socket.on('connect', () => {
     console.log('Socket холбогдлоо');
+    updateConnectionStatus('online');
     if (currentUser) {
       // JWT middleware-ийн ачаар username/userId-г серверт дахин илгээх шаардлагагүй
       // Гэхдээ lobby-д бүртгүүлэхийн тулд event илгээнэ
@@ -84,7 +85,11 @@ async function connectSocket() {
     showRoomInvite(fromUsername, roomId, roomName);
   });
 
-  socket.on('disconnect', () => console.log('Socket салгагдлаа'));
+  socket.on('disconnect', () => {
+    console.log('Socket салгагдлаа');
+    updateConnectionStatus('offline');
+  });
+  socket.on('reconnecting', () => updateConnectionStatus('reconnecting'));
 
   // Өрөөний чат
   socket.on('chat:message',     (msg)     => appendMessage(msg));
@@ -236,6 +241,7 @@ document.querySelectorAll('.auth-tab').forEach(btn => {
     const which = btn.dataset.auth;
     document.getElementById('auth-login').style.display    = which === 'login'    ? '' : 'none';
     document.getElementById('auth-register').style.display = which === 'register' ? '' : 'none';
+    document.getElementById('auth-forgot').style.display   = 'none';
   };
 });
 
@@ -333,6 +339,71 @@ document.getElementById('btn-email-login').onclick = async (e) => {
 document.getElementById('login-password').addEventListener('keydown', e => {
   if (e.key === 'Enter') document.getElementById('btn-email-login').click();
 });
+
+// ── Нууц үг сэргээх (Forgot Password) ───────────────────
+function showLoginForm()  { showAuthPanel('auth-login');  }
+function showForgotForm() { showAuthPanel('auth-forgot'); }
+
+function showAuthPanel(id) {
+  ['auth-login', 'auth-register', 'auth-forgot'].forEach(p => {
+    const el = document.getElementById(p);
+    if (el) el.classList.toggle('hidden', el.id !== id);
+  });
+}
+
+document.getElementById('btn-forgot-password').onclick = () => {
+  showForgotForm();
+  document.getElementById('forgot-step-1').classList.remove('hidden');
+  document.getElementById('forgot-step-2').classList.add('hidden');
+  document.getElementById('forgot-error').textContent = '';
+};
+
+document.getElementById('btn-back-to-login').onclick = () => showLoginForm();
+
+document.getElementById('btn-forgot-send').onclick = async (e) => {
+  const btn   = e.currentTarget;
+  const email = document.getElementById('forgot-email').value.trim();
+  const errEl = document.getElementById('forgot-error');
+  errEl.textContent = '';
+  if (!email) { errEl.textContent = 'Имэйл оруулна уу'; return; }
+  btn.disabled = true; btn.textContent = '...';
+  try {
+    const data = await window.api.forgotPassword(email);
+    // Show the reset token to the user (they copy it)
+    document.getElementById('forgot-token-display').textContent = data.resetToken;
+    document.getElementById('forgot-step-1').classList.add('hidden');
+    document.getElementById('forgot-step-2').classList.remove('hidden');
+  } catch (err) {
+    errEl.textContent = err.message || 'Алдаа гарлаа';
+  } finally {
+    btn.disabled = false; btn.textContent = 'Код авах';
+  }
+};
+
+document.getElementById('btn-forgot-reset').onclick = async (e) => {
+  const btn      = e.currentTarget;
+  const token    = document.getElementById('forgot-token-input').value.trim();
+  const newPw    = document.getElementById('forgot-new-password').value;
+  const errEl    = document.getElementById('forgot-reset-error');
+  errEl.textContent = '';
+  if (!token || !newPw) { errEl.textContent = 'Бүх талбарыг бөглөнө үү'; return; }
+  if (newPw.length < 6) { errEl.textContent = 'Нууц үг хамгийн багадаа 6 тэмдэгт'; return; }
+  btn.disabled = true; btn.textContent = '...';
+  try {
+    await window.api.resetPassword(token, newPw);
+    showLoginForm();
+    document.getElementById('login-error').textContent = '';
+    // Show success briefly
+    const errLogin = document.getElementById('login-error');
+    errLogin.style.color = 'var(--green)';
+    errLogin.textContent = '✓ Нууц үг амжилттай шинэчлэгдлээ. Нэвтэрнэ үү.';
+    setTimeout(() => { errLogin.textContent = ''; errLogin.style.color = ''; }, 5000);
+  } catch (err) {
+    errEl.textContent = err.message || 'Token буруу эсвэл хугацаа дууссан';
+  } finally {
+    btn.disabled = false; btn.textContent = 'Нууц үг шинэчлэх';
+  }
+};
 
 // ── Нууц үг харах/нуух toggle ────────────────────────────
 document.querySelectorAll('.btn-eye').forEach(btn => {
@@ -1512,6 +1583,57 @@ async function loadGameHistory(userId, page) {
 
 document.getElementById('btn-link-discord').onclick = () => window.api.linkDiscord();
 
+// ── Username засах ────────────────────────────────────────
+document.getElementById('btn-edit-username').onclick = () => {
+  const form = document.getElementById('username-edit-form');
+  form.classList.toggle('hidden');
+  if (!form.classList.contains('hidden')) {
+    const input = document.getElementById('username-input');
+    input.value = document.getElementById('profile-name').textContent;
+    input.focus();
+  }
+};
+document.getElementById('btn-username-cancel').onclick = () => {
+  document.getElementById('username-edit-form').classList.add('hidden');
+  document.getElementById('username-edit-error').textContent = '';
+};
+document.getElementById('btn-username-save').onclick = async (e) => {
+  const btn   = e.currentTarget;
+  const val   = document.getElementById('username-input').value.trim();
+  const errEl = document.getElementById('username-edit-error');
+  errEl.textContent = '';
+  if (!val || val.length < 2 || val.length > 20) {
+    errEl.textContent = 'Username 2-20 тэмдэгт байх ёстой';
+    return;
+  }
+  btn.disabled = true; btn.textContent = '...';
+  try {
+    const data = await window.api.changeUsername(val);
+    document.getElementById('profile-name').textContent = data.username;
+    document.getElementById('user-name').textContent    = data.username;
+    document.getElementById('username-edit-form').classList.add('hidden');
+  } catch (err) {
+    errEl.textContent = err.message || 'Алдаа гарлаа';
+  } finally {
+    btn.disabled = false; btn.textContent = 'Хадгалах';
+  }
+};
+
+// ── Discord салгах ────────────────────────────────────────
+const btnUnlinkDiscord = document.getElementById('btn-unlink-discord');
+if (btnUnlinkDiscord) {
+  btnUnlinkDiscord.onclick = async () => {
+    if (!confirm('Discord холболтыг салгахдаа итгэлтэй байна уу? Нэвтрэхэд нууц үг шаардлагатай болно.')) return;
+    try {
+      await window.api.unlinkDiscord();
+      // Reload profile
+      loadProfile();
+    } catch (err) {
+      alert(err.message || 'Алдаа гарлаа');
+    }
+  };
+}
+
 // ── Нууц үг солих ─────────────────────────────────────────
 document.getElementById('btn-change-password').onclick = async (e) => {
   const btn        = e.currentTarget;
@@ -1654,6 +1776,18 @@ function showGameResult(data) {
 document.getElementById('btn-close-result').onclick = () => {
   document.getElementById('result-modal').style.display = 'none';
 };
+
+// ── Холболтын төлөв ───────────────────────────────────────
+function updateConnectionStatus(status) {
+  const indicator = document.getElementById('connection-status');
+  if (!indicator) return;
+  indicator.className = `connection-status ${status}`;
+  indicator.textContent = {
+    online:       '🟢 Холбогдсон',
+    offline:      '🔴 Салгагдсан',
+    reconnecting: '🟡 Дахин холбогдож байна...',
+  }[status] || '';
+}
 
 // ── Хэрэгслүүд ───────────────────────────────────────────
 function escHtml(t) {

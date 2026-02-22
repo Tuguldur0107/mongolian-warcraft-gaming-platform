@@ -53,8 +53,12 @@ contextBridge.exposeInMainWorld('api', {
   // Профайл зураг
   uploadAvatar: () => ipcRenderer.invoke('auth:uploadAvatar'),
 
-  // Нууц үг солих
-  changePassword: (oldPassword, newPassword) => ipcRenderer.invoke('auth:changePassword', { oldPassword, newPassword }),
+  // Нууц үг солих / сэргээх
+  changePassword:  (oldPassword, newPassword) => ipcRenderer.invoke('auth:changePassword', { oldPassword, newPassword }),
+  forgotPassword:  (email) => ipcRenderer.invoke('auth:forgotPassword', email),
+  resetPassword:   (token, newPassword) => ipcRenderer.invoke('auth:resetPassword', token, newPassword),
+  changeUsername:  (username) => ipcRenderer.invoke('auth:changeUsername', username),
+  unlinkDiscord:   () => ipcRenderer.invoke('auth:unlinkDiscord'),
 
   // Нийгмийн функцүүд (friends / block)
   getFriends:          ()             => ipcRenderer.invoke('social:friends'),

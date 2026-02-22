@@ -331,6 +331,31 @@ ipcMain.handle('stats:ranking', async (_, { sort, page } = {}) => {
   return apiService.getRanking({ sort, page });
 });
 
+// Auth utilities
+ipcMain.handle('auth:forgotPassword', async (_, email) => {
+  try { return await apiService.forgotPassword(email); } catch (err) { throw apiError(err); }
+});
+ipcMain.handle('auth:resetPassword', async (_, token, newPassword) => {
+  try { return await apiService.resetPassword(token, newPassword); } catch (err) { throw apiError(err); }
+});
+ipcMain.handle('auth:changeUsername', async (_, username) => {
+  const axios = require('axios');
+  const token = authService.getToken();
+  if (!token) throw new Error('Нэвтэрх хугацаа дууссан');
+  try {
+    const { data } = await axios.put(
+      `${apiService.SERVER_URL}/auth/username`,
+      { username },
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    if (data.token) authService.saveToken(data.token);
+    return data;
+  } catch (err) { throw apiError(err); }
+});
+ipcMain.handle('auth:unlinkDiscord', async () => {
+  try { return await apiService.unlinkDiscord(); } catch (err) { throw apiError(err); }
+});
+
 // Replay watcher — тоглоом дуусахад renderer руу мэдэгдэх
 replayService.onResult((data) => {
   mainWindow?.webContents.send('game:result', data);

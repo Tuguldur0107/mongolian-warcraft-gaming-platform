@@ -95,6 +95,7 @@
         </div>
         <p id="login-error" class="form-error"></p>
         <button type="button" id="btn-email-login" class="btn btn-primary btn-block">Нэвтрэх</button>
+        <button type="button" id="btn-forgot-password" class="btn-link mt-4">Нууц үгээ мартсан уу?</button>
         <div class="login-divider"><span>эсвэл</span></div>
         <button type="button" id="btn-login" class="btn btn-discord btn-block">Discord-ээр нэвтрэх</button>
         <div class="qr-section">
@@ -108,6 +109,28 @@
             Шинэчлэх
           </button>
         </div>
+      </div>
+
+      <!-- Нууц үг сэргээх form -->
+      <div id="auth-forgot" class="auth-form hidden">
+        <h3 class="mb-8">🔑 Нууц үг сэргээх</h3>
+        <div id="forgot-step-1">
+          <input id="forgot-email" type="email" placeholder="Бүртгэлтэй имэйл хаяг" class="input" />
+          <p id="forgot-error" class="form-error"></p>
+          <button type="button" id="btn-forgot-send" class="btn btn-primary btn-block mt-4">Код авах</button>
+        </div>
+        <div id="forgot-step-2" class="hidden">
+          <p class="hint mb-8">Доорх кодыг хадгалж авна уу:</p>
+          <div id="forgot-token-display" class="reset-token-box"></div>
+          <input id="forgot-token-input" type="text" placeholder="Дээрх кодыг оруулна уу" class="input mt-8" />
+          <div class="input-pw-wrap mt-4">
+            <input id="forgot-new-password" type="password" placeholder="Шинэ нууц үг (6+ тэмдэгт)" class="input" />
+            <button type="button" class="btn-eye" data-target="forgot-new-password" title="Нууц үг харах">👁</button>
+          </div>
+          <p id="forgot-reset-error" class="form-error"></p>
+          <button type="button" id="btn-forgot-reset" class="btn btn-primary btn-block mt-4">Нууц үг шинэчлэх</button>
+        </div>
+        <button type="button" id="btn-back-to-login" class="btn-link mt-8">← Нэвтрэх хуудас руу буцах</button>
       </div>
 
       <div id="auth-register" class="auth-form hidden">
@@ -144,6 +167,7 @@
         <button type="button" class="nav-btn" data-tab="settings">⚙️</button>
       </nav>
       <div class="header-right">
+        <span id="connection-status" class="connection-status online">🟢 Холбогдсон</span>
         <!-- Light / Dark toggle -->
         <button type="button" id="btn-theme" class="btn btn-icon-only" title="Харааны горим солих">
           <svg class="btn-icon-svg" id="icon-sun"><use href="#ico-sun"/></svg>
@@ -305,7 +329,16 @@
           <img id="profile-avatar" src="" alt="" />
           <button type="button" id="btn-upload-avatar" class="avatar-upload-btn" title="Зураг солих">📷</button>
         </div>
-        <h2 id="profile-name"></h2>
+        <div class="username-edit-row">
+          <h2 id="profile-name"></h2>
+          <button type="button" id="btn-edit-username" class="btn btn-sm" title="Username өөрчлөх">✏️</button>
+        </div>
+        <div id="username-edit-form" class="hidden username-edit-form">
+          <input id="username-input" type="text" placeholder="Шинэ нэр (2-20 тэмдэгт)" class="input input-sm" maxlength="20" />
+          <button type="button" id="btn-username-save" class="btn btn-sm btn-primary">Хадгалах</button>
+          <button type="button" id="btn-username-cancel" class="btn btn-sm">Цуцлах</button>
+        </div>
+        <p id="username-edit-error" class="form-error"></p>
         <p id="profile-email" class="hint"></p>
         <div class="stats-row">
           <div class="stat"><span id="stat-wins">0</span><label>Хожил</label></div>
@@ -316,6 +349,7 @@
           <div id="discord-linked" class="discord-badge hidden">
             <span>✓ Discord холбогдсон</span>
             <span id="discord-username" class="hint"></span>
+            <button type="button" id="btn-unlink-discord" class="btn btn-sm btn-danger-soft" title="Discord салгах">✕</button>
           </div>
           <button type="button" id="btn-link-discord" class="btn btn-discord hidden">Discord холбох</button>
         </div>

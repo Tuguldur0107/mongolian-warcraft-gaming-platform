@@ -671,3 +671,43 @@ body.light #icon-moon { display: block !important; }
 .history-table-sm { width: 100%; font-size: 0.78rem; }
 .history-table-sm th, .history-table-sm td { padding: 4px 6px; }
 
+/* ── Connection status indicator ────────────────────── */
+.connection-status {
+  font-size: 0.72rem;
+  padding: 3px 8px;
+  border-radius: 10px;
+  background: var(--bg2);
+  white-space: nowrap;
+}
+.connection-status.offline      { color: #f04747; }
+.connection-status.reconnecting { color: #faa61a; }
+.connection-status.online       { color: #43b581; }
+
+/* ── Forgot password / Reset token ─────────────────── */
+.reset-token-box {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 14px;
+  font-family: monospace;
+  font-size: 0.82rem;
+  word-break: break-all;
+  user-select: all;
+  cursor: text;
+}
+.btn-link {
+  background: none;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 0.82rem;
+  padding: 0;
+  text-decoration: underline;
+}
+.btn-link:hover { color: var(--accent-hover, #8ab4f8); }
+
+/* ── Username edit row ──────────────────────────────── */
+.username-edit-row { display: flex; align-items: center; gap: 8px; }
+.username-edit-form { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 4px; }
+.username-edit-form .input { flex: 1; min-width: 120px; }
+
