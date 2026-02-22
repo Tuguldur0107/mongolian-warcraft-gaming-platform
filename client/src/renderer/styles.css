@@ -768,6 +768,7 @@ body.light #icon-moon { display: block !important; }
   word-break: break-word;
 }
 .toast.success { background: #43b581; }
+.btn-success { background: #43b581 !important; border-color: #43b581 !important; color: #fff !important; }
 .toast.error   { background: #f04747; }
 .toast.info    { background: #5865f2; }
 .toast.warning { background: #faa61a; color: #000; }

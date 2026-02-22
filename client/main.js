@@ -598,12 +598,16 @@ ipcMain.handle('game:launch', (_, gameType) => {
   const games = s.games;
   if (!games.length) throw new Error('Тоглоом тохируулагдаагүй байна (Тохируулга таб)');
 
-  // Тоглоомын нэрийг тохируулах (тохирох нэр, эсвэл эхний тоглоом)
   const game = games.find(g => g.name === gameType) || games[0];
   if (!fs.existsSync(game.path)) {
     throw new Error(`"${game.name}" файл олдсонгүй: ${game.path}`);
   }
-  const proc = spawn(game.path, [], { detached: true, stdio: 'ignore' });
-  proc.unref();
+  const proc = spawn(game.path, [], { detached: false, stdio: 'ignore' });
+
+  // WC3 хаагдахад renderer-т мэдэгдэнэ
+  proc.on('exit', () => {
+    mainWindow?.webContents.send('game:exited');
+  });
+
   return true;
 });
