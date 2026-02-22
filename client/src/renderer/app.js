@@ -1,4 +1,4 @@
-const SERVER = 'http://localhost:3000';
+const SERVER = 'https://mongolian-warcraft-gaming-platform-production.up.railway.app';
 
 // ── Socket.io ─────────────────────────────────────────────
 let socket = null;
