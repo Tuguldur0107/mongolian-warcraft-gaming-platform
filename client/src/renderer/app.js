@@ -239,9 +239,10 @@ document.querySelectorAll('.auth-tab').forEach(btn => {
     document.querySelectorAll('.auth-tab').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     const which = btn.dataset.auth;
-    document.getElementById('auth-login').style.display    = which === 'login'    ? '' : 'none';
-    document.getElementById('auth-register').style.display = which === 'register' ? '' : 'none';
-    document.getElementById('auth-forgot').style.display   = 'none';
+    // classList ашиглах — style.display нь 'hidden' CSS классыг устгадаггүй учраас
+    document.getElementById('auth-login').classList.toggle('hidden', which !== 'login');
+    document.getElementById('auth-register').classList.toggle('hidden', which !== 'register');
+    document.getElementById('auth-forgot').classList.add('hidden');
   };
 });
 
