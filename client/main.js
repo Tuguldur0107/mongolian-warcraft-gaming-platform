@@ -490,6 +490,20 @@ ipcMain.handle('social:unblock',       async (_, targetUserId) => {
 });
 ipcMain.handle('social:blocked',       async () => apiService.getBlockedUsers());
 
+// DM түүх & уншаагүй тоо
+ipcMain.handle('social:dmHistory', async (_, userId) => {
+  try { return await apiService.getDMHistory(userId); } catch { return []; }
+});
+ipcMain.handle('social:dmHistory:before', async (_, userId, beforeId) => {
+  try { return await apiService.getDMHistory(userId, beforeId); } catch { return []; }
+});
+ipcMain.handle('social:unread', async () => {
+  try { return await apiService.getUnreadCount(); } catch { return {}; }
+});
+ipcMain.handle('social:markRead', async (_, fromUserId) => {
+  try { return await apiService.markDMRead(fromUserId); } catch { return { ok: false }; }
+});
+
 // Тоглоом эхлүүлэх (gameType нэрээр тохирох exe хайна)
 ipcMain.handle('game:launch', (_, gameType) => {
   const s = migrateSettings(readSettings());

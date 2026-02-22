@@ -96,6 +96,42 @@ async function connectSocket() {
   // Нийтийн лобби чат
   socket.on('lobby:chat', (msg) => appendLobbyMessage(msg));
 
+  // Лобби чатын түүх (нэвтрэхэд нэг удаа ирнэ)
+  socket.on('lobby:history', (msgs) => {
+    const box = document.getElementById('lobby-chat-messages');
+    if (!box) return;
+    box.innerHTML = '';
+    msgs.forEach(msg => appendLobbyMessage(msg, true)); // true = историйн мессеж (тоолохгүй)
+    box.scrollTop = box.scrollHeight;
+  });
+
+  // Өрөөний чатын түүх
+  socket.on('room:history', (msgs) => {
+    msgs.forEach(msg => appendMessage(msg));
+  });
+
+  // Typing indicator (DM)
+  socket.on('typing:start', ({ fromUserId, fromUsername }) => {
+    if (activeDmUserId !== String(fromUserId)) return;
+    let indicator = document.getElementById('dm-typing-indicator');
+    if (!indicator) {
+      indicator = document.createElement('div');
+      indicator.id = 'dm-typing-indicator';
+      indicator.className = 'sys-msg';
+      document.getElementById('dm-messages')?.after(indicator);
+    }
+    indicator.textContent = `${fromUsername} бичиж байна...`;
+    indicator.style.display = 'block';
+    clearTimeout(indicator._hideTimer);
+    indicator._hideTimer = setTimeout(() => { indicator.style.display = 'none'; }, 2000);
+  });
+
+  socket.on('typing:stop', ({ fromUserId }) => {
+    if (activeDmUserId !== String(fromUserId)) return;
+    const indicator = document.getElementById('dm-typing-indicator');
+    if (indicator) indicator.style.display = 'none';
+  });
+
   // Хувийн мессеж
   socket.on('private:message', (msg) => handleIncomingDM(msg));
   socket.on('private:sent',    (msg) => handleSentDM(msg));
@@ -206,6 +242,7 @@ async function init() {
     showPage('page-main');
     loadRooms();
     connectSocket();
+    loadUnreadDMCounts();
   } else {
     showPage('page-login');
     loadQR();
@@ -217,6 +254,7 @@ async function init() {
     showPage('page-main');
     loadRooms();
     connectSocket();
+    loadUnreadDMCounts();
   });
 
   window.api.onGameResult((data) => showGameResult(data));
@@ -247,6 +285,7 @@ document.getElementById('btn-email-login').onclick = async (e) => {
     showPage('page-main');
     loadRooms();
     connectSocket();
+    loadUnreadDMCounts();
   } catch (err) {
     errEl.textContent = err.message || 'Нэвтрэхэд алдаа гарлаа';
     btn.disabled = false; btn.textContent = 'Нэвтрэх';
@@ -287,6 +326,7 @@ document.getElementById('btn-register').onclick = async (e) => {
     showPage('page-main');
     loadRooms();
     connectSocket();
+    loadUnreadDMCounts();
   } catch (err) {
     errEl.textContent = err.message || 'Бүртгэхэд алдаа гарлаа';
     btn.disabled = false; btn.textContent = 'Бүртгүүлэх';
@@ -643,7 +683,7 @@ async function kickPlayer(targetId, targetName) {
 }
 
 // ── Нийтийн лобби чат ────────────────────────────────────
-function appendLobbyMessage({ username, text, time }) {
+function appendLobbyMessage({ username, text, time }, isHistory = false) {
   const box = document.getElementById('lobby-chat-messages');
   if (!box) return;
   const isMe = username === currentUser?.username;
@@ -658,7 +698,7 @@ function appendLobbyMessage({ username, text, time }) {
   box.appendChild(div);
   box.scrollTop = box.scrollHeight;
 
-  if (!isMe) {
+  if (!isMe && !isHistory) {
     const chatTab = document.getElementById('tab-chat');
     if (!chatTab?.classList.contains('active')) {
       chatUnreadCount++;
@@ -691,17 +731,59 @@ function updateChatBadge() {
   }
 }
 
+// ── Уншаагүй DM тоог серверээс авах ─────────────────────
+async function loadUnreadDMCounts() {
+  try {
+    const counts = await window.api.getUnreadCount();
+    Object.entries(counts).forEach(([userId, count]) => {
+      if (!dmConversations[userId]) {
+        dmConversations[userId] = { username: '', messages: [], unread: 0 };
+      }
+      dmConversations[userId].unread = count;
+    });
+    renderDMUsersBadges();
+    const total = Object.values(counts).reduce((s, c) => s + c, 0);
+    if (total > 0) {
+      chatUnreadCount += total;
+      updateChatBadge();
+    }
+  } catch {}
+}
+
 // ── Private мессеж (DM) ───────────────────────────────────
-function openDM(userId, username) {
+async function openDM(userId, username) {
   activeDmUserId = String(userId);
   if (!dmConversations[activeDmUserId]) {
     dmConversations[activeDmUserId] = { username, messages: [], unread: 0 };
   }
   dmConversations[activeDmUserId].unread = 0;
   document.getElementById('dm-title').textContent = `🔒 ${escHtml(username)}`;
-  renderDMMessages();
   document.getElementById('dm-modal').style.display = 'flex';
   setTimeout(() => document.getElementById('dm-input').focus(), 50);
+
+  // Серверээс DM түүх татах
+  try {
+    const history = await window.api.getDMHistory(userId);
+    if (history.length > 0) {
+      // Серверийн мессежийг стандарт хэлбэрт хөрвүүлэх
+      const conv = dmConversations[activeDmUserId];
+      conv.messages = history.map(m => ({
+        fromUsername: m.sender_username,
+        fromUserId:   String(m.sender_id),
+        text:         m.text,
+        time:         m.created_at,
+        id:           m.id,
+      }));
+      renderDMMessages();
+    } else {
+      renderDMMessages();
+    }
+  } catch {
+    renderDMMessages();
+  }
+
+  // Уншсан тэмдэглэх
+  window.api.markDMRead(userId).catch(() => {});
 }
 
 function renderDMMessages() {
@@ -972,12 +1054,33 @@ function renderDMUsersBadges() {
 }
 
 document.getElementById('btn-dm-send').onclick = sendDM;
+
+// Typing indicator — DM input дээр бичих үед
+let _typingTimer = null;
+let _isTyping = false;
+document.getElementById('dm-input').addEventListener('input', () => {
+  if (!activeDmUserId || !socket) return;
+  if (!_isTyping) {
+    _isTyping = true;
+    socket.emit('typing:start', { toUserId: activeDmUserId });
+  }
+  clearTimeout(_typingTimer);
+  _typingTimer = setTimeout(() => {
+    _isTyping = false;
+    socket.emit('typing:stop', { toUserId: activeDmUserId });
+  }, 2000);
+});
+
 document.getElementById('dm-input').addEventListener('keydown', e => {
   if (e.key === 'Enter') sendDM();
 });
 document.getElementById('btn-close-dm').onclick = () => {
   document.getElementById('dm-modal').style.display = 'none';
   activeDmUserId = null;
+  if (_isTyping && socket) {
+    socket.emit('typing:stop', { toUserId: activeDmUserId });
+    _isTyping = false;
+  }
 };
 
 // ── Онлайн тоглогчид ─────────────────────────────────────

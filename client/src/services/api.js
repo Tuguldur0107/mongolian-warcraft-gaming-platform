@@ -120,9 +120,28 @@ async function changePassword(oldPassword, newPassword) {
   return data;
 }
 
+async function getDMHistory(userId, beforeId = null) {
+  const params = beforeId ? { before: beforeId } : {};
+  const { data } = await getClient().get(`/social/messages/${userId}`, { params });
+  return data;
+}
+
+async function getUnreadCount() {
+  const { data } = await getClient().get('/social/unread');
+  return data;
+}
+
+async function markDMRead(fromUserId) {
+  const { data } = await getClient().post('/social/messages/read', { fromUserId });
+  return data;
+}
+
 module.exports = {
   SERVER_URL,
   changePassword,
+  getDMHistory,
+  getUnreadCount,
+  markDMRead,
   getRooms,
   getMyRoom,
   createRoom,

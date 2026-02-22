@@ -63,4 +63,10 @@ contextBridge.exposeInMainWorld('api', {
   blockUser:           (targetUserId) => ipcRenderer.invoke('social:block', targetUserId),
   unblockUser:         (targetUserId) => ipcRenderer.invoke('social:unblock', targetUserId),
   getBlockedUsers:     ()             => ipcRenderer.invoke('social:blocked'),
+
+  // DM түүх
+  getDMHistory:  (userId)              => ipcRenderer.invoke('social:dmHistory', userId),
+  getDMHistoryBefore: (userId, before) => ipcRenderer.invoke('social:dmHistory:before', userId, before),
+  getUnreadCount: ()                   => ipcRenderer.invoke('social:unread'),
+  markDMRead:    (fromUserId)          => ipcRenderer.invoke('social:markRead', fromUserId),
 });

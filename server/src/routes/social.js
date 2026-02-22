@@ -59,6 +59,24 @@ async function initTables() {
         UNIQUE(user_id, blocked_user_id)
       )
     `);
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS messages (
+        id          SERIAL PRIMARY KEY,
+        sender_id   INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        receiver_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        text        TEXT NOT NULL,
+        is_read     BOOLEAN DEFAULT FALSE,
+        created_at  TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    await db.query(`
+      CREATE INDEX IF NOT EXISTS idx_messages_conversation
+        ON messages(LEAST(sender_id, receiver_id), GREATEST(sender_id, receiver_id), created_at DESC)
+    `);
+    await db.query(`
+      CREATE INDEX IF NOT EXISTS idx_messages_unread
+        ON messages(receiver_id, is_read) WHERE is_read = FALSE
+    `);
   } catch (e) { console.error('[Social] Хүснэгт үүсгэхэд алдаа:', e.message); }
 }
 initTables();
@@ -305,6 +323,93 @@ router.get('/blocked', authMW, async (req, res) => {
   res.json(ids.map(id => ({ id: parseInt(id), username: `Хэрэглэгч#${id}`, avatar_url: null })));
 });
 
+// ── GET /social/messages/:userId — DM түүх ─────────────────
+router.get('/messages/:userId', authMW, async (req, res) => {
+  const myId     = req.user.id;
+  const otherId  = parseInt(req.params.userId);
+  const before   = req.query.before ? parseInt(req.query.before) : null;
+  if (!otherId) return res.status(400).json({ error: 'userId шаардлагатай' });
+
+  if (await dbOk()) {
+    try {
+      const whereClause = before
+        ? 'AND m.id < $3'
+        : '';
+      const params = before
+        ? [myId, otherId, before]
+        : [myId, otherId];
+      const r = await db.query(`
+        SELECT m.id, m.sender_id, m.receiver_id, m.text, m.is_read, m.created_at,
+          u.username AS sender_username
+        FROM messages m
+        JOIN users u ON m.sender_id = u.id
+        WHERE (
+          (m.sender_id=$1 AND m.receiver_id=$2) OR
+          (m.sender_id=$2 AND m.receiver_id=$1)
+        ) ${whereClause}
+        ORDER BY m.created_at DESC
+        LIMIT 50
+      `, params);
+      return res.json(r.rows.reverse()); // хуучнаас шинэ дараалал
+    } catch (e) { console.error(e); }
+  }
+  res.json([]);
+});
+
+// ── GET /social/unread — Уншаагүй мессежийн тоо ────────────
+router.get('/unread', authMW, async (req, res) => {
+  const myId = req.user.id;
+  if (await dbOk()) {
+    try {
+      const r = await db.query(`
+        SELECT sender_id, COUNT(*) AS count
+        FROM messages
+        WHERE receiver_id=$1 AND is_read=FALSE
+        GROUP BY sender_id
+      `, [myId]);
+      // { [senderId]: count } хэлбэрт хөрвүүлэх
+      const result = {};
+      r.rows.forEach(row => { result[String(row.sender_id)] = parseInt(row.count); });
+      return res.json(result);
+    } catch (e) { console.error(e); }
+  }
+  res.json({});
+});
+
+// ── POST /social/messages/read — Мессеж уншсан тэмдэглэх ───
+router.post('/messages/read', authMW, async (req, res) => {
+  const myId = req.user.id;
+  const { fromUserId } = req.body;
+  if (!fromUserId) return res.status(400).json({ error: 'fromUserId шаардлагатай' });
+
+  if (await dbOk()) {
+    try {
+      await db.query(
+        'UPDATE messages SET is_read=TRUE WHERE receiver_id=$1 AND sender_id=$2 AND is_read=FALSE',
+        [myId, fromUserId]
+      );
+      return res.json({ ok: true });
+    } catch (e) { console.error(e); }
+  }
+  res.json({ ok: true });
+});
+
+// ── saveMessage — index.js-аас дуудах helper ───────────────
+async function saveMessage(senderId, receiverId, text) {
+  if (!await dbOk()) return null;
+  try {
+    const r = await db.query(
+      'INSERT INTO messages (sender_id, receiver_id, text) VALUES ($1, $2, $3) RETURNING id, created_at',
+      [senderId, receiverId, text]
+    );
+    return r.rows[0];
+  } catch (e) {
+    console.error('[saveMessage]', e.message);
+    return null;
+  }
+}
+
 module.exports = router;
-module.exports.setIO       = setIO;
+module.exports.setIO         = setIO;
 module.exports.isUserBlocked = isUserBlocked;
+module.exports.saveMessage   = saveMessage;

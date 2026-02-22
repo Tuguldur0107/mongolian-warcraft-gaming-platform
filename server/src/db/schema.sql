@@ -48,9 +48,23 @@ CREATE TABLE IF NOT EXISTS game_results (
   played_at        TIMESTAMP DEFAULT NOW()
 );
 
+-- Хувийн мессеж (DM)
+CREATE TABLE IF NOT EXISTS messages (
+  id          SERIAL PRIMARY KEY,
+  sender_id   INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  receiver_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  text        TEXT NOT NULL,
+  is_read     BOOLEAN DEFAULT FALSE,
+  created_at  TIMESTAMP DEFAULT NOW()
+);
+
 -- Indexes (query performance сайжруулах)
-CREATE INDEX IF NOT EXISTS idx_rooms_status       ON rooms(status);
-CREATE INDEX IF NOT EXISTS idx_room_players_user  ON room_players(user_id);
-CREATE INDEX IF NOT EXISTS idx_room_players_room  ON room_players(room_id);
-CREATE INDEX IF NOT EXISTS idx_users_discord_id   ON users(discord_id);
-CREATE INDEX IF NOT EXISTS idx_users_wins         ON users(wins DESC);
+CREATE INDEX IF NOT EXISTS idx_rooms_status         ON rooms(status);
+CREATE INDEX IF NOT EXISTS idx_room_players_user    ON room_players(user_id);
+CREATE INDEX IF NOT EXISTS idx_room_players_room    ON room_players(room_id);
+CREATE INDEX IF NOT EXISTS idx_users_discord_id     ON users(discord_id);
+CREATE INDEX IF NOT EXISTS idx_users_wins           ON users(wins DESC);
+CREATE INDEX IF NOT EXISTS idx_messages_conversation
+  ON messages(LEAST(sender_id, receiver_id), GREATEST(sender_id, receiver_id), created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_messages_unread
+  ON messages(receiver_id, is_read) WHERE is_read = FALSE;

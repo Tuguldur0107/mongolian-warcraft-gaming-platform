@@ -93,6 +93,11 @@ const roomMembers = {};
 const onlineUsers = new Map();
 // String(userId) → socketId (private мессеж илгээхэд хэрэг)
 const userSockets = new Map();
+// Лобби чатын түүх (сүүлийн 100)
+const lobbyHistory = [];
+const LOBBY_HISTORY_MAX = 100;
+// Өрөөний чатын түүх (roomId → [{username, text, time}, ...])
+const roomMessages = {};
 
 // ── Socket.io JWT middleware ──────────────────────────────
 io.use((socket, next) => {
@@ -122,6 +127,8 @@ io.on('connection', (socket) => {
       socket.join(`user:${userId}`);
     }
     io.emit('lobby:online_users', [...onlineUsers.values()]);
+    // Лобби чатын сүүлийн 50 мессеж илгээх
+    socket.emit('lobby:history', lobbyHistory.slice(-50));
     console.log(`[Socket] ${username} онлайн (нийт: ${onlineUsers.size})`);
   });
 
@@ -134,22 +141,29 @@ io.on('connection', (socket) => {
       text: escapeHtml(text.trim().slice(0, 500)),
       time: new Date().toISOString(),
     };
+    // Түүхэнд хадгалах
+    lobbyHistory.push(msg);
+    if (lobbyHistory.length > LOBBY_HISTORY_MAX) lobbyHistory.shift();
     io.emit('lobby:chat', msg);
   });
 
   // Хувийн мессеж (private message)
-  socket.on('private:message', ({ toUserId, text }) => {
+  socket.on('private:message', async ({ toUserId, text }) => {
     if (!text?.trim()) return;
     if (checkRateLimit(socket)) return;
     const userId   = String(socket.user.id);
     const username = socket.user.username;
     // Хүлээн авагч илгээгчийг хаасан эсэх шалгах
     if (socialRoutes.isUserBlocked(String(toUserId), userId)) return;
+    const safeText = escapeHtml(text.trim());
+    // DB-д хадгалах
+    const saved = await socialRoutes.saveMessage(socket.user.id, toUserId, safeText);
     const msg = {
       fromUsername: username,
       fromUserId:   userId,
-      text: escapeHtml(text.trim()),
-      time: new Date().toISOString(),
+      text:         safeText,
+      time:         saved?.created_at?.toISOString() || new Date().toISOString(),
+      id:           saved?.id || null,
     };
     const toSocketId = userSockets.get(String(toUserId));
     if (toSocketId) {
@@ -171,6 +185,8 @@ io.on('connection', (socket) => {
 
     socket.to(roomId).emit('room:user_joined', { username });
     io.to(roomId).emit('room:members', [...roomMembers[roomId]]);
+    // Өрөөний чатын түүх илгээх (хожуу нэгдсэн тоглогчид)
+    socket.emit('room:history', roomMessages[roomId] || []);
     console.log(`[Socket] ${username} → өрөө ${roomId}`);
   });
 
@@ -183,7 +199,26 @@ io.on('connection', (socket) => {
       text: escapeHtml(text.trim().slice(0, 500)),
       time: new Date().toISOString(),
     };
+    // Өрөөний чат түүхэнд хадгалах (max 100)
+    if (!roomMessages[roomId]) roomMessages[roomId] = [];
+    roomMessages[roomId].push(msg);
+    if (roomMessages[roomId].length > 100) roomMessages[roomId].shift();
     io.to(String(roomId)).emit('chat:message', msg);
+  });
+
+  // Typing indicator (DM)
+  socket.on('typing:start', ({ toUserId }) => {
+    const toSocketId = userSockets.get(String(toUserId));
+    if (toSocketId) {
+      io.to(toSocketId).emit('typing:start', { fromUserId: String(socket.user.id), fromUsername: socket.user.username });
+    }
+  });
+
+  socket.on('typing:stop', ({ toUserId }) => {
+    const toSocketId = userSockets.get(String(toUserId));
+    if (toSocketId) {
+      io.to(toSocketId).emit('typing:stop', { fromUserId: String(socket.user.id) });
+    }
   });
 
   // Өрөөнөөс гарах
