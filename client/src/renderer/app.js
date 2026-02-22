@@ -53,9 +53,12 @@ async function connectSocket() {
     console.log('Socket холбогдлоо');
     updateConnectionStatus('online');
     if (currentUser) {
-      // JWT middleware-ийн ачаар username/userId-г серверт дахин илгээх шаардлагагүй
-      // Гэхдээ lobby-д бүртгүүлэхийн тулд event илгээнэ
       socket.emit('lobby:register');
+      // Өрөөнд байсан бол автоматаар дахин нэгдэх (reconnect)
+      if (currentRoom) {
+        console.log(`[Rejoin] Дахин холбогдлоо, өрөө ${currentRoom.id} руу дахин нэгдэж байна`);
+        socket.emit('room:join', { roomId: currentRoom.id });
+      }
     }
   });
 
@@ -88,14 +91,20 @@ async function connectSocket() {
   socket.on('disconnect', () => {
     console.log('Socket салгагдлаа');
     updateConnectionStatus('offline');
+    // Өрөөнд байсан бол reconnecting мессеж харуулах
+    if (currentRoom) {
+      appendSysMsg('⚠ Холболт тасарлаа. Дахин холбогдож байна...');
+    }
   });
   socket.on('reconnecting', () => updateConnectionStatus('reconnecting'));
 
   // Өрөөний чат
-  socket.on('chat:message',     (msg)     => appendMessage(msg));
-  socket.on('room:members',     (members) => renderMembers(members));
-  socket.on('room:user_joined', ({ username }) => appendSysMsg(`${username} нэгдлээ`));
-  socket.on('room:user_left',   ({ username }) => appendSysMsg(`${username} гарлаа`));
+  socket.on('chat:message',         (msg)        => appendMessage(msg));
+  socket.on('room:members',         (members)    => renderMembers(members));
+  socket.on('room:user_joined',     ({ username }) => appendSysMsg(`${username} нэгдлээ`));
+  socket.on('room:user_left',       ({ username }) => appendSysMsg(`${username} гарлаа`));
+  socket.on('room:user_reconnecting', ({ username }) => appendSysMsg(`⚠ ${username} холболт тасарлаа, дахин холбогдохыг хүлээж байна...`));
+  socket.on('room:user_rejoined',   ({ username }) => appendSysMsg(`✓ ${username} дахин нэгдлээ`));
 
   // Өрөөний тохиргоо шинэчлэгдсэн
   socket.on('room:updated', (room) => {

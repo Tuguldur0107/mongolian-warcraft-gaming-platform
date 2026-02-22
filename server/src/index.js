@@ -207,6 +207,9 @@ const lobbyHistory = [];
 const LOBBY_HISTORY_MAX = 100;
 // Өрөөний чатын түүх (roomId → [{username, text, time}, ...])
 const roomMessages = {};
+// Rejoin grace period: userId → { timer, roomId, username }
+const disconnectTimers = {};
+const REJOIN_GRACE_MS = 45000; // 45 секунд
 
 // ── Socket.io JWT middleware ──────────────────────────────
 io.use((socket, next) => {
@@ -291,7 +294,31 @@ io.on('connection', (socket) => {
     socket.data.username = username;
 
     if (!roomMembers[roomId]) roomMembers[roomId] = new Set();
-    roomMembers[roomId].add(username);
+
+    // Хэрэв өөр өрөөний grace period байвал цуцлаад тэр өрөөнөөс гарна
+    if (disconnectTimers[userId] && disconnectTimers[userId].roomId !== String(roomId)) {
+      const prev = disconnectTimers[userId];
+      clearTimeout(prev.timer);
+      delete disconnectTimers[userId];
+      if (roomMembers[prev.roomId]) {
+        roomMembers[prev.roomId].delete(prev.username);
+        io.to(prev.roomId).emit('room:user_left', { username: prev.username });
+        io.to(prev.roomId).emit('room:members', [...roomMembers[prev.roomId]]);
+      }
+    }
+
+    // Rejoin шалгах: grace period дотор буцаж ирсэн эсэх
+    const isRejoin = !!(disconnectTimers[userId]?.roomId === String(roomId) && roomMembers[roomId].has(username));
+    if (isRejoin) {
+      clearTimeout(disconnectTimers[userId].timer);
+      delete disconnectTimers[userId];
+      socket.to(roomId).emit('room:user_rejoined', { username });
+      console.log(`[Rejoin] ${username} дахин нэгдлээ → өрөө ${roomId}`);
+    } else {
+      roomMembers[roomId].add(username);
+      socket.to(roomId).emit('room:user_joined', { username });
+      console.log(`[Socket] ${username} → өрөө ${roomId}`);
+    }
 
     // Онлайн статус шинэчлэх
     if (onlineUsers.has(socket.id)) {
@@ -299,11 +326,9 @@ io.on('connection', (socket) => {
       io.emit('lobby:online_users', [...onlineUsers.values()]);
     }
 
-    socket.to(roomId).emit('room:user_joined', { username });
     io.to(roomId).emit('room:members', [...roomMembers[roomId]]);
     // Өрөөний чатын түүх илгээх (хожуу нэгдсэн тоглогчид)
     socket.emit('room:history', roomMessages[roomId] || []);
-    console.log(`[Socket] ${username} → өрөө ${roomId}`);
   });
 
   // Өрөөний урилга
@@ -364,6 +389,11 @@ io.on('connection', (socket) => {
   socket.on('room:leave', ({ roomId }) => {
     const username = socket.user.username;
     const userId   = String(socket.user.id);
+    // Grace period байвал цуцлах (санаатай гарч байна)
+    if (disconnectTimers[userId]) {
+      clearTimeout(disconnectTimers[userId].timer);
+      delete disconnectTimers[userId];
+    }
     socket.leave(roomId);
     socket.data.roomId = null;
     if (roomMembers[roomId]) {
@@ -383,15 +413,40 @@ io.on('connection', (socket) => {
     const { roomId } = socket.data;
     const username = socket.user?.username || socket.data.username;
     const userId   = String(socket.user?.id || socket.data.userId || '');
-    if (roomId && username && roomMembers[roomId]) {
-      roomMembers[roomId].delete(username);
-      io.to(roomId).emit('room:user_left', { username });
-      io.to(roomId).emit('room:members', [...roomMembers[roomId]]);
-    }
+
+    // Socket mapping-уудыг шууд устгах
     onlineUsers.delete(socket.id);
     if (userId) userSockets.delete(userId);
     io.emit('lobby:online_users', [...onlineUsers.values()]);
-    console.log(`[Socket] салгагдлаа: ${socket.id} (${username})`);
+
+    // Өрөөнд байсан бол grace period эхлүүлэх
+    if (roomId && username && roomMembers[roomId]) {
+      // Өмнө нь grace period байсан бол цуцлах
+      if (disconnectTimers[userId]) {
+        clearTimeout(disconnectTimers[userId].timer);
+      }
+      // Бусдад мэдэгдэх: дахин холбогдохыг хүлээж байна
+      io.to(roomId).emit('room:user_reconnecting', { username });
+
+      // Grace period таймер
+      disconnectTimers[userId] = {
+        roomId: String(roomId),
+        username,
+        timer: setTimeout(() => {
+          delete disconnectTimers[userId];
+          // Хугацаа дуусав — өрөөнөөс бүрмөсөн гарна
+          if (roomMembers[roomId]) {
+            roomMembers[roomId].delete(username);
+            io.to(roomId).emit('room:user_left', { username });
+            io.to(roomId).emit('room:members', [...roomMembers[roomId]]);
+          }
+          console.log(`[Rejoin] ${username} grace period дууссан, өрөөнөөс гарлаа`);
+        }, REJOIN_GRACE_MS),
+      };
+      console.log(`[Socket] салгагдлаа: ${socket.id} (${username}) — ${REJOIN_GRACE_MS / 1000}с grace period`);
+    } else {
+      console.log(`[Socket] салгагдлаа: ${socket.id} (${username})`);
+    }
   });
 });
 
