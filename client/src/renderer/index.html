@@ -88,8 +88,11 @@
       </div>
 
       <div id="auth-login" class="auth-form">
-        <input id="login-email"    type="email"    placeholder="Имэйл хаяг"  class="input" />
-        <input id="login-password" type="password" placeholder="Нууц үг"     class="input" />
+        <input id="login-email" type="email" placeholder="Имэйл хаяг" class="input" />
+        <div class="input-pw-wrap">
+          <input id="login-password" type="password" placeholder="Нууц үг" class="input" />
+          <button type="button" class="btn-eye" data-target="login-password" title="Нууц үг харах">👁</button>
+        </div>
         <p id="login-error" class="form-error"></p>
         <button type="button" id="btn-email-login" class="btn btn-primary btn-block">Нэвтрэх</button>
         <div class="login-divider"><span>эсвэл</span></div>
@@ -108,9 +111,16 @@
       </div>
 
       <div id="auth-register" class="auth-form hidden">
-        <input id="reg-username" type="text"     placeholder="Хоч нэр (Nickname)"    class="input" />
-        <input id="reg-email"    type="email"    placeholder="Имэйл хаяг"            class="input" />
-        <input id="reg-password" type="password" placeholder="Нууц үг (6+ тэмдэгт)" class="input" />
+        <input id="reg-username" type="text"  placeholder="Хоч нэр (Nickname)" class="input" />
+        <input id="reg-email"    type="email" placeholder="Имэйл хаяг"         class="input" />
+        <div class="input-pw-wrap">
+          <input id="reg-password" type="password" placeholder="Нууц үг (6+ тэмдэгт)" class="input" />
+          <button type="button" class="btn-eye" data-target="reg-password" title="Нууц үг харах">👁</button>
+        </div>
+        <div class="input-pw-wrap">
+          <input id="reg-password-confirm" type="password" placeholder="Нууц үг давтах" class="input" />
+          <button type="button" class="btn-eye" data-target="reg-password-confirm" title="Нууц үг харах">👁</button>
+        </div>
         <p id="reg-error" class="form-error"></p>
         <button type="button" id="btn-register" class="btn btn-primary btn-block">Бүртгүүлэх</button>
         <div class="login-divider"><span>эсвэл</span></div>
@@ -292,6 +302,25 @@
           </div>
           <button type="button" id="btn-link-discord" class="btn btn-discord hidden">Discord холбох</button>
         </div>
+      </div>
+
+      <div class="card mt-16">
+        <h3>🔑 Нууц үг солих</h3>
+        <div class="input-pw-wrap">
+          <input id="old-password" type="password" placeholder="Хуучин нууц үг" class="input" />
+          <button type="button" class="btn-eye" data-target="old-password" title="Нууц үг харах">👁</button>
+        </div>
+        <div class="input-pw-wrap">
+          <input id="new-password" type="password" placeholder="Шинэ нууц үг (6+ тэмдэгт)" class="input" />
+          <button type="button" class="btn-eye" data-target="new-password" title="Нууц үг харах">👁</button>
+        </div>
+        <div class="input-pw-wrap">
+          <input id="new-password-confirm" type="password" placeholder="Шинэ нууц үг давтах" class="input" />
+          <button type="button" class="btn-eye" data-target="new-password-confirm" title="Нууц үг харах">👁</button>
+        </div>
+        <p id="pw-change-error" class="form-error"></p>
+        <p id="pw-change-success" class="form-success"></p>
+        <button type="button" id="btn-change-password" class="btn btn-primary mt-8">Солих</button>
       </div>
     </div>
 

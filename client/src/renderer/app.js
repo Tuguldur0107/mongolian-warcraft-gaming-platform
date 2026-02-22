@@ -254,15 +254,28 @@ document.getElementById('login-password').addEventListener('keydown', e => {
   if (e.key === 'Enter') document.getElementById('btn-email-login').click();
 });
 
+// ── Нууц үг харах/нуух toggle ────────────────────────────
+document.querySelectorAll('.btn-eye').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const input = document.getElementById(btn.dataset.target);
+    if (!input) return;
+    const isHidden = input.type === 'password';
+    input.type = isHidden ? 'text' : 'password';
+    btn.textContent = isHidden ? '🙈' : '👁';
+  });
+});
+
 // ── Бүртгэл ──────────────────────────────────────────────
 document.getElementById('btn-register').onclick = async (e) => {
   const btn      = e.currentTarget;
   const username = document.getElementById('reg-username').value.trim();
   const email    = document.getElementById('reg-email').value.trim();
   const password = document.getElementById('reg-password').value;
+  const confirm  = document.getElementById('reg-password-confirm').value;
   const errEl    = document.getElementById('reg-error');
   errEl.textContent = '';
-  if (!username || !email || !password) { errEl.textContent = 'Бүх талбарыг бөглөнө үү'; return; }
+  if (!username || !email || !password || !confirm) { errEl.textContent = 'Бүх талбарыг бөглөнө үү'; return; }
+  if (password !== confirm) { errEl.textContent = 'Нууц үг таарахгүй байна'; return; }
   btn.disabled = true; btn.textContent = 'Бүртгэж байна...';
   try {
     const { token, user } = await window.api.register({ username, email, password });
@@ -1111,6 +1124,34 @@ async function loadProfile() {
 }
 
 document.getElementById('btn-link-discord').onclick = () => window.api.linkDiscord();
+
+// ── Нууц үг солих ─────────────────────────────────────────
+document.getElementById('btn-change-password').onclick = async (e) => {
+  const btn        = e.currentTarget;
+  const oldPw      = document.getElementById('old-password').value;
+  const newPw      = document.getElementById('new-password').value;
+  const confirmPw  = document.getElementById('new-password-confirm').value;
+  const errEl      = document.getElementById('pw-change-error');
+  const successEl  = document.getElementById('pw-change-success');
+  errEl.textContent = ''; successEl.textContent = '';
+
+  if (!oldPw || !newPw || !confirmPw) { errEl.textContent = 'Бүх талбарыг бөглөнө үү'; return; }
+  if (newPw !== confirmPw) { errEl.textContent = 'Шинэ нууц үг таарахгүй байна'; return; }
+  if (newPw.length < 6) { errEl.textContent = 'Шинэ нууц үг хамгийн багадаа 6 тэмдэгт байна'; return; }
+
+  btn.disabled = true; btn.textContent = 'Солж байна...';
+  try {
+    await window.api.changePassword(oldPw, newPw);
+    successEl.textContent = '✓ Нууц үг амжилттай солигдлоо';
+    document.getElementById('old-password').value = '';
+    document.getElementById('new-password').value = '';
+    document.getElementById('new-password-confirm').value = '';
+  } catch (err) {
+    errEl.textContent = err.message || 'Нууц үг солиход алдаа гарлаа';
+  } finally {
+    btn.disabled = false; btn.textContent = 'Солих';
+  }
+};
 
 // Профайл зураг оруулах
 document.getElementById('btn-upload-avatar').onclick = async () => {

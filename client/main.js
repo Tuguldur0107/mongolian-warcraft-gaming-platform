@@ -240,6 +240,20 @@ ipcMain.handle('auth:linkDiscord', () => {
   authWin.webContents.on('will-navigate',  (e, url) => { if (handleRedirect(url)) e.preventDefault(); });
 });
 
+ipcMain.handle('auth:changePassword', async (_, { oldPassword, newPassword }) => {
+  const axios = require('axios');
+  const token = authService.getToken();
+  if (!token) throw new Error('Нэвтрэх хугацаа дууссан');
+  try {
+    const { data } = await axios.put(
+      `${apiService.SERVER_URL}/auth/password`,
+      { oldPassword, newPassword },
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    return data;
+  } catch (err) { throw apiError(err); }
+});
+
 ipcMain.handle('auth:logout', () => {
   authService.clearToken();
   replayService.stopWatcher();

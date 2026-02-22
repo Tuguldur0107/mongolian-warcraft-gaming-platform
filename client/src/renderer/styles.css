@@ -559,3 +559,17 @@ body.light #icon-moon { display: block !important; }
 .pad-list      { padding: 12px; font-size: 0.8rem; }
 .pad-empty     { padding: 20px 12px; font-size: 0.8rem; }
 .flex-center   { display: flex; gap: 8px; justify-content: center; }
+
+/* ── Password show/hide wrap ───────────────────────── */
+.input-pw-wrap          { position: relative; }
+.input-pw-wrap .input   { padding-right: 42px; width: 100%; }
+.btn-eye {
+  position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+  background: none; border: none; cursor: pointer;
+  color: var(--text-muted, #888); font-size: 1rem; padding: 2px 4px;
+  line-height: 1;
+}
+.btn-eye:hover { color: var(--accent, #7289da); }
+
+/* ── Form success message ──────────────────────────── */
+.form-success { color: #43b581; font-size: 0.82rem; margin-top: 4px; min-height: 1.1em; }

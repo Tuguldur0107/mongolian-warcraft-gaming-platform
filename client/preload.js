@@ -49,6 +49,9 @@ contextBridge.exposeInMainWorld('api', {
   // Профайл зураг
   uploadAvatar: () => ipcRenderer.invoke('auth:uploadAvatar'),
 
+  // Нууц үг солих
+  changePassword: (oldPassword, newPassword) => ipcRenderer.invoke('auth:changePassword', { oldPassword, newPassword }),
+
   // Нийгмийн функцүүд (friends / block)
   getFriends:          ()             => ipcRenderer.invoke('social:friends'),
   getPendingRequests:  ()             => ipcRenderer.invoke('social:pending'),

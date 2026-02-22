@@ -215,6 +215,37 @@ router.get('/poll/:sessionId', (req, res) => {
   res.json({ token: null });
 });
 
+// ── Нууц үг солих (нэвтэрсэн байхад) ────────────────────
+router.put('/password', authMW, async (req, res) => {
+  const { oldPassword, newPassword } = req.body;
+  if (!oldPassword || !newPassword)
+    return res.status(400).json({ error: 'Бүх талбарыг бөглөнө үү' });
+  if (newPassword.length < 6)
+    return res.status(400).json({ error: 'Шинэ нууц үг хамгийн багадаа 6 тэмдэгт байна' });
+
+  if (await dbOk()) {
+    try {
+      const r = await db.query('SELECT * FROM users WHERE id = $1', [req.user.id]);
+      const user = r.rows[0];
+      if (!user || !user.password_hash)
+        return res.status(400).json({ error: 'Нууц үгийн бүртгэл байхгүй (Discord-ээр нэвтэрсэн хэрэглэгч)' });
+      const ok = await bcrypt.compare(oldPassword, user.password_hash);
+      if (!ok) return res.status(401).json({ error: 'Хуучин нууц үг буруу байна' });
+      const newHash = await bcrypt.hash(newPassword, 10);
+      await db.query('UPDATE users SET password_hash = $1 WHERE id = $2', [newHash, req.user.id]);
+      return res.json({ ok: true });
+    } catch (e) { console.error(e); }
+  }
+  // In-memory fallback
+  const user = memFindById(req.user.id);
+  if (!user || !user.password_hash)
+    return res.status(400).json({ error: 'Нууц үгийн бүртгэл байхгүй' });
+  const ok = await bcrypt.compare(oldPassword, user.password_hash);
+  if (!ok) return res.status(401).json({ error: 'Хуучин нууц үг буруу байна' });
+  user.password_hash = await bcrypt.hash(newPassword, 10);
+  res.json({ ok: true });
+});
+
 // ── Профайл зураг солих ───────────────────────────────────
 router.put('/avatar', authMW, async (req, res) => {
   const { avatar_url } = req.body;

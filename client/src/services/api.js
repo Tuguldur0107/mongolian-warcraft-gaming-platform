@@ -115,8 +115,14 @@ async function updateAvatar(avatar_url) {
   return data;
 }
 
+async function changePassword(oldPassword, newPassword) {
+  const { data } = await getClient().put('/auth/password', { oldPassword, newPassword });
+  return data;
+}
+
 module.exports = {
   SERVER_URL,
+  changePassword,
   getRooms,
   getMyRoom,
   createRoom,
