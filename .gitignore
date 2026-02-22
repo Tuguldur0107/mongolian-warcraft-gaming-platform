@@ -1,0 +1,35 @@
+# Claude Code
+.claude/
+
+# Screenshots
+*.png
+*.jpg
+*.docx
+
+# Dependencies
+node_modules/
+client/node_modules/
+server/node_modules/
+
+# Environment variables (нууц мэдээлэл)
+server/.env
+client/.env
+
+# Electron build output
+client/dist/
+client/out/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Replays (хэрэглэгчийн файл)
+*.w3g

@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="mn">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy"
+    content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https://cdn.discordapp.com data:; connect-src 'self' http://localhost:3000 ws://localhost:3000;" />
+  <title>WC3/DotA Platform</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <!-- SVG icon тодорхойлолт -->
+  <svg style="display:none">
+    <defs>
+      <!-- Гарах (logout) -->
+      <symbol id="ico-logout" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+        <polyline points="16 17 21 12 16 7"/>
+        <line x1="21" y1="12" x2="9" y2="12"/>
+      </symbol>
+      <!-- Гарах (leave / back) -->
+      <symbol id="ico-leave" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M15 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h8"/>
+        <polyline points="10 17 15 12 10 7"/>
+        <line x1="15" y1="12" x2="3" y2="12"/>
+      </symbol>
+      <!-- Шинэчлэх (refresh) -->
+      <symbol id="ico-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="23 4 23 10 17 10"/>
+        <polyline points="1 20 1 14 7 14"/>
+        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+      </symbol>
+      <!-- Илгээх (send / paper plane) -->
+      <symbol id="ico-send" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="22" y1="2" x2="11" y2="13"/>
+        <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+      </symbol>
+      <!-- Тоглолт эхлүүлэх (play) -->
+      <symbol id="ico-play" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+        <polygon points="5 3 19 12 5 21 5 3"/>
+      </symbol>
+      <!-- Өрөөг хаах (X close) -->
+      <symbol id="ico-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+        <line x1="18" y1="6" x2="6" y2="18"/>
+        <line x1="6" y1="6" x2="18" y2="18"/>
+      </symbol>
+      <!-- Нар (light mode) -->
+      <symbol id="ico-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="5"/>
+        <line x1="12" y1="1" x2="12" y2="3"/>
+        <line x1="12" y1="21" x2="12" y2="23"/>
+        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+        <line x1="1" y1="12" x2="3" y2="12"/>
+        <line x1="21" y1="12" x2="23" y2="12"/>
+        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+      </symbol>
+      <!-- Сар (dark mode) -->
+      <symbol id="ico-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+      </symbol>
+      <!-- + Нэмэх -->
+      <symbol id="ico-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+        <line x1="12" y1="5" x2="12" y2="19"/>
+        <line x1="5" y1="12" x2="19" y2="12"/>
+      </symbol>
+      <!-- Нэгдэх (join / log-in) -->
+      <symbol id="ico-join" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M9 3H17a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H9"/>
+        <polyline points="14 17 9 12 14 7"/>
+        <line x1="9" y1="12" x2="21" y2="12"/>
+      </symbol>
+    </defs>
+  </svg>
+
+  <!-- ① Нэвтрэх / Бүртгэл -->
+  <div id="page-login" class="page active">
+    <div class="login-box">
+      <div class="login-logo">⚔️</div>
+      <h1>WC3/DotA Platform</h1>
+      <p class="subtitle">Монголын WC3 &amp; DotA 1 тоглогчдын платформ</p>
+
+      <div class="auth-tabs">
+        <button class="auth-tab active" data-auth="login">Нэвтрэх</button>
+        <button class="auth-tab" data-auth="register">Бүртгүүлэх</button>
+      </div>
+
+      <div id="auth-login" class="auth-form">
+        <input id="login-email"    type="email"    placeholder="Имэйл хаяг"  class="input" />
+        <input id="login-password" type="password" placeholder="Нууц үг"     class="input" />
+        <p id="login-error" class="form-error"></p>
+        <button id="btn-email-login" class="btn btn-primary btn-block">Нэвтрэх</button>
+        <div class="login-divider"><span>эсвэл</span></div>
+        <button id="btn-login" class="btn btn-discord btn-block">Discord-ээр нэвтрэх</button>
+        <div class="qr-section">
+          <p class="qr-label">Утасны Discord апп-аар скан хийж нэвтрэх</p>
+          <div class="qr-box">
+            <img id="qr-img" src="" alt="QR" />
+            <div id="qr-loading" class="qr-loading">Ачааллаж байна...</div>
+          </div>
+          <button id="btn-refresh-qr" class="btn btn-sm btn-with-icon" style="margin-top:8px">
+            <svg class="btn-icon-svg"><use href="#ico-refresh"/></svg>
+            Шинэчлэх
+          </button>
+        </div>
+      </div>
+
+      <div id="auth-register" class="auth-form" style="display:none">
+        <input id="reg-username" type="text"     placeholder="Хоч нэр (Nickname)"    class="input" />
+        <input id="reg-email"    type="email"    placeholder="Имэйл хаяг"            class="input" />
+        <input id="reg-password" type="password" placeholder="Нууц үг (6+ тэмдэгт)" class="input" />
+        <p id="reg-error" class="form-error"></p>
+        <button id="btn-register" class="btn btn-primary btn-block">Бүртгүүлэх</button>
+        <div class="login-divider"><span>эсвэл</span></div>
+        <button id="btn-discord-reg" class="btn btn-discord btn-block">Discord-ээр бүртгүүлэх</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ② Үндсэн хуудас -->
+  <div id="page-main" class="page">
+    <header>
+      <div class="logo">⚔️ WC3/DotA Platform</div>
+      <nav>
+        <button class="nav-btn active" data-tab="lobby">Lobby</button>
+        <button class="nav-btn" data-tab="chat">
+          💬 Чат
+          <span id="chat-badge" class="nav-badge" style="display:none">0</span>
+        </button>
+        <button class="nav-btn" data-tab="ranking">Ranking</button>
+        <button class="nav-btn" data-tab="profile">Профайл</button>
+        <button class="nav-btn" data-tab="settings">⚙️</button>
+      </nav>
+      <div class="header-right">
+        <!-- Light / Dark toggle -->
+        <button id="btn-theme" class="btn btn-icon-only" title="Харааны горим солих">
+          <svg class="btn-icon-svg" id="icon-sun"><use href="#ico-sun"/></svg>
+          <svg class="btn-icon-svg" id="icon-moon" style="display:none"><use href="#ico-moon"/></svg>
+        </button>
+        <div class="user-info">
+          <img id="user-avatar" src="" alt="" style="display:none" />
+          <span id="user-name"></span>
+          <button id="btn-logout" class="btn btn-icon-only btn-danger-soft" title="Гарах">
+            <svg class="btn-icon-svg"><use href="#ico-logout"/></svg>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Lobby tab -->
+    <div id="tab-lobby" class="tab active">
+      <div class="tab-header">
+        <h2>Нээлттэй өрөөнүүд</h2>
+        <div class="online-bar">
+          <span class="online-dot"></span>
+          <span id="online-count">0</span> тоглогч онлайн
+          <span id="online-names" class="online-names"></span>
+        </div>
+        <div class="tab-actions">
+          <button id="btn-refresh" class="btn btn-icon-only" title="Шинэчлэх">
+            <svg class="btn-icon-svg"><use href="#ico-refresh"/></svg>
+          </button>
+          <button id="btn-create-room" class="btn btn-primary btn-with-icon">
+            <svg class="btn-icon-svg"><use href="#ico-plus"/></svg>
+            Өрөө үүсгэх
+          </button>
+        </div>
+      </div>
+
+      <div id="create-room-form" class="card" style="display:none">
+        <h3>Шинэ өрөө</h3>
+        <input id="room-name" type="text" placeholder="Өрөөний нэр (жиш: Battle #5)" class="input" />
+        <select id="room-type" class="input">
+          <option value="">— Тоглоом сонгоно уу —</option>
+        </select>
+        <input id="room-max" type="number" value="10" min="2" max="12" class="input" />
+        <div class="password-row">
+          <label class="checkbox-label">
+            <input id="room-has-password" type="checkbox" />
+            <span>Нууц үгтэй өрөө</span>
+          </label>
+          <input id="room-password" type="password" placeholder="Өрөөний нууц үг" class="input" style="display:none;margin-top:6px" />
+        </div>
+        <div class="form-actions">
+          <button id="btn-submit-room" class="btn btn-primary">Үүсгэх</button>
+          <button id="btn-cancel-room" class="btn">Болих</button>
+        </div>
+      </div>
+
+      <div class="rooms-section">
+        <h3 class="section-title">🟢 Нэгдэж болно</h3>
+        <div id="rooms-waiting" class="rooms-grid">
+          <p class="empty-text">Ачааллаж байна...</p>
+        </div>
+      </div>
+      <div class="rooms-section">
+        <h3 class="section-title">🔴 Тоглолт явагдаж байна</h3>
+        <div id="rooms-playing" class="rooms-grid">
+          <p class="empty-text">Одоогоор тоглолт явагдахгүй байна</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Chat tab -->
+    <div id="tab-chat" class="tab">
+      <div class="chat-tab-layout">
+        <div class="lobby-chat-panel">
+          <div class="lobby-chat-header">
+            <span>🌐 Нийтийн чат</span>
+            <span class="hint" style="font-size:0.75rem">Бүх онлайн хэрэглэгчид харна</span>
+          </div>
+          <div id="lobby-chat-messages" class="lobby-chat-messages"></div>
+          <div class="chat-input-row">
+            <input id="lobby-chat-input" type="text" placeholder="Нийтэд мессеж бичих..." class="input" />
+            <button id="btn-lobby-send" class="btn btn-primary btn-icon-only" title="Илгээх">
+              <svg class="btn-icon-svg"><use href="#ico-send"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="dm-users-panel">
+          <!-- Tabs -->
+          <div class="dm-panel-tabs">
+            <button class="dm-tab active" data-dm-tab="friends">
+              Найзууд
+              <span id="pending-badge" class="dm-tab-badge" style="display:none">0</span>
+            </button>
+            <button class="dm-tab" data-dm-tab="online">
+              Онлайн
+              <span id="dm-online-badge" class="dm-tab-badge">0</span>
+            </button>
+            <button class="dm-tab" data-dm-tab="blocked">Хаасан</button>
+          </div>
+          <!-- Friends tab content -->
+          <div id="dm-tab-friends" class="dm-tab-content active">
+            <div id="pending-requests-section" style="display:none">
+              <div class="dm-section-label">📨 Хүсэлтүүд</div>
+              <ul id="pending-requests-list" class="dm-users-list"></ul>
+            </div>
+            <div class="dm-section-label" id="friends-online-label" style="display:none">🟢 Онлайн найзууд</div>
+            <ul id="friends-online-list" class="dm-users-list"></ul>
+            <div class="dm-section-label" id="friends-offline-label" style="display:none">⚫ Офлайн найзууд</div>
+            <ul id="friends-offline-list" class="dm-users-list"></ul>
+            <p id="no-friends-text" class="empty-text" style="padding:20px 12px;font-size:0.8rem">Найз байхгүй байна</p>
+          </div>
+          <!-- Online tab content -->
+          <div id="dm-tab-online" class="dm-tab-content">
+            <ul id="dm-users-list" class="dm-users-list">
+              <li class="empty-text" style="padding:12px;font-size:0.8rem">Онлайн хэрэглэгч байхгүй</li>
+            </ul>
+          </div>
+          <!-- Blocked tab content -->
+          <div id="dm-tab-blocked" class="dm-tab-content">
+            <ul id="blocked-users-list" class="dm-users-list">
+              <li class="empty-text" style="padding:12px;font-size:0.8rem">Хаасан хэрэглэгч байхгүй</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Ranking tab -->
+    <div id="tab-ranking" class="tab">
+      <h2>🏆 Шилдэг тоглогчид</h2>
+      <table id="ranking-table">
+        <thead>
+          <tr><th>#</th><th>Тоглогч</th><th>Хожил</th><th>Хожигдол</th><th>Win%</th></tr>
+        </thead>
+        <tbody id="ranking-body"></tbody>
+      </table>
+    </div>
+
+    <!-- Profile tab -->
+    <div id="tab-profile" class="tab">
+      <div class="card profile-card">
+        <div class="profile-avatar-wrap">
+          <img id="profile-avatar" src="" alt="" />
+          <button id="btn-upload-avatar" class="avatar-upload-btn" title="Зураг солих">📷</button>
+        </div>
+        <h2 id="profile-name"></h2>
+        <p id="profile-email" class="hint"></p>
+        <div class="stats-row">
+          <div class="stat"><span id="stat-wins">0</span><label>Хожил</label></div>
+          <div class="stat"><span id="stat-losses">0</span><label>Хожигдол</label></div>
+          <div class="stat"><span id="stat-winrate">0%</span><label>Win rate</label></div>
+        </div>
+        <div id="discord-link-section" style="margin-top:16px">
+          <div id="discord-linked" style="display:none" class="discord-badge">
+            <span>✓ Discord холбогдсон</span>
+            <span id="discord-username" class="hint"></span>
+          </div>
+          <button id="btn-link-discord" class="btn btn-discord" style="display:none">Discord холбох</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Settings tab -->
+    <div id="tab-settings" class="tab">
+      <h2>⚙️ Тохируулга</h2>
+      <div class="card settings-card">
+        <h3>🎮 Тоглоомууд</h3>
+        <p class="hint">Тоглоомын exe файлуудаа нэмнэ үү. Өрөө үүсгэхдээ аль тоглоомоор тоглохоо сонгоно.</p>
+
+        <!-- Тоглоомуудын жагсаалт -->
+        <ul id="games-list" class="games-list"></ul>
+
+        <button id="btn-add-game" class="btn btn-primary btn-with-icon" style="margin-top:8px">
+          <svg class="btn-icon-svg"><use href="#ico-plus"/></svg>
+          Тоглоом нэмэх
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ③ Өрөөний дотор -->
+  <div id="page-room" class="page">
+    <div class="room-layout">
+      <div class="chat-panel">
+        <div class="room-header">
+          <button id="btn-leave-room" class="btn btn-sm btn-icon-only btn-danger" title="Өрөөнөөс гарах">
+            <svg class="btn-icon-svg"><use href="#ico-leave"/></svg>
+          </button>
+          <h2 id="room-title">Өрөө</h2>
+          <span id="room-badge" class="badge"></span>
+        </div>
+        <div id="chat-messages" class="chat-messages"></div>
+        <div class="chat-input-row">
+          <input id="chat-input" type="text" placeholder="Мессеж бичих..." class="input" />
+          <button id="btn-send" class="btn btn-primary btn-icon-only" title="Илгээх">
+            <svg class="btn-icon-svg"><use href="#ico-send"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="side-panel">
+        <div class="card">
+          <h3>👥 Тоглогчид <span id="members-count" class="hint"></span></h3>
+          <ul id="members-list" class="members-list"></ul>
+        </div>
+        <div class="card">
+          <h3>🎮 Тоглоом</h3>
+          <p class="hint" id="room-info-text"></p>
+          <button id="btn-launch-wc3" class="btn btn-primary btn-block btn-with-icon">
+            <svg class="btn-icon-svg"><use href="#ico-play"/></svg>
+            <span>Тоглоом эхлүүлэх</span>
+          </button>
+          <button id="btn-close-room" class="btn btn-danger btn-icon-only" style="margin-top:8px;display:none" title="Өрөөг хаах">
+            <svg class="btn-icon-svg"><use href="#ico-close"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Нууц үг modal -->
+  <div id="password-modal" class="modal" style="display:none">
+    <div class="modal-box">
+      <h2>🔒 Нууц үгтэй өрөө</h2>
+      <p>Энэ өрөөнд нэвтрэхийн тулд нууц үгийг оруулна уу</p>
+      <input id="join-password" type="password" placeholder="Нууц үг" class="input" style="margin-bottom:12px" />
+      <p id="join-password-error" class="form-error"></p>
+      <div style="display:flex;gap:8px;justify-content:center">
+        <button id="btn-join-confirm" class="btn btn-primary">Нэгдэх</button>
+        <button id="btn-join-cancel"  class="btn">Болих</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Тоглоом дуусах -->
+  <div id="result-modal" class="modal" style="display:none">
+    <div class="modal-box">
+      <h2>🏆 Тоглоом дууслаа!</h2>
+      <p id="result-text"></p>
+      <button id="btn-close-result" class="btn btn-primary">Хаах</button>
+    </div>
+  </div>
+
+  <!-- Private мессеж (DM) modal -->
+  <div id="dm-modal" class="modal" style="display:none">
+    <div class="modal-box dm-modal-box">
+      <div class="dm-header">
+        <h3 id="dm-title">🔒 Private чат</h3>
+        <button id="btn-close-dm" class="btn btn-icon-only btn-sm" title="Хаах">
+          <svg class="btn-icon-svg"><use href="#ico-close"/></svg>
+        </button>
+      </div>
+      <div id="dm-messages" class="dm-messages"></div>
+      <div class="chat-input-row dm-input-row">
+        <input id="dm-input" type="text" placeholder="Хувийн мессеж..." class="input" />
+        <button id="btn-dm-send" class="btn btn-primary btn-icon-only" title="Илгээх">
+          <svg class="btn-icon-svg"><use href="#ico-send"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script src="socket.io.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
