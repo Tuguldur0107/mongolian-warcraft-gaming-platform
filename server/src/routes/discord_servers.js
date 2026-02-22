@@ -34,6 +34,10 @@ function isValidDiscordInvite(url) {
       created_at        TIMESTAMP DEFAULT NOW()
     )
   `).catch(e => console.error('[Migration] discord_servers:', e.message));
+  await db.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS discord_servers_invite_url_unique
+    ON discord_servers (LOWER(invite_url))
+  `).catch(e => console.error('[Migration] discord_servers unique idx:', e.message));
 })();
 
 // ── GET / — бүх серверийг авах ────────────────────────────
@@ -65,6 +69,14 @@ router.post('/', authMW, async (req, res) => {
 
   if (await dbOk()) {
     try {
+      // Давхардсан холбоос шалгах
+      const dup = await db.query(
+        'SELECT id FROM discord_servers WHERE LOWER(invite_url) = LOWER($1)',
+        [safeUrl]
+      );
+      if (dup.rows.length)
+        return res.status(409).json({ error: 'Энэ Discord сервер аль хэдийн нэмэгдсэн байна' });
+
       const { rows } = await db.query(
         `INSERT INTO discord_servers (name, invite_url, description, added_by_id, added_by_username)
          VALUES ($1,$2,$3,$4,$5) RETURNING *`,
@@ -73,6 +85,10 @@ router.post('/', authMW, async (req, res) => {
       return res.status(201).json(rows[0]);
     } catch (e) { console.error(e); }
   }
+  // In-memory давхардал шалгах
+  if (memServers.some(s => s.invite_url.toLowerCase() === safeUrl.toLowerCase()))
+    return res.status(409).json({ error: 'Энэ Discord сервер аль хэдийн нэмэгдсэн байна' });
+
   const entry = {
     id: memNextId++, name: safeName, invite_url: safeUrl,
     description: desc, added_by_id: userId, added_by_username: username,
