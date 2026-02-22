@@ -283,6 +283,20 @@ ipcMain.handle('update:install', () => {
   autoUpdater.quitAndInstall();
 });
 
+// App хувилбар буцаах
+ipcMain.handle('update:version', () => app.getVersion());
+
+// Гараар шинэчлэл шалгах
+ipcMain.handle('update:check', async () => {
+  if (!app.isPackaged) return { error: 'dev' };
+  try {
+    const result = await autoUpdater.checkForUpdates();
+    return { version: result?.updateInfo?.version || null };
+  } catch (e) {
+    return { error: e.message };
+  }
+});
+
 ipcMain.handle('auth:logout', () => {
   authService.clearToken();
   replayService.stopWatcher();

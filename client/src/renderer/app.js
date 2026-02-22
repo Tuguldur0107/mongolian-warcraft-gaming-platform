@@ -328,13 +328,51 @@ async function init() {
   // ── Auto-update мэдэгдлүүд ─────────────────────────────
   window.api.onUpdateAvailable(({ version }) => {
     showUpdateBar(`v${version} шинэ хувилбар байна. Татаж байна...`, null);
+    setUpdateMsg(`v${version} шинэ хувилбар олдлоо. Татаж байна...`, 'info');
   });
   window.api.onUpdateProgress((pct) => {
     showUpdateBar(`Шинэ хувилбар татаж байна... ${pct}%`, null, pct);
+    setUpdateMsg(`Татаж байна... ${pct}%`, 'info');
   });
   window.api.onUpdateDownloaded(({ version }) => {
     showUpdateBar(`v${version} бэлэн боллоо!`, true);
+    setUpdateMsg(`v${version} татагдлаа! Дээрх "Суулгаж дахин эхлүүлэх" дарна уу.`, 'success');
   });
+
+  // ── Хувилбар харуулах + гараар шалгах ─────────────────
+  window.api.getAppVersion?.().then(v => {
+    const el = document.getElementById('app-version');
+    if (el) el.textContent = v || '—';
+  });
+
+  document.getElementById('btn-check-update')?.addEventListener('click', async () => {
+    const btn = document.getElementById('btn-check-update');
+    btn.disabled = true;
+    btn.textContent = 'Шалгаж байна...';
+    setUpdateMsg('', '');
+    try {
+      const res = await window.api.checkForUpdates();
+      if (res?.error === 'dev') {
+        setUpdateMsg('Dev горимд update шалгах боломжгүй.', 'warn');
+      } else if (res?.error) {
+        setUpdateMsg('Шалгах үед алдаа гарлаа: ' + res.error, 'error');
+      } else {
+        setUpdateMsg('Шалгаж байна — шинэ хувилбар байвал автоматаар татна.', 'info');
+      }
+    } catch {
+      setUpdateMsg('Серверт холбогдож чадсангүй.', 'error');
+    }
+    btn.disabled = false;
+    btn.innerHTML = `<svg class="btn-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg> Шинэчлэл шалгах`;
+  });
+}
+
+function setUpdateMsg(msg, type) {
+  const el = document.getElementById('update-check-msg');
+  if (!el) return;
+  const colors = { info: 'var(--accent,#7c5cbf)', success: 'var(--success,#4caf50)', warn: '#f0a500', error: 'var(--danger,#e53935)' };
+  el.textContent = msg;
+  el.style.color = colors[type] || '';
 }
 
 function setUserUI(user) {
