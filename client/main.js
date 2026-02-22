@@ -309,9 +309,9 @@ ipcMain.handle('update:install', () => {
   // Цонхыг нуухын тулд UAC dialog харагдана
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.hide();
   if (roomWindow && !roomWindow.isDestroyed()) roomWindow.hide();
-  // isSilent=true: per-user install тул UAC шаардахгүй, чимээгүй суулгана
+  // isSilent=false: installer UI харагдана (SmartScreen bypass боломжтой)
   // isForceRunAfter=true: суулгасны дараа апп дахин нээнэ
-  setTimeout(() => autoUpdater.quitAndInstall(true, true), 300);
+  setTimeout(() => autoUpdater.quitAndInstall(false, true), 300);
 });
 
 // App хувилбар буцаах
