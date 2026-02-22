@@ -87,8 +87,9 @@ app.whenReady().then(() => {
 
 // Апп хаагдахаас өмнө өрөөг цэвэрлэх
 let _quitCleanupDone = false;
+let _isInstallingUpdate = false; // quitAndInstall-д before-quit-г алгасах
 app.on('before-quit', async (e) => {
-  if (_quitCleanupDone) return;
+  if (_quitCleanupDone || _isInstallingUpdate) return;
   e.preventDefault();
   _quitCleanupDone = true;
   try {
@@ -304,6 +305,7 @@ ipcMain.handle('auth:changePassword', async (_, { oldPassword, newPassword }) =>
 
 // Update суулгаж restart хийх
 ipcMain.handle('update:install', () => {
+  _isInstallingUpdate = true; // before-quit cleanup алгасах
   // isSilent=false: NSIS installer UI гаргана (UAC зөвшөөрөл авна)
   // isForceRunAfter=true: суулгасны дараа апп дахин нээнэ
   autoUpdater.quitAndInstall(false, true);
