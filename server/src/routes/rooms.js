@@ -1,5 +1,6 @@
 const express = require('express');
 const bcrypt  = require('bcrypt');
+const axios   = require('axios');
 const auth    = require('../middleware/auth');
 const optAuth = auth.optional;
 const strictAuth = auth; // strict — token заавал шаардана
@@ -10,6 +11,42 @@ try { db = require('../config/db'); } catch { db = null; }
 async function dbOk() {
   if (!db) return false;
   try { await db.query('SELECT 1'); return true; } catch { return false; }
+}
+
+// ── ZeroTier Central API ──────────────────────────────────
+const ZT_API   = 'https://api.zerotier.com/api/v1';
+const ZT_TOKEN = process.env.ZEROTIER_API_TOKEN;
+
+async function ztCreateNetwork(roomName) {
+  if (!ZT_TOKEN) return null;
+  try {
+    const { data } = await axios.post(`${ZT_API}/network`, {
+      config: {
+        name: `WC3-${roomName}`.slice(0, 64),
+        private: false, // authorization хэрэггүй — автоматаар нэгдэнэ
+        v4AssignMode: { zt: true },
+        ipAssignmentPools: [{ ipRangeStart: '10.147.20.1', ipRangeEnd: '10.147.20.254' }],
+        routes: [{ target: '10.147.20.0/24' }],
+      },
+    }, { headers: { Authorization: `token ${ZT_TOKEN}` } });
+    console.log(`[ZeroTier] Network үүслээ: ${data.id} (${roomName})`);
+    return data.id;
+  } catch (e) {
+    console.error('[ZeroTier] Network үүсгэхэд алдаа:', e.message);
+    return null;
+  }
+}
+
+async function ztDeleteNetwork(networkId) {
+  if (!ZT_TOKEN || !networkId) return;
+  try {
+    await axios.delete(`${ZT_API}/network/${networkId}`, {
+      headers: { Authorization: `token ${ZT_TOKEN}` },
+    });
+    console.log(`[ZeroTier] Network устгагдлаа: ${networkId}`);
+  } catch (e) {
+    console.error('[ZeroTier] Network устгахад алдаа:', e.message);
+  }
 }
 
 const router = express.Router();
@@ -133,6 +170,14 @@ router.post('/', strictAuth, async (req, res) => {
       );
       const room = r.rows[0];
       await db.query('INSERT INTO room_players (room_id, user_id) VALUES ($1,$2)', [room.id, userId]);
+
+      // ZeroTier network автоматаар үүсгэх
+      const ztNetId = await ztCreateNetwork(name);
+      if (ztNetId) {
+        await db.query('UPDATE rooms SET zerotier_network_id=$1 WHERE id=$2', [ztNetId, room.id]);
+        room.zerotier_network_id = ztNetId;
+      }
+
       emitRoomsUpdated();
       return res.status(201).json({ ...room, host_name: hostName, members: [{ id: String(userId), name: hostName }], player_count: 1 });
     } catch (e) { console.error(e); }
@@ -234,9 +279,11 @@ router.post('/:id/leave', strictAuth, async (req, res) => {
       await db.query('DELETE FROM room_players WHERE room_id=$1 AND user_id=$2', [id, userId]);
       const rr = await db.query('SELECT * FROM rooms WHERE id=$1', [id]);
       if (rr.rows[0]?.host_id === userId || String(rr.rows[0]?.host_id) === String(userId)) {
+        const ztId = rr.rows[0]?.zerotier_network_id;
         await db.query('DELETE FROM rooms WHERE id=$1', [id]);
         if (_io) _io.to(id).emit('room:closed', { reason: 'Өрөөний эзэн гарлаа' });
         emitRoomsUpdated();
+        ztDeleteNetwork(ztId); // fire-and-forget
         return res.json({ message: 'Өрөө устгагдлаа' });
       }
       emitRoomsUpdated();
@@ -261,13 +308,15 @@ router.delete('/:id', strictAuth, async (req, res) => {
 
   if (await dbOk()) {
     try {
-      const rr = await db.query('SELECT host_id FROM rooms WHERE id=$1', [id]);
+      const rr = await db.query('SELECT host_id, zerotier_network_id FROM rooms WHERE id=$1', [id]);
       if (!rr.rows[0]) return res.status(404).json({ error: 'Өрөө олдсонгүй' });
       if (String(rr.rows[0].host_id) !== String(userId))
         return res.status(403).json({ error: 'Зөвхөн өрөөний эзэн хаах эрхтэй' });
+      const ztId = rr.rows[0].zerotier_network_id;
       await db.query('DELETE FROM rooms WHERE id=$1', [id]);
       if (_io) _io.to(id).emit('room:closed', { reason: 'Өрөөний эзэн өрөөг хаалаа' });
       emitRoomsUpdated();
+      ztDeleteNetwork(ztId); // fire-and-forget
       return res.json({ message: 'Өрөө хаагдлаа' });
     } catch (e) { console.error(e); }
   }

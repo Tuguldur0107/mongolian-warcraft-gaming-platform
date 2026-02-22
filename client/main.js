@@ -307,14 +307,10 @@ ipcMain.handle('rooms:create', async (event, { name, max_players, game_type, pas
   try {
     room = await apiService.createRoom({ name, max_players, game_type, password });
   } catch (err) { throw apiError(err); }
-  // ZeroTier — settings-д тохируулсан network ID ашиглана
+  // ZeroTier — server-аас автоматаар үүссэн network ID ашиглана
   try {
-    const s = migrateSettings(readSettings());
-    const networkId = s.zerotierNetworkId?.trim();
-    if (networkId) {
-      await zerotierService.joinNetwork(networkId);
-      await apiService.updateRoomNetwork(room.id, networkId).catch(() => {});
-      room.zerotier_network_id = networkId;
+    if (room?.zerotier_network_id) {
+      await zerotierService.joinNetwork(room.zerotier_network_id);
     }
   } catch {}
   try { replayService.startWatcher(room.id); } catch {}
