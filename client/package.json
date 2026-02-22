@@ -37,8 +37,16 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Mongolian Warcraft Platform"
+      "shortcutName": "Mongolian Warcraft Platform",
+      "include": "nsis-extra.nsh"
     },
+    "extraResources": [
+      {
+        "from": "resources/ZeroTierOne.msi",
+        "to": "ZeroTierOne.msi",
+        "filter": ["**/*"]
+      }
+    ],
     "files": [
       "**/*",
       "!dist/**",

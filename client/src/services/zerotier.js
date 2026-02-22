@@ -1,74 +1,81 @@
 const { execSync, exec } = require('child_process');
-const path = require('path');
+const fs = require('fs');
 
-// ZeroTier CLI байрлал (Windows)
-const ZT_CLI = 'C:\\Program Files (x86)\\ZeroTier\\One\\zerotier-one_x64.exe';
-const ZT_CLI_CMD = '"C:\\Program Files (x86)\\ZeroTier\\One\\zerotier-one_x64.exe" -q';
+// ZeroTier суулгалтын боломжит замууд (32-bit болон 64-bit)
+const ZT_PATHS = [
+  'C:\\Program Files (x86)\\ZeroTier\\One\\zerotier-one_x64.exe',
+  'C:\\Program Files\\ZeroTier\\One\\zerotier-one_x64.exe',
+];
 
+let _ztCmd = null;
 let currentNetworkId = null;
 
-// ZeroTier ажиллаж байгаа эсэх шалгах
+function getZtCmd() {
+  if (_ztCmd) return _ztCmd;
+  for (const p of ZT_PATHS) {
+    if (fs.existsSync(p)) {
+      _ztCmd = `"${p}" -q`;
+      return _ztCmd;
+    }
+  }
+  return null;
+}
+
+function isInstalled() {
+  return ZT_PATHS.some(p => fs.existsSync(p));
+}
+
 function isRunning() {
+  const cmd = getZtCmd();
+  if (!cmd) return false;
   try {
-    execSync(`${ZT_CLI_CMD} info`, { stdio: 'pipe' });
+    execSync(`${cmd} info`, { stdio: 'pipe' });
     return true;
   } catch {
     return false;
   }
 }
 
-// Шинэ виртуал сүлжээ үүсгэх (өрөө эзэн)
-async function createNetwork(roomId) {
-  // Жич: ZeroTier Central API-аар network үүсгэх боломжтой
-  // Одоохондоо тоглогчид нийтлэг network ID ашиглана
-  // Хожим ZeroTier Central API интеграц нэмнэ
-  const networkId = generateNetworkId(roomId);
-  await joinNetwork(networkId);
-  return networkId;
-}
-
-// Виртуал сүлжээнд нэгдэх
 async function joinNetwork(networkId) {
-  if (!networkId) return;
+  if (!networkId) return false;
+
+  const cmd = getZtCmd();
+  if (!cmd) {
+    console.warn('[ZeroTier] Суулгаагүй байна');
+    return false;
+  }
+  if (!isRunning()) {
+    console.warn('[ZeroTier] Сервис ажиллаагүй байна');
+    return false;
+  }
 
   return new Promise((resolve, reject) => {
-    if (!isRunning()) {
-      console.warn('ZeroTier ажиллаагүй байна, суулгаж тохируулна уу');
-      return resolve(false);
-    }
-
-    exec(`${ZT_CLI_CMD} join ${networkId}`, (err, stdout) => {
+    exec(`${cmd} join ${networkId}`, (err) => {
       if (err) {
-        console.error('ZeroTier join алдаа:', err.message);
+        console.error('[ZeroTier] join алдаа:', err.message);
         return reject(err);
       }
       currentNetworkId = networkId;
-      console.log(`ZeroTier network ${networkId}-д нэгдлээ`);
+      console.log(`[ZeroTier] ${networkId}-д нэгдлээ`);
       resolve(true);
     });
   });
 }
 
-// Сүлжээнээс гарах
 function disconnect() {
   if (!currentNetworkId) return;
-
+  const cmd = getZtCmd();
+  if (!cmd) return;
   try {
     if (isRunning()) {
-      execSync(`${ZT_CLI_CMD} leave ${currentNetworkId}`, { stdio: 'pipe' });
-      console.log(`ZeroTier network ${currentNetworkId}-аас гарлаа`);
+      execSync(`${cmd} leave ${currentNetworkId}`, { stdio: 'pipe' });
+      console.log(`[ZeroTier] ${currentNetworkId}-аас гарлаа`);
     }
   } catch (err) {
-    console.error('ZeroTier leave алдаа:', err.message);
+    console.error('[ZeroTier] leave алдаа:', err.message);
   } finally {
     currentNetworkId = null;
   }
 }
 
-// Room ID-аас тогтмол network ID үүсгэх (энгийн hash)
-function generateNetworkId(roomId) {
-  const clean = roomId.replace(/-/g, '').substring(0, 16);
-  return clean.padEnd(16, '0');
-}
-
-module.exports = { createNetwork, joinNetwork, disconnect, isRunning };
+module.exports = { joinNetwork, disconnect, isInstalled, isRunning };
