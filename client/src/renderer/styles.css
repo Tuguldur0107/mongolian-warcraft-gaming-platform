@@ -711,3 +711,77 @@ body.light #icon-moon { display: block !important; }
 .username-edit-form { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 4px; }
 .username-edit-form .input { flex: 1; min-width: 120px; }
 
+/* ── Skeleton loading ───────────────────────────────── */
+.skeleton {
+  background: linear-gradient(90deg, var(--bg2) 25%, var(--card) 50%, var(--bg2) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-loading 1.5s infinite;
+  border-radius: 8px;
+}
+@keyframes skeleton-loading {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ── Toast notifications ────────────────────────────── */
+.toast-container {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+}
+.toast {
+  padding: 12px 20px;
+  border-radius: 8px;
+  color: white;
+  font-size: 0.88rem;
+  animation: toast-in 0.3s ease, toast-out 0.3s ease 2.7s forwards;
+  max-width: 350px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.35);
+  pointer-events: auto;
+  word-break: break-word;
+}
+.toast.success { background: #43b581; }
+.toast.error   { background: #f04747; }
+.toast.info    { background: #5865f2; }
+.toast.warning { background: #faa61a; color: #000; }
+@keyframes toast-in  { from { transform: translateX(100%); opacity:0; } to { transform: translateX(0); opacity:1; } }
+@keyframes toast-out { from { opacity:1; } to { opacity:0; } }
+
+/* ── Confirm modal ──────────────────────────────────── */
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.55);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 9998;
+}
+.confirm-box {
+  background: var(--card);
+  border-radius: 12px;
+  padding: 24px;
+  max-width: 400px;
+  width: 92%;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+}
+.confirm-box h3 { margin-bottom: 8px; }
+.confirm-box p  { color: var(--text2); font-size: 0.9rem; margin-bottom: 16px; }
+.confirm-actions { display: flex; gap: 8px; justify-content: flex-end; }
+
+/* ── Responsive ─────────────────────────────────────── */
+@media (max-width: 900px) {
+  .rooms-grid { grid-template-columns: 1fr !important; }
+  .chat-layout { flex-direction: column; }
+}
+@media (max-width: 700px) {
+  header { flex-wrap: wrap; gap: 6px; }
+  .header-right { flex-wrap: wrap; }
+  .connection-status { display: none; }
+}
+

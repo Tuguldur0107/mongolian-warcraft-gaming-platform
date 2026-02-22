@@ -493,7 +493,7 @@ document.querySelectorAll('.dm-tab').forEach(btn => {
 async function loadRooms() {
   const waiting = document.getElementById('rooms-waiting');
   const playing = document.getElementById('rooms-playing');
-  waiting.innerHTML = '<p class="empty-text">Ачааллаж байна...</p>';
+  waiting.innerHTML = renderRoomsSkeleton();
   playing.innerHTML = '';
   try {
     const rooms = await window.api.getRooms();
@@ -546,11 +546,11 @@ function rejoinMyRoom(id, name, gameType, hostId, isHost) {
 }
 
 async function joinPlayingRoom(id, name, gameType, hostId) {
-  if (!confirm(`"${name}" тоглолтод нэгдэх үү? "${gameType}" тоглоом нээгдэнэ.`)) return;
+  if (!await showConfirm('Тоглолтод нэгдэх', `"${name}" тоглолтод нэгдэх үү? "${gameType}" тоглоом нээгдэнэ.`)) return;
   try {
     await window.api.launchGame(gameType);
   } catch (err) {
-    alert(`Тоглоом нээхэд алдаа гарлаа: ${err.message}`);
+    showToast(`Тоглоом нээхэд алдаа гарлаа: ${err.message}`, 'error');
   }
 }
 
@@ -559,7 +559,7 @@ document.getElementById('btn-refresh').onclick = loadRooms;
 // Хурдан тоглолт
 document.getElementById('btn-quickmatch').onclick = async () => {
   const gameType = configuredGames[0]?.name;
-  if (!gameType) return alert('Эхлээд Тохируулга таб-д тоглоом нэмнэ үү');
+  if (!gameType) { showToast('Эхлээд Тохируулга таб-д тоглоом нэмнэ үү', 'warning'); return; }
   const btn = document.getElementById('btn-quickmatch');
   btn.disabled = true; btn.textContent = '⏳ ...';
   try {
@@ -568,7 +568,7 @@ document.getElementById('btn-quickmatch').onclick = async () => {
     const isHost = !result.joined && String(room.host_id) === String(currentUser?.id);
     enterRoom(String(room.id), room.name, room.game_type, isHost, String(room.host_id));
   } catch (err) {
-    alert(`Хурдан тоглолт: ${err.message}`);
+    showToast(`Хурдан тоглолт: ${err.message}`, 'error');
   } finally {
     btn.disabled = false; btn.textContent = '⚡ Хурдан';
   }
@@ -593,9 +593,9 @@ document.getElementById('btn-submit-room').onclick = async () => {
   const max_players = parseInt(document.getElementById('room-max').value);
   const hasPass     = document.getElementById('room-has-password').checked;
   const password    = hasPass ? document.getElementById('room-password').value : null;
-  if (!name) return alert('Өрөөний нэр оруулна уу');
-  if (!game_type) return alert('Тоглоом сонгоно уу (Тохируулга таб-д тоглоом нэмнэ үү)');
-  if (hasPass && !password) return alert('Нууц үг оруулна уу');
+  if (!name)             { showToast('Өрөөний нэр оруулна уу', 'warning'); return; }
+  if (!game_type)        { showToast('Тоглоом сонгоно уу (Тохируулга таб-д тоглоом нэмнэ үү)', 'warning'); return; }
+  if (hasPass && !password) { showToast('Нууц үг оруулна уу', 'warning'); return; }
   try {
     const room = await window.api.createRoom({ name, max_players, game_type, password });
     document.getElementById('create-room-form').style.display = 'none';
@@ -603,8 +603,9 @@ document.getElementById('btn-submit-room').onclick = async () => {
     document.getElementById('room-has-password').checked = false;
     document.getElementById('room-password').value = '';
     document.getElementById('room-password').style.display = 'none';
+    showToast(`"${room.name}" өрөө үүслээ`, 'success');
     enterRoom(room.id, room.name, room.game_type, true);
-  } catch (err) { alert(`Алдаа: ${err.message}`); }
+  } catch (err) { showToast(`Алдаа: ${err.message}`, 'error'); }
 };
 
 // ── Өрөөнд нэгдэх ────────────────────────────────────────
@@ -629,7 +630,7 @@ async function doJoinRoom(id, name, gameType, password, hostId) {
     if (err.message?.includes('Нууц үг шаардлагатай')) {
       joinRoom(id, name, gameType, true, hostId);
     } else {
-      alert(`Алдаа: ${err.message}`);
+      showToast(`Алдаа: ${err.message}`, 'error');
     }
   }
 }
@@ -701,7 +702,7 @@ document.getElementById('btn-leave-room').onclick = async () => {
 
 document.getElementById('btn-close-room').onclick = async () => {
   if (!currentRoom) return;
-  if (!confirm(`"${currentRoom.name}" өрөөг хаах уу? Бүх тоглогчид гарна.`)) return;
+  if (!await showConfirm('Өрөө хаах', `"${currentRoom.name}" өрөөг хаах уу? Бүх тоглогчид гарна.`)) return;
   try {
     await window.api.closeRoom(currentRoom.id);
     currentRoom = null;
@@ -801,7 +802,7 @@ function renderMembers(members) {
 
 async function kickPlayer(targetId, targetName) {
   if (!currentRoom || !targetId) return;
-  if (!confirm(`${targetName}-г өрөөнөөс гаргах уу?`)) return;
+  if (!await showConfirm('Гаргах', `${targetName}-г өрөөнөөс гаргах уу?`)) return;
   try {
     await window.api.kickPlayer(currentRoom.id, targetId);
     appendSysMsg(`✓ ${targetName} гаргагдлаа`);
@@ -1118,7 +1119,7 @@ async function acceptFriend(fromId, fromUsername) {
     }
     updatePendingBadge();
     renderFriendsTab();
-  } catch (err) { alert(err.message); }
+  } catch (err) { showToast(err.message, 'error'); }
 }
 
 async function declineFriend(fromId) {
@@ -1127,17 +1128,17 @@ async function declineFriend(fromId) {
     pendingRequests = pendingRequests.filter(p => String(p.id) !== String(fromId));
     updatePendingBadge();
     renderFriendsTab();
-  } catch (err) { alert(err.message); }
+  } catch (err) { showToast(err.message, 'error'); }
 }
 
 async function removeFriendClick(friendId, friendName) {
-  if (!confirm(`${friendName}-г найзуудаас хасах уу?`)) return;
+  if (!await showConfirm('Найз хасах', `${friendName}-г найзуудаас хасах уу?`)) return;
   try {
     await window.api.removeFriend(friendId);
     myFriends = myFriends.filter(f => String(f.id) !== String(friendId));
     renderFriendsTab();
     renderOnlineUsersFromCache();
-  } catch (err) { alert(err.message); }
+  } catch (err) { showToast(err.message, 'error'); }
 }
 
 // ── Хаасан хэрэглэгчдийн tab дүрслэх ─────────────────────
@@ -1165,7 +1166,7 @@ function renderBlockedTab() {
 }
 
 async function blockUserClick(targetId, targetName) {
-  if (!confirm(`${targetName}-г хаах уу? Найзлалт устгагдана.`)) return;
+  if (!await showConfirm('Хэрэглэгч хаах', `${targetName}-г хаах уу? Найзлалт устгагдана.`)) return;
   try {
     await window.api.blockUser(targetId);
     myFriends       = myFriends.filter(f => String(f.id) !== String(targetId));
@@ -1177,17 +1178,17 @@ async function blockUserClick(targetId, targetName) {
     renderFriendsTab();
     renderBlockedTab();
     renderOnlineUsersFromCache();
-  } catch (err) { alert(err.message); }
+  } catch (err) { showToast(err.message, 'error'); }
 }
 
 async function unblockUserClick(targetId, targetName) {
-  if (!confirm(`${targetName}-г хаалтаас гаргах уу?`)) return;
+  if (!await showConfirm('Хаалт нээх', `${targetName}-г хаалтаас гаргах уу?`)) return;
   try {
     await window.api.unblockUser(targetId);
     blockedUsers = blockedUsers.filter(b => String(b.id) !== String(targetId));
     renderBlockedTab();
     renderOnlineUsersFromCache();
-  } catch (err) { alert(err.message); }
+  } catch (err) { showToast(err.message, 'error'); }
 }
 
 async function addFriendClick(targetId, targetName) {
@@ -1195,7 +1196,7 @@ async function addFriendClick(targetId, targetName) {
     await window.api.sendFriendRequest(targetId);
     showDMNotification(`${targetName}-д найз хүсэлт илгээлээ`);
     renderOnlineUsersFromCache();
-  } catch (err) { alert(err.message || 'Найз хүсэлт илгээхэд алдаа гарлаа'); }
+  } catch (err) { showToast(err.message || 'Найз хүсэлт илгээхэд алдаа гарлаа', 'error'); }
 }
 
 function renderDMUsersBadges() {
@@ -1623,13 +1624,12 @@ document.getElementById('btn-username-save').onclick = async (e) => {
 const btnUnlinkDiscord = document.getElementById('btn-unlink-discord');
 if (btnUnlinkDiscord) {
   btnUnlinkDiscord.onclick = async () => {
-    if (!confirm('Discord холболтыг салгахдаа итгэлтэй байна уу? Нэвтрэхэд нууц үг шаардлагатай болно.')) return;
+    if (!await showConfirm('Discord салгах', 'Discord холболтыг салгахдаа итгэлтэй байна уу? Нэвтрэхэд нууц үг шаардлагатай болно.')) return;
     try {
       await window.api.unlinkDiscord();
-      // Reload profile
       loadProfile();
     } catch (err) {
-      alert(err.message || 'Алдаа гарлаа');
+      showToast(err.message || 'Алдаа гарлаа', 'error');
     }
   };
 }
@@ -1679,7 +1679,7 @@ document.getElementById('btn-upload-avatar').onclick = async () => {
       if (currentUser) currentUser.avatar_url = result.avatar_url;
     }
   } catch (err) {
-    if (err.message) alert(`Зураг оруулахад алдаа: ${err.message}`);
+    if (err.message) showToast(`Зураг оруулахад алдаа: ${err.message}`, 'error');
   } finally {
     btn.disabled = false;
     btn.textContent = '📷';
@@ -1749,8 +1749,7 @@ document.getElementById('btn-add-game').onclick = async () => {
     renderGamesList();
     populateRoomTypeSelect();
   } catch (err) {
-    const msg = err?.message || String(err);
-    alert('Тоглоом нэмэхэд алдаа гарлаа:\n' + msg);
+    showToast('Тоглоом нэмэхэд алдаа гарлаа: ' + (err?.message || String(err)), 'error');
     console.error('addGame error:', err);
   } finally {
     btn.disabled = false;
@@ -1759,12 +1758,12 @@ document.getElementById('btn-add-game').onclick = async () => {
 };
 
 async function removeGameClick(id) {
-  if (!confirm('Энэ тоглоомыг жагсаалтаас устгах уу?')) return;
+  if (!await showConfirm('Тоглоом устгах', 'Энэ тоглоомыг жагсаалтаас устгах уу?')) return;
   try {
     configuredGames = await window.api.removeGame(id);
     renderGamesList();
     populateRoomTypeSelect();
-  } catch (err) { alert(err.message); }
+  } catch (err) { showToast(err.message, 'error'); }
 }
 
 // ── Тоглоом дуусах ───────────────────────────────────────
@@ -1776,6 +1775,63 @@ function showGameResult(data) {
 document.getElementById('btn-close-result').onclick = () => {
   document.getElementById('result-modal').style.display = 'none';
 };
+
+// ── Toast notifications ───────────────────────────────────
+function showToast(message, type = 'info', duration = 3000) {
+  let container = document.getElementById('toast-container');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'toast-container';
+    container.className = 'toast-container';
+    document.body.appendChild(container);
+  }
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
+  toast.textContent = message;
+  container.appendChild(toast);
+  setTimeout(() => toast.remove(), duration);
+}
+
+// ── Confirm modal ─────────────────────────────────────────
+function showConfirm(title, message) {
+  return new Promise(resolve => {
+    document.getElementById('confirm-title').textContent   = title;
+    document.getElementById('confirm-message').textContent = message;
+    const modal = document.getElementById('confirm-modal');
+    modal.style.display = 'flex';
+    const cleanup = (result) => {
+      modal.style.display = 'none';
+      resolve(result);
+    };
+    document.getElementById('confirm-ok').onclick     = () => cleanup(true);
+    document.getElementById('confirm-cancel').onclick = () => cleanup(false);
+  });
+}
+
+// ── withLoading helper ────────────────────────────────────
+function withLoading(button, asyncFn) {
+  return async (...args) => {
+    if (button.disabled) return;
+    const originalText = button.textContent;
+    button.disabled = true;
+    button.textContent = '⏳ ...';
+    try {
+      await asyncFn(...args);
+    } catch (e) {
+      showToast(e.message || 'Алдаа гарлаа', 'error');
+    } finally {
+      button.disabled = false;
+      button.textContent = originalText;
+    }
+  };
+}
+
+// ── Skeleton helpers ──────────────────────────────────────
+function renderRoomsSkeleton() {
+  return Array(3).fill('').map(() => `
+    <div class="room-card skeleton" style="height:120px;margin-bottom:12px;"></div>
+  `).join('');
+}
 
 // ── Холболтын төлөв ───────────────────────────────────────
 function updateConnectionStatus(status) {
@@ -1850,6 +1906,37 @@ const rankingSortEl = document.getElementById('ranking-sort');
 if (rankingSortEl) {
   rankingSortEl.addEventListener('change', () => loadRanking(1, rankingSortEl.value));
 }
+
+// ── Keyboard shortcuts ────────────────────────────────────
+document.addEventListener('keydown', (e) => {
+  // Escape: Open modal хаах
+  if (e.key === 'Escape') {
+    const modals = [
+      'user-profile-modal',
+      'confirm-modal',
+      'dm-modal',
+      'password-modal',
+    ];
+    for (const id of modals) {
+      const el = document.getElementById(id);
+      if (el && !el.classList.contains('hidden') && el.style.display !== 'none') {
+        el.classList.add('hidden');
+        el.style.display = 'none';
+        break;
+      }
+    }
+  }
+
+  // Ctrl+Enter: чат input дотроос мессеж илгээх
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+    const activeEl = document.activeElement;
+    if (activeEl?.id === 'chat-input') {
+      document.getElementById('btn-send')?.click();
+    } else if (activeEl?.id === 'dm-input') {
+      document.getElementById('btn-dm-send')?.click();
+    }
+  }
+});
 
 // ── Эхлүүлэх ─────────────────────────────────────────────
 init();
