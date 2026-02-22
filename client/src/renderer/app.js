@@ -248,6 +248,7 @@ function showTab(name) {
   if (name === 'ranking')  loadRanking();
   if (name === 'profile')  loadProfile();
   if (name === 'settings') loadSettings();
+  if (name === 'discord')  loadDiscordServers();
   if (name === 'chat') {
     chatUnreadCount = 0;
     updateChatBadge();
@@ -2128,6 +2129,90 @@ document.addEventListener('keydown', (e) => {
     }
   }
 });
+
+// ── Discord Servers ───────────────────────────────────────
+async function loadDiscordServers() {
+  const list = document.getElementById('discord-servers-list');
+  if (!list) return;
+  list.innerHTML = '<p class="empty-text">Ачааллаж байна...</p>';
+  try {
+    const servers = await window.api.getDiscordServers();
+    if (!servers.length) {
+      list.innerHTML = '<p class="empty-text">Одоогоор Discord сервер байхгүй байна. Эхний сервераа нэмээрэй!</p>';
+      return;
+    }
+    list.innerHTML = servers.map(s => {
+      const isOwn = currentUser && String(s.added_by_id) === String(currentUser.id);
+      return `
+        <div class="room-card discord-server-card">
+          <div class="room-card-header">
+            <span class="discord-icon">🎮</span>
+            <strong>${escHtml(s.name)}</strong>
+          </div>
+          ${s.description ? `<p class="meta">${escHtml(s.description)}</p>` : ''}
+          <p class="meta hint">Нэмсэн: ${escHtml(s.added_by_username)}</p>
+          <div class="discord-card-footer">
+            <button type="button" class="btn btn-primary btn-sm btn-discord-join" data-url="${escHtml(s.invite_url)}">
+              Нэгдэх →
+            </button>
+            ${isOwn ? `<button type="button" class="btn btn-sm btn-danger-soft btn-ds-delete" data-id="${s.id}">Устгах</button>` : ''}
+          </div>
+        </div>`;
+    }).join('');
+
+    list.querySelectorAll('.btn-discord-join').forEach(btn => {
+      btn.onclick = () => window.api.openDiscordInvite(btn.dataset.url);
+    });
+    list.querySelectorAll('.btn-ds-delete').forEach(btn => {
+      btn.onclick = async () => {
+        if (!await showConfirm('Сервер устгах', 'Энэ Discord серверийг жагсаалтаас устгах уу?')) return;
+        try {
+          await window.api.deleteDiscordServer(Number(btn.dataset.id));
+          showToast('Устгагдлаа', 'success');
+          loadDiscordServers();
+        } catch (err) {
+          showToast(`Алдаа: ${err.message}`, 'error');
+        }
+      };
+    });
+  } catch (err) {
+    list.innerHTML = `<p class="empty-text">Серверийн жагсаалт ачаалахад алдаа гарлаа</p>`;
+  }
+}
+
+document.getElementById('btn-add-discord-server').onclick = () => {
+  const form = document.getElementById('discord-server-form');
+  form.classList.toggle('hidden');
+  if (!form.classList.contains('hidden')) {
+    document.getElementById('ds-name').focus();
+  }
+};
+
+document.getElementById('btn-ds-cancel').onclick = () => {
+  document.getElementById('discord-server-form').classList.add('hidden');
+  document.getElementById('ds-form-error').textContent = '';
+};
+
+document.getElementById('btn-ds-submit').onclick = async () => {
+  const name        = document.getElementById('ds-name').value.trim();
+  const invite_url  = document.getElementById('ds-invite-url').value.trim();
+  const description = document.getElementById('ds-description').value.trim();
+  const errEl       = document.getElementById('ds-form-error');
+  errEl.textContent = '';
+  if (!name)       { errEl.textContent = 'Серверийн нэр оруулна уу';  return; }
+  if (!invite_url) { errEl.textContent = 'Discord урилгын холбоос оруулна уу'; return; }
+  try {
+    await window.api.addDiscordServer({ name, invite_url, description });
+    document.getElementById('discord-server-form').classList.add('hidden');
+    document.getElementById('ds-name').value        = '';
+    document.getElementById('ds-invite-url').value  = '';
+    document.getElementById('ds-description').value = '';
+    showToast('Discord сервер нэмэгдлээ! 🎮', 'success');
+    loadDiscordServers();
+  } catch (err) {
+    errEl.textContent = err.message;
+  }
+};
 
 // ── Эхлүүлэх ─────────────────────────────────────────────
 init();

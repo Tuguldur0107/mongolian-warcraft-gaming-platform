@@ -637,6 +637,23 @@ ipcMain.handle('social:markRead', async (_, fromUserId) => {
   try { return await apiService.markDMRead(fromUserId); } catch { return { ok: false }; }
 });
 
+// ── Discord Servers ────────────────────────────────────────
+ipcMain.handle('discord:getServers', async () => {
+  try { return await apiService.getDiscordServers(); } catch { return []; }
+});
+ipcMain.handle('discord:addServer', async (_, data) => {
+  try { return await apiService.addDiscordServer(data); } catch (err) { throw apiError(err); }
+});
+ipcMain.handle('discord:deleteServer', async (_, id) => {
+  try { return await apiService.deleteDiscordServer(id); } catch (err) { throw apiError(err); }
+});
+ipcMain.handle('discord:openInvite', async (_, url) => {
+  // Main process талд дахин шалгаж Discord URL-г нээнэ
+  if (/^https?:\/\/(discord\.gg|discord\.com\/invite)\/[\w-]+$/.test(url)) {
+    await shell.openExternal(url);
+  }
+});
+
 // Тоглоом эхлүүлэх (gameType нэрээр тохирох exe хайна)
 ipcMain.handle('game:launch', (_, gameType) => {
   const s = migrateSettings(readSettings());

@@ -188,6 +188,20 @@ async function unlinkDiscord() {
   return data;
 }
 
+// ── Discord Servers ────────────────────────────────────────
+async function getDiscordServers() {
+  const { data } = await getClient().get('/discord-servers');
+  return data;
+}
+async function addDiscordServer({ name, invite_url, description }) {
+  const { data } = await getClient().post('/discord-servers', { name, invite_url, description });
+  return data;
+}
+async function deleteDiscordServer(id) {
+  const { data } = await getClient().delete(`/discord-servers/${id}`);
+  return data;
+}
+
 module.exports = {
   SERVER_URL,
   friendlyError,
@@ -225,4 +239,7 @@ module.exports = {
   resetPassword,
   changeUsername,
   unlinkDiscord,
+  getDiscordServers,
+  addDiscordServer,
+  deleteDiscordServer,
 };

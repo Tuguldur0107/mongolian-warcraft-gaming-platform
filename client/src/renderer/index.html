@@ -163,6 +163,7 @@
           <span id="chat-badge" class="nav-badge hidden">0</span>
         </button>
         <button type="button" class="nav-btn" data-tab="ranking">Ranking</button>
+        <button type="button" class="nav-btn" data-tab="discord">Discord</button>
         <button type="button" class="nav-btn" data-tab="profile">Профайл</button>
         <button type="button" class="nav-btn" data-tab="settings">⚙️</button>
       </nav>
@@ -415,6 +416,33 @@
         </div>
         <p id="update-check-msg" class="hint mt-8"></p>
       </div>
+    <!-- Discord Servers tab -->
+    <div id="tab-discord" class="tab">
+      <div class="tab-header">
+        <h2>Discord Серверүүд</h2>
+        <button type="button" id="btn-add-discord-server" class="btn btn-primary btn-with-icon">
+          <svg class="btn-icon-svg"><use href="#ico-plus"/></svg>
+          Сервер нэмэх
+        </button>
+      </div>
+
+      <!-- Сервер нэмэх форм -->
+      <div id="discord-server-form" class="card hidden" style="margin-bottom:16px">
+        <h3 class="mb-8">Шинэ Discord сервер нэмэх</h3>
+        <input id="ds-name"        type="text" placeholder="Серверийн нэр"           class="input" />
+        <input id="ds-invite-url"  type="url"  placeholder="https://discord.gg/..."  class="input" />
+        <input id="ds-description" type="text" placeholder="Тайлбар (заавал биш)"    class="input" />
+        <p id="ds-form-error" class="form-error"></p>
+        <div class="form-actions mt-8">
+          <button type="button" id="btn-ds-submit" class="btn btn-primary">Нэмэх</button>
+          <button type="button" id="btn-ds-cancel"  class="btn">Болих</button>
+        </div>
+      </div>
+
+      <div id="discord-servers-list" class="rooms-grid">
+        <p class="empty-text">Ачааллаж байна...</p>
+      </div>
+    </div>
     </div>
   </div>
 

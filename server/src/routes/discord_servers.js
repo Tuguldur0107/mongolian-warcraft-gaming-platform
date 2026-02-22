@@ -1,0 +1,108 @@
+const express = require('express');
+const authMW  = require('../middleware/auth');
+
+let db;
+try { db = require('../config/db'); } catch { db = null; }
+
+async function dbOk() {
+  if (!db) return false;
+  try { await db.query('SELECT 1'); return true; } catch { return false; }
+}
+
+// In-memory fallback
+let memServers = [];
+let memNextId  = 1;
+
+const router = express.Router();
+
+// Discord урилгын холбоос шалгах
+function isValidDiscordInvite(url) {
+  return /^https?:\/\/(discord\.gg|discord\.com\/invite)\/[\w-]+$/.test(url.trim());
+}
+
+// DB тэблийг үүсгэх
+(async () => {
+  if (!await dbOk()) return;
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS discord_servers (
+      id                SERIAL PRIMARY KEY,
+      name              VARCHAR(100) NOT NULL,
+      invite_url        TEXT NOT NULL,
+      description       VARCHAR(200),
+      added_by_id       INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      added_by_username VARCHAR(255) NOT NULL,
+      created_at        TIMESTAMP DEFAULT NOW()
+    )
+  `).catch(e => console.error('[Migration] discord_servers:', e.message));
+})();
+
+// ── GET / — бүх серверийг авах ────────────────────────────
+router.get('/', async (req, res) => {
+  if (await dbOk()) {
+    try {
+      const { rows } = await db.query(
+        'SELECT * FROM discord_servers ORDER BY created_at DESC'
+      );
+      return res.json(rows);
+    } catch (e) { console.error(e); }
+  }
+  res.json([...memServers].reverse());
+});
+
+// ── POST / — сервер нэмэх (нэвтэрсэн хэрэглэгч) ─────────
+router.post('/', authMW, async (req, res) => {
+  const { name, invite_url, description } = req.body;
+  if (!name?.trim())
+    return res.status(400).json({ error: 'Серверийн нэр оруулна уу' });
+  if (!invite_url || !isValidDiscordInvite(invite_url))
+    return res.status(400).json({ error: 'Зөвхөн discord.gg эсвэл discord.com/invite холбоос оруулна уу' });
+
+  const userId   = req.user.id;
+  const username = req.user.username;
+  const desc     = description?.trim().slice(0, 200) || null;
+  const safeName = name.trim().slice(0, 100);
+  const safeUrl  = invite_url.trim();
+
+  if (await dbOk()) {
+    try {
+      const { rows } = await db.query(
+        `INSERT INTO discord_servers (name, invite_url, description, added_by_id, added_by_username)
+         VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+        [safeName, safeUrl, desc, userId, username]
+      );
+      return res.status(201).json(rows[0]);
+    } catch (e) { console.error(e); }
+  }
+  const entry = {
+    id: memNextId++, name: safeName, invite_url: safeUrl,
+    description: desc, added_by_id: userId, added_by_username: username,
+    created_at: new Date().toISOString(),
+  };
+  memServers.push(entry);
+  res.status(201).json(entry);
+});
+
+// ── DELETE /:id — өөрийнхийг устгах ──────────────────────
+router.delete('/:id', authMW, async (req, res) => {
+  const id     = parseInt(req.params.id);
+  const userId = req.user.id;
+
+  if (await dbOk()) {
+    try {
+      const { rows } = await db.query('SELECT added_by_id FROM discord_servers WHERE id=$1', [id]);
+      if (!rows.length) return res.status(404).json({ error: 'Олдсонгүй' });
+      if (rows[0].added_by_id !== userId)
+        return res.status(403).json({ error: 'Зөвхөн өөрийн оруулсан серверийг устгаж болно' });
+      await db.query('DELETE FROM discord_servers WHERE id=$1', [id]);
+      return res.json({ ok: true });
+    } catch (e) { console.error(e); }
+  }
+  const idx = memServers.findIndex(s => s.id === id);
+  if (idx === -1) return res.status(404).json({ error: 'Олдсонгүй' });
+  if (memServers[idx].added_by_id !== userId)
+    return res.status(403).json({ error: 'Зөвхөн өөрийн оруулсан серверийг устгаж болно' });
+  memServers.splice(idx, 1);
+  res.json({ ok: true });
+});
+
+module.exports = router;

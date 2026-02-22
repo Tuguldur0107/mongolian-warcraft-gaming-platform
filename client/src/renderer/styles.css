@@ -810,6 +810,13 @@ body.light #icon-moon { display: block !important; }
 #btn-close-room     { display: none; }
 #dm-typing-indicator { display: none; }
 
+/* ── Discord Servers ─────────────────────────────────── */
+.discord-server-card { border-left: 3px solid #5865f2; }
+.discord-server-card:hover { border-color: #7289da; }
+.discord-icon { font-size: 1.2rem; }
+.discord-card-footer { display: flex; gap: 8px; margin-top: 10px; align-items: center; }
+#discord-server-form .input { margin-bottom: 8px; }
+
 /* ── Responsive ─────────────────────────────────────── */
 @media (max-width: 900px) {
   .rooms-grid { grid-template-columns: 1fr !important; }

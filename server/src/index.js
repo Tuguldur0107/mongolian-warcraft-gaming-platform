@@ -6,10 +6,11 @@ const cors = require('cors');
 const rateLimit = require('express-rate-limit');
 const jwt = require('jsonwebtoken');
 
-const authRoutes   = require('./routes/auth');
-const roomRoutes   = require('./routes/rooms');
-const statsRoutes  = require('./routes/stats');
-const socialRoutes = require('./routes/social');
+const authRoutes          = require('./routes/auth');
+const roomRoutes          = require('./routes/rooms');
+const statsRoutes         = require('./routes/stats');
+const socialRoutes        = require('./routes/social');
+const discordServerRoutes = require('./routes/discord_servers');
 const { setIO } = roomRoutes;
 
 const app = express();
@@ -40,6 +41,7 @@ app.use('/auth', authRoutes);
 app.use('/rooms', roomRoutes);
 app.use('/stats', statsRoutes);
 app.use('/social', socialRoutes);
+app.use('/discord-servers', discordServerRoutes);
 
 app.get('/', (req, res) => {
   res.json({ status: 'ok', message: 'Mongolian Warcraft Gaming Platform Server ажиллаж байна' });
