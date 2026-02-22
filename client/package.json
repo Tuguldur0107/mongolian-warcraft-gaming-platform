@@ -11,11 +11,31 @@
   "build": {
     "appId": "com.tuguldur.wc3platform",
     "productName": "Mongolian Warcraft Gaming Platform",
+    "icon": "src/renderer/icon.png",
     "directories": {
       "output": "dist"
     },
     "win": {
-      "target": "portable"
+      "icon": "src/renderer/icon.png",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        },
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "src/renderer/icon.png",
+      "uninstallerIcon": "src/renderer/icon.png",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Mongolian Warcraft Platform"
     },
     "files": [
       "**/*",
