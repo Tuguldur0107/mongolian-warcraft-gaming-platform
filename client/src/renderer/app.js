@@ -719,7 +719,10 @@ function _enterRoomUI(id, name, gameType, isHost, hostId) {
   document.getElementById('room-info-text').textContent = `${name} | ${gameType}`;
   document.getElementById('chat-messages').innerHTML  = '';
   document.getElementById('members-list').innerHTML   = '';
-  document.getElementById('btn-close-room').style.display = isHost ? 'block' : 'none';
+  // Хост: "Өрөөг хаах" харуулж "Гарах" нуух — хост гарахад room устдаг учир хоёулаа байх хэрэггүй
+  document.getElementById('btn-close-room').style.display = isHost ? '' : 'none';
+  document.getElementById('btn-leave-room').style.display = isHost ? 'none' : '';
+  document.getElementById('btn-close-room').classList.remove('hidden');
 
   const launchBtn = document.getElementById('btn-launch-wc3');
   launchBtn.querySelector('span').textContent = isHost ? 'Тоглолт эхлүүлэх' : 'Тоглоом эхлүүлэх';
