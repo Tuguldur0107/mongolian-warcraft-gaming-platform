@@ -92,6 +92,29 @@ async function connectSocket() {
   socket.on('room:user_joined', ({ username }) => appendSysMsg(`${username} нэгдлээ`));
   socket.on('room:user_left',   ({ username }) => appendSysMsg(`${username} гарлаа`));
 
+  // Өрөөний тохиргоо шинэчлэгдсэн
+  socket.on('room:updated', (room) => {
+    if (currentRoom) {
+      if (room.name) document.getElementById('room-title').textContent = room.name;
+      appendSysMsg(`⚙ Өрөөний тохиргоо шинэчлэгдлээ`);
+    }
+  });
+
+  // Баг солигдсон
+  socket.on('room:team_changed', ({ userId, team }) => {
+    appendSysMsg(`Тоглогч баг ${team} руу шилжлээ`);
+  });
+
+  // Лобби өрөөний жагсаалт автоматаар шинэчлэгдэх
+  let _roomsRefreshTimer = null;
+  socket.on('rooms:updated', () => {
+    clearTimeout(_roomsRefreshTimer);
+    _roomsRefreshTimer = setTimeout(() => {
+      const lobbyTab = document.getElementById('tab-lobby');
+      if (lobbyTab?.classList.contains('active')) loadRooms();
+    }, 2000);
+  });
+
   // Онлайн тоглогчид (лобби)
   socket.on('lobby:online_users', (users) => {
     const prevOnlineIds = new Set(onlineUserIds);
@@ -461,6 +484,24 @@ async function joinPlayingRoom(id, name, gameType, hostId) {
 }
 
 document.getElementById('btn-refresh').onclick = loadRooms;
+
+// Хурдан тоглолт
+document.getElementById('btn-quickmatch').onclick = async () => {
+  const gameType = configuredGames[0]?.name;
+  if (!gameType) return alert('Эхлээд Тохируулга таб-д тоглоом нэмнэ үү');
+  const btn = document.getElementById('btn-quickmatch');
+  btn.disabled = true; btn.textContent = '⏳ ...';
+  try {
+    const result = await window.api.quickMatch(gameType);
+    const room = result.room;
+    const isHost = !result.joined && String(room.host_id) === String(currentUser?.id);
+    enterRoom(String(room.id), room.name, room.game_type, isHost, String(room.host_id));
+  } catch (err) {
+    alert(`Хурдан тоглолт: ${err.message}`);
+  } finally {
+    btn.disabled = false; btn.textContent = '⚡ Хурдан';
+  }
+};
 
 // Өрөө үүсгэх форм
 document.getElementById('btn-create-room').onclick = () => {

@@ -14,7 +14,8 @@ contextBridge.exposeInMainWorld('api', {
   onAuthSuccess:(cb) => ipcRenderer.on('auth:success', (_, user) => cb(user)),
 
   // Rooms
-  getRooms:   ()               => ipcRenderer.invoke('rooms:list'),
+  getRooms:     ()              => ipcRenderer.invoke('rooms:list'),
+  quickMatch:   (gameType)      => ipcRenderer.invoke('rooms:quickmatch', gameType),
   getMyRoom:  ()               => ipcRenderer.invoke('rooms:mine'),
   createRoom: (data)           => ipcRenderer.invoke('rooms:create', data),
   joinRoom:   (id, pass)       => ipcRenderer.invoke('rooms:join', id, pass),

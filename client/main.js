@@ -265,7 +265,10 @@ ipcMain.handle('auth:getUser',  () => authService.getUser());
 ipcMain.handle('auth:getToken', () => authService.getToken());
 
 // Өрөөнүүд
-ipcMain.handle('rooms:list', async () => apiService.getRooms());
+ipcMain.handle('rooms:list',       async () => apiService.getRooms());
+ipcMain.handle('rooms:quickmatch', async (_, game_type) => {
+  try { return await apiService.quickMatch(game_type); } catch (err) { throw apiError(err); }
+});
 ipcMain.handle('rooms:mine', async () => {
   try { return await apiService.getMyRoom(); } catch { return null; }
 });

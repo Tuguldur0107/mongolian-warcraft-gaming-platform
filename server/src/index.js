@@ -45,6 +45,19 @@ app.get('/', (req, res) => {
   res.json({ status: 'ok', message: 'Mongolian Warcraft Gaming Platform Server ажиллаж байна' });
 });
 
+// ── DB migration: team column нэмэх (хэрэв байхгүй бол) ──
+let dbForMigration;
+try { dbForMigration = require('./config/db'); } catch {}
+if (dbForMigration) {
+  dbForMigration.query(`
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='room_players' AND column_name='team') THEN
+        ALTER TABLE room_players ADD COLUMN team INTEGER DEFAULT NULL;
+      END IF;
+    END $$
+  `).catch(e => console.error('[Migration] team column:', e.message));
+}
+
 // Rooms router-т io дамжуулах (kick/close event илгээхэд хэрэг)
 setIO(io);
 // Social router-т io дамжуулах (friend request мэдэгдэлд хэрэг)
@@ -285,6 +298,16 @@ io.on('connection', (socket) => {
     console.log(`[Socket] салгагдлаа: ${socket.id} (${username})`);
   });
 });
+
+// ── Өрөөний auto-expire (2 цаг тутам) ───────────────────
+setInterval(async () => {
+  if (!dbForMigration) return;
+  try {
+    await dbForMigration.query("DELETE FROM rooms WHERE status='waiting' AND created_at < NOW() - INTERVAL '6 hours'");
+    await dbForMigration.query("UPDATE rooms SET status='done' WHERE status='playing' AND created_at < NOW() - INTERVAL '12 hours'");
+    console.log('[AutoExpire] Хуучин өрөөнүүдийг цэвэрлэлээ');
+  } catch (e) { console.error('[AutoExpire]', e.message); }
+}, 2 * 60 * 60 * 1000);
 
 // ─────────────────────────────────────────────────────────
 server.listen(PORT, () => {

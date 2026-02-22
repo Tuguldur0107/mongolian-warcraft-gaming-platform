@@ -24,6 +24,10 @@ let memNextId  = 1;
 let _io = null;
 function setIO(io) { _io = io; }
 
+function emitRoomsUpdated() {
+  if (_io) _io.emit('rooms:updated');
+}
+
 function roomToPublic(r) {
   const members = [...r.players.entries()].map(([id, name]) => ({ id: String(id), name }));
   return {
@@ -129,6 +133,7 @@ router.post('/', strictAuth, async (req, res) => {
       );
       const room = r.rows[0];
       await db.query('INSERT INTO room_players (room_id, user_id) VALUES ($1,$2)', [room.id, userId]);
+      emitRoomsUpdated();
       return res.status(201).json({ ...room, host_name: hostName, members: [{ id: String(userId), name: hostName }], player_count: 1 });
     } catch (e) { console.error(e); }
   }
@@ -145,6 +150,7 @@ router.post('/', strictAuth, async (req, res) => {
     players: new Map([[userId, hostName]]),
   };
   memRooms.set(room.id, room);
+  emitRoomsUpdated();
   res.status(201).json(roomToPublic(room));
 });
 
@@ -179,6 +185,7 @@ router.post('/:id/join', strictAuth, async (req, res) => {
       if (parseInt(cnt.rows[0].count) >= room.max_players)
         return res.status(400).json({ error: 'Өрөө дүүрсэн байна' });
       await db.query('INSERT INTO room_players (room_id,user_id) VALUES ($1,$2) ON CONFLICT DO NOTHING', [id, userId]);
+      emitRoomsUpdated();
       return res.json({ message: 'Өрөөнд нэгдлээ', room });
     } catch (e) { console.error(e); }
   }
@@ -212,8 +219,10 @@ router.post('/:id/leave', strictAuth, async (req, res) => {
       if (rr.rows[0]?.host_id === userId || String(rr.rows[0]?.host_id) === String(userId)) {
         await db.query('DELETE FROM rooms WHERE id=$1', [id]);
         if (_io) _io.to(id).emit('room:closed', { reason: 'Өрөөний эзэн гарлаа' });
+        emitRoomsUpdated();
         return res.json({ message: 'Өрөө устгагдлаа' });
       }
+      emitRoomsUpdated();
       return res.json({ message: 'Өрөөнөөс гарлаа' });
     } catch (e) { console.error(e); }
   }
@@ -241,6 +250,7 @@ router.delete('/:id', strictAuth, async (req, res) => {
         return res.status(403).json({ error: 'Зөвхөн өрөөний эзэн хаах эрхтэй' });
       await db.query('DELETE FROM rooms WHERE id=$1', [id]);
       if (_io) _io.to(id).emit('room:closed', { reason: 'Өрөөний эзэн өрөөг хаалаа' });
+      emitRoomsUpdated();
       return res.json({ message: 'Өрөө хаагдлаа' });
     } catch (e) { console.error(e); }
   }
@@ -289,6 +299,7 @@ router.post('/:id/start', strictAuth, async (req, res) => {
     try {
       await db.query("UPDATE rooms SET status='playing' WHERE id=$1 AND host_id=$2", [id, userId]);
       if (_io) _io.to(id).emit('room:started');
+      emitRoomsUpdated();
       return res.json({ message: 'Тоглолт эхэллээ' });
     } catch (e) { console.error(e); }
   }
@@ -298,6 +309,134 @@ router.post('/:id/start', strictAuth, async (req, res) => {
     if (_io) _io.to(id).emit('room:started');
   }
   res.json({ message: 'Тоглолт эхэллээ' });
+});
+
+// ── PATCH /rooms/:id — Өрөөний тохиргоо засах (эзэн) ────
+router.patch('/:id', strictAuth, async (req, res) => {
+  const { id } = req.params;
+  const userId = req.user.id;
+  const { name, max_players, password } = req.body;
+
+  if (await dbOk()) {
+    try {
+      const rr = await db.query('SELECT host_id FROM rooms WHERE id=$1', [id]);
+      if (!rr.rows[0]) return res.status(404).json({ error: 'Өрөө олдсонгүй' });
+      if (String(rr.rows[0].host_id) !== String(userId))
+        return res.status(403).json({ error: 'Зөвхөн өрөөний эзэн тохиргоо өөрчилж болно' });
+
+      const updates = [];
+      const params  = [];
+      if (name && name.trim()) {
+        params.push(name.trim()); updates.push(`name=$${params.length}`);
+      }
+      if (max_players && Number.isInteger(Number(max_players)) && Number(max_players) > 0) {
+        params.push(Number(max_players)); updates.push(`max_players=$${params.length}`);
+      }
+      if (password !== undefined) {
+        if (password === null || password === '') {
+          updates.push('has_password=FALSE', 'password_hash=NULL');
+        } else {
+          const hash = await bcrypt.hash(password, 8);
+          params.push(true, hash);
+          updates.push(`has_password=$${params.length - 1}`, `password_hash=$${params.length}`);
+        }
+      }
+      if (updates.length > 0) {
+        params.push(id);
+        await db.query(`UPDATE rooms SET ${updates.join(',')} WHERE id=$${params.length}`, params);
+      }
+      const updated = await db.query('SELECT * FROM rooms WHERE id=$1', [id]);
+      if (_io) _io.to(id).emit('room:updated', updated.rows[0]);
+      return res.json({ ok: true, room: updated.rows[0] });
+    } catch (e) { console.error(e); }
+  }
+  // In-memory fallback
+  const room = memRooms.get(id);
+  if (!room) return res.status(404).json({ error: 'Өрөө олдсонгүй' });
+  if (String(room.host_id) !== String(userId)) return res.status(403).json({ error: 'Зөвхөн эзэн өөрчилж болно' });
+  if (name) room.name = name.trim();
+  if (max_players) room.max_players = Number(max_players);
+  if (_io) _io.to(id).emit('room:updated', roomToPublic(room));
+  res.json({ ok: true, room: roomToPublic(room) });
+});
+
+// ── POST /rooms/quickmatch ────────────────────────────────
+router.post('/quickmatch', strictAuth, async (req, res) => {
+  const { game_type } = req.body;
+  if (!game_type) return res.status(400).json({ error: 'game_type шаардлагатай' });
+  const userId   = req.user.id;
+  const hostName = req.user.username || 'Тоглогч';
+
+  if (await dbOk()) {
+    try {
+      // Тухайн game_type-тай, нууц үггүй, waiting, дүүрээгүй өрөө хайх
+      const available = await db.query(`
+        SELECT r.id, COUNT(rp.user_id) AS player_count
+        FROM rooms r
+        LEFT JOIN room_players rp ON r.id = rp.room_id
+        WHERE r.status='waiting' AND r.has_password=FALSE AND r.game_type=$1
+        GROUP BY r.id
+        HAVING COUNT(rp.user_id) < r.max_players
+        ORDER BY player_count DESC
+        LIMIT 1
+      `, [game_type]);
+
+      if (available.rows[0]) {
+        const roomId = available.rows[0].id;
+        await db.query('INSERT INTO room_players (room_id, user_id) VALUES ($1,$2) ON CONFLICT DO NOTHING', [roomId, userId]);
+        const rr = await db.query(`
+          SELECT r.id, r.name, r.host_id, u.username AS host_name,
+            r.max_players, r.game_type, r.status, r.has_password,
+            COUNT(rp.user_id) AS player_count,
+            JSON_AGG(JSON_BUILD_OBJECT('id', u2.id::text, 'name', u2.username)
+              ORDER BY rp.joined_at) FILTER (WHERE u2.username IS NOT NULL) AS members
+          FROM rooms r JOIN users u ON r.host_id=u.id
+          LEFT JOIN room_players rp ON r.id=rp.room_id
+          LEFT JOIN users u2 ON rp.user_id=u2.id
+          WHERE r.id=$1 GROUP BY r.id, u.username
+        `, [roomId]);
+        return res.json({ joined: true, room: { ...rr.rows[0], members: rr.rows[0].members || [] } });
+      }
+
+      // Шинэ өрөө үүсгэх
+      const qname = `Quick Match #${Math.floor(Math.random() * 9000) + 1000}`;
+      const r = await db.query(
+        `INSERT INTO rooms (name, host_id, max_players, game_type, has_password) VALUES ($1,$2,10,$3,FALSE) RETURNING *`,
+        [qname, userId, game_type]
+      );
+      const room = r.rows[0];
+      await db.query('INSERT INTO room_players (room_id, user_id) VALUES ($1,$2)', [room.id, userId]);
+      return res.status(201).json({ joined: false, room: { ...room, host_name: hostName, members: [{ id: String(userId), name: hostName }], player_count: 1 } });
+    } catch (e) { console.error(e); return res.status(500).json({ error: 'Серверийн алдаа' }); }
+  }
+  res.status(503).json({ error: 'DB байхгүй' });
+});
+
+// ── PATCH /rooms/:id/team — Баг солих ────────────────────
+router.patch('/:id/team', strictAuth, async (req, res) => {
+  const { id } = req.params;
+  const userId = req.user.id;
+  const team   = Number(req.body.team);
+  if (![1, 2].includes(team)) return res.status(400).json({ error: 'team 1 эсвэл 2 байх ёстой' });
+
+  if (await dbOk()) {
+    try {
+      const rr = await db.query('SELECT max_players FROM rooms WHERE id=$1', [id]);
+      if (!rr.rows[0]) return res.status(404).json({ error: 'Өрөө олдсонгүй' });
+      // Тухайн багийн гишүүний тоо шалгах
+      const cnt = await db.query(
+        'SELECT COUNT(*) FROM room_players WHERE room_id=$1 AND team=$2',
+        [id, team]
+      );
+      const max = Math.ceil(rr.rows[0].max_players / 2);
+      if (parseInt(cnt.rows[0].count) >= max)
+        return res.status(400).json({ error: 'Баг дүүрсэн байна' });
+      await db.query('UPDATE room_players SET team=$1 WHERE room_id=$2 AND user_id=$3', [team, id, userId]);
+      if (_io) _io.to(id).emit('room:team_changed', { userId: String(userId), team });
+      return res.json({ ok: true, team });
+    } catch (e) { console.error(e); }
+  }
+  res.json({ ok: true });
 });
 
 module.exports = router;

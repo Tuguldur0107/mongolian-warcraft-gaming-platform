@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS rooms (
 CREATE TABLE IF NOT EXISTS room_players (
   room_id   INTEGER REFERENCES rooms(id) ON DELETE CASCADE,
   user_id   INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  team      INTEGER DEFAULT NULL,
   joined_at TIMESTAMP DEFAULT NOW(),
   PRIMARY KEY (room_id, user_id)
 );

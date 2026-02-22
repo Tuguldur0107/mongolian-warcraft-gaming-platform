@@ -51,6 +51,11 @@ async function leaveRoom(id) {
   return data;
 }
 
+async function quickMatch(game_type) {
+  const { data } = await getClient().post('/rooms/quickmatch', { game_type });
+  return data;
+}
+
 async function updateRoomNetwork(roomId, networkId) {
   const { data } = await getClient().patch(`/rooms/${roomId}`, {
     zerotier_network_id: networkId,
@@ -144,6 +149,7 @@ async function markDMRead(fromUserId) {
 module.exports = {
   SERVER_URL,
   changePassword,
+  quickMatch,
   searchUsers,
   getDMHistory,
   getUnreadCount,
