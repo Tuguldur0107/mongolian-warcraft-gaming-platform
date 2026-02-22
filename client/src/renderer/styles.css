@@ -546,3 +546,16 @@ body.light #icon-moon { display: block !important; }
   from { transform: translateY(20px); opacity: 0; }
   to   { transform: translateY(0);    opacity: 1; }
 }
+
+
+/* ── Utility classes (inline style орлуулагчид) ─── */
+.hidden        { display: none; }
+.mb-12         { margin-bottom: 12px; }
+.mt-6          { margin-top: 6px; }
+.mt-8          { margin-top: 8px; }
+.mt-16         { margin-top: 16px; }
+.text-xs       { font-size: 0.75rem; }
+.text-sm       { font-size: 0.8rem; }
+.pad-list      { padding: 12px; font-size: 0.8rem; }
+.pad-empty     { padding: 20px 12px; font-size: 0.8rem; }
+.flex-center   { display: flex; gap: 8px; justify-content: center; }
