@@ -41,23 +41,31 @@ function isRunning() {
 // Автомат суулгалт & тохиргоо
 // ═══════════════════════════════════════════════════════════
 
+function findMsiPath() {
+  // Production: extraResources-д байгаа
+  const prodPath = path.join(process.resourcesPath, 'ZeroTierOne.msi');
+  if (fs.existsSync(prodPath)) return prodPath;
+  // Dev mode: client/resources/ хавтаст байгаа
+  const devPath = path.join(__dirname, '..', '..', 'resources', 'ZeroTierOne.msi');
+  if (fs.existsSync(devPath)) return devPath;
+  return null;
+}
+
 async function ensureInstalled() {
   if (isInstalled()) return true;
 
-  // Bundled MSI-г олох (extraResources-д байгаа)
-  const msiPath = path.join(process.resourcesPath, 'ZeroTierOne.msi');
-  if (!fs.existsSync(msiPath)) {
-    console.error('[ZeroTier] MSI файл олдсонгүй:', msiPath);
+  const msiPath = findMsiPath();
+  if (!msiPath) {
+    console.error('[ZeroTier] MSI файл олдсонгүй');
     return false;
   }
 
-  console.log('[ZeroTier] Суулгаж байна...');
+  console.log('[ZeroTier] Суулгаж байна... MSI:', msiPath);
   try {
     // PowerShell-ээр UAC elevation + silent install
-    execSync(
-      `powershell -Command "Start-Process msiexec -ArgumentList '/i','\\"${msiPath}\\"','/qn','/norestart' -Verb RunAs -Wait"`,
-      { stdio: 'pipe', timeout: 120000 }
-    );
+    // Зам дотор зай байж болох тул single-quote ашиглана
+    const psCmd = `Start-Process -FilePath 'msiexec.exe' -ArgumentList '/i ""${msiPath}"" /qn /norestart' -Verb RunAs -Wait`;
+    execSync(`powershell -Command "${psCmd}"`, { stdio: 'pipe', timeout: 120000 });
   } catch (e) {
     console.error('[ZeroTier] Суулгалт алдаа:', e.message);
     return false;
