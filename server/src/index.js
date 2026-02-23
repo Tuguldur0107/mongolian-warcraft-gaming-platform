@@ -416,6 +416,26 @@ io.on('connection', (socket) => {
     });
   });
 
+  // ZeroTier node-г автоматаар authorize хийх
+  socket.on('zt:authorize', async ({ nodeId, networkId }) => {
+    if (!nodeId || !networkId) return;
+    const token = process.env.ZEROTIER_API_TOKEN;
+    if (!token) { socket.emit('zt:authorize_result', { ok: false, error: 'no-api-token' }); return; }
+    try {
+      const axios = require('axios');
+      await axios.post(
+        `https://api.zerotier.com/api/v1/network/${networkId}/member/${nodeId}`,
+        { config: { authorized: true } },
+        { headers: { Authorization: `token ${token}` } }
+      );
+      console.log(`[ZT] Authorized ${nodeId} on ${networkId} (${socket.user.username})`);
+      socket.emit('zt:authorize_result', { ok: true });
+    } catch (e) {
+      console.error(`[ZT] Authorize failed for ${nodeId}:`, e.message);
+      socket.emit('zt:authorize_result', { ok: false, error: e.message });
+    }
+  });
+
   // Тоглогчийн ZeroTier IP бүртгэх — relay-д хэрэгтэй
   socket.on('room:zt_ip', ({ roomId, ip }) => {
     if (!ip || !roomId) return;

@@ -36,6 +36,18 @@ function isInstalled() {
   return ZT_PATHS.some(p => fs.existsSync(p));
 }
 
+// ZeroTier node ID авах (authorize-д хэрэгтэй)
+function getNodeId() {
+  const cmd = getZtCmd();
+  if (!cmd) return null;
+  try {
+    const out = execSync(`${cmd} info`, { stdio: 'pipe', encoding: 'utf8' });
+    // Output: "200 info <nodeId> <version> <status>"
+    const match = out.match(/200\s+info\s+([0-9a-f]+)/);
+    return match ? match[1] : null;
+  } catch { return null; }
+}
+
 function isRunning() {
   const cmd = getZtCmd();
   if (!cmd) return false;
@@ -265,6 +277,6 @@ function disconnect() {
 
 module.exports = {
   joinNetwork, disconnect,
-  isInstalled, isRunning, getMyIp, getStatus,
+  isInstalled, isRunning, getMyIp, getNodeId, getStatus,
   ensureInstalled, ensureRunning, autoSetup,
 };

@@ -765,6 +765,7 @@ ipcMain.handle('discord:openInvite', async (_, url) => {
 // ZeroTier статус & IP
 ipcMain.handle('zt:status', (_, networkId) => zerotierService.getStatus(networkId));
 ipcMain.handle('zt:ip',     (_, networkId) => zerotierService.getMyIp(networkId));
+ipcMain.handle('zt:nodeId', ()             => zerotierService.getNodeId());
 
 // Game Relay — Host: capture+forward, Player: search+rebroadcast
 ipcMain.handle('relay:startHost', (_, playerIps) => {

@@ -48,6 +48,7 @@ contextBridge.exposeInMainWorld('api', {
   // ZeroTier статус
   getZerotierStatus: (networkId) => ipcRenderer.invoke('zt:status', networkId),
   getZerotierIp:     (networkId) => ipcRenderer.invoke('zt:ip', networkId),
+  getZerotierNodeId: ()          => ipcRenderer.invoke('zt:nodeId'),
 
   // Game Relay — Host: capture+forward, Player: search+rebroadcast
   startHostRelay:  (playerIps) => ipcRenderer.invoke('relay:startHost', playerIps),

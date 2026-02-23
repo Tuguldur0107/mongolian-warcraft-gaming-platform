@@ -439,9 +439,17 @@ async function init() {
   });
 
   // ── ZeroTier автомат тохиргоо статус ─────────────────
-  window.api.onZtSetupComplete?.((result) => {
+  window.api.onZtSetupComplete?.(async (result) => {
     if (result.ok) {
       console.log('[ZT] Автомат тохиргоо амжилттай. IP:', result.ip || 'хүлээж байна');
+      // Серверээр автоматаар authorize хийлгэх (private network-д шаардлагатай)
+      try {
+        const nodeId = await window.api.getZerotierNodeId();
+        const cfg = await fetch(SERVER + '/config').then(r => r.json());
+        if (nodeId && cfg.zerotierNetworkId && socket) {
+          socket.emit('zt:authorize', { nodeId, networkId: cfg.zerotierNetworkId });
+        }
+      } catch (e) { console.warn('[ZT] Authorize хүсэлт алдаа:', e.message); }
     } else {
       const msgs = {
         'install-failed': 'ZeroTier суулгалт амжилтгүй болсон. Гараар суулгана уу: zerotier.com/download',
