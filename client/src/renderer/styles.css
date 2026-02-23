@@ -807,8 +807,18 @@ body.light #icon-moon { display: block !important; }
 .icon-sm            { width: 13px; height: 13px; }
 #zt-info            { display: none; margin-bottom: 8px; font-size: 0.78rem; }
 #zt-info code       { font-size: 0.78rem; user-select: all; }
+#zt-my-ip           { display: none; }
+#zt-host-ip         { display: none; margin-top: 4px; padding: 6px 8px; background: rgba(76,175,80,0.15); border-radius: 6px; border: 1px solid rgba(76,175,80,0.3); }
+#zt-host-ip-val     { font-size: 1.05em; font-weight: bold; color: #4caf50; }
+#btn-copy-host-ip   { margin-left: 8px; padding: 2px 8px; font-size: 0.8em; }
+#zt-status-warn     { display: none; color: #ff9800; margin-top: 4px; }
 #btn-close-room     { display: none; }
 #dm-typing-indicator { display: none; }
+#dm-window-typing    { display: none; }
+#btn-open-friends-window { margin-left: auto; padding: 2px 8px; font-size: 0.75rem; }
+#fw-pending-section { display: none; }
+#fw-online-label    { display: none; }
+#fw-offline-label   { display: none; }
 
 /* ── Discord Servers ─────────────────────────────────── */
 .discord-server-card { border-left: 3px solid #5865f2; }

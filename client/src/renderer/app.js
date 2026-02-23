@@ -907,8 +907,8 @@ function _enterRoomUI(id, name, gameType, isHost, hostId, status, ztNetId) {
   document.getElementById('chat-messages').innerHTML  = '';
   document.getElementById('members-list').innerHTML   = '';
   // Хост: "Өрөөг хаах" харуулж "Гарах" нуух — хост гарахад room устдаг учир хоёулаа байх хэрэггүй
-  document.getElementById('btn-close-room').style.display = isHost ? '' : 'none';
-  document.getElementById('btn-leave-room').style.display = isHost ? 'none' : '';
+  document.getElementById('btn-close-room').style.display = isHost ? 'block' : 'none';
+  document.getElementById('btn-leave-room').style.display = isHost ? 'none' : 'block';
   document.getElementById('btn-close-room').classList.remove('hidden');
 
   // Host биш бол "Тоглолт эхлүүлэх" товчийг нуух — host эхлүүлэхэд автоматаар нээгдэнэ
@@ -931,7 +931,7 @@ function _enterRoomUI(id, name, gameType, isHost, hostId, status, ztNetId) {
   if (ztDiv) {
     if (ztNetId) {
       document.getElementById('zt-network-id').textContent = ztNetId;
-      ztDiv.style.display = '';
+      ztDiv.style.display = 'block';
       // ZeroTier статус шалгах
       checkZerotierStatus(ztNetId);
     } else {
@@ -1005,18 +1005,18 @@ async function checkZerotierStatus(networkId) {
     const warnEl = document.getElementById('zt-status-warn');
     const myIpEl = document.getElementById('zt-my-ip');
     if (!st.installed) {
-      if (warnEl) { warnEl.textContent = '⚠ ZeroTier суулгаагүй байна! Суулгана уу.'; warnEl.style.display = ''; }
+      if (warnEl) { warnEl.textContent = '⚠ ZeroTier суулгаагүй байна! Суулгана уу.'; warnEl.style.display = 'block'; }
     } else if (!st.running) {
-      if (warnEl) { warnEl.textContent = '⚠ ZeroTier ажиллахгүй байна! ZeroTier One-г нээнэ үү.'; warnEl.style.display = ''; }
+      if (warnEl) { warnEl.textContent = '⚠ ZeroTier ажиллахгүй байна! ZeroTier One-г нээнэ үү.'; warnEl.style.display = 'block'; }
     } else if (!st.connected) {
-      if (warnEl) { warnEl.textContent = '⚠ ZeroTier сүлжээнд холбогдоогүй. Хүлээнэ үү...'; warnEl.style.display = ''; }
+      if (warnEl) { warnEl.textContent = '⚠ ZeroTier сүлжээнд холбогдоогүй. Хүлээнэ үү...'; warnEl.style.display = 'block'; }
       // 5 секундийн дараа дахин шалгах
       setTimeout(() => checkZerotierStatus(networkId), 5000);
     } else {
       if (warnEl) warnEl.style.display = 'none';
       if (myIpEl && st.ip) {
         document.getElementById('zt-my-ip-val').textContent = st.ip;
-        myIpEl.style.display = '';
+        myIpEl.style.display = 'block';
       }
     }
   } catch {}
@@ -1038,7 +1038,7 @@ function showHostIp(ip) {
   const val = document.getElementById('zt-host-ip-val');
   if (el && val && ip) {
     val.textContent = ip;
-    el.style.display = '';
+    el.style.display = 'block';
   }
 }
 

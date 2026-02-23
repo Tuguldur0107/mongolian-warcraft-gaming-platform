@@ -159,7 +159,7 @@
       <nav>
         <button type="button" class="nav-btn active" data-tab="lobby">Lobby</button>
         <button type="button" class="nav-btn" data-tab="chat">
-          💬 Чат
+          Чат
           <span id="chat-badge" class="nav-badge hidden">0</span>
         </button>
         <button type="button" class="nav-btn" data-tab="ranking">Ranking</button>
@@ -269,7 +269,7 @@
               <span id="dm-online-badge" class="dm-tab-badge">0</span>
             </button>
             <button type="button" class="dm-tab" data-dm-tab="blocked">Хаасан</button>
-            <button type="button" id="btn-open-friends-window" class="btn btn-sm" title="Тусдаа цонхоор нээх" style="margin-left:auto;padding:2px 8px;font-size:0.75rem">📤</button>
+            <button type="button" id="btn-open-friends-window" class="btn btn-sm" title="Тусдаа цонхоор нээх">📤</button>
           </div>
           <!-- Friends tab content -->
           <div id="dm-tab-friends" class="dm-tab-content active">
@@ -470,14 +470,14 @@
         <div class="card">
           <h3>🎮 Тоглоом</h3>
           <p class="hint" id="room-info-text"></p>
-          <div id="zt-info" class="hint" style="display:none">
+          <div id="zt-info" class="hint">
             <div>🌐 ZeroTier: <code id="zt-network-id"></code></div>
-            <div id="zt-my-ip" style="display:none">📍 Миний IP: <code id="zt-my-ip-val"></code></div>
-            <div id="zt-host-ip" style="display:none; margin-top:4px; padding:6px 8px; background:rgba(76,175,80,0.15); border-radius:6px; border:1px solid rgba(76,175,80,0.3)">
-              🎯 Host IP: <code id="zt-host-ip-val" style="font-size:1.05em; font-weight:bold; color:#4caf50"></code>
-              <button type="button" id="btn-copy-host-ip" class="btn btn-sm" style="margin-left:8px; padding:2px 8px; font-size:0.8em" title="IP хуулах">📋</button>
+            <div id="zt-my-ip">📍 Миний IP: <code id="zt-my-ip-val"></code></div>
+            <div id="zt-host-ip">
+              🎯 Host IP: <code id="zt-host-ip-val"></code>
+              <button type="button" id="btn-copy-host-ip" class="btn btn-sm" title="IP хуулах">📋</button>
             </div>
-            <div id="zt-status-warn" style="display:none; color:#ff9800; margin-top:4px"></div>
+            <div id="zt-status-warn"></div>
           </div>
           <button type="button" id="btn-launch-wc3" class="btn btn-primary btn-block btn-with-icon">
             <svg class="btn-icon-svg"><use href="#ico-play"/></svg>
@@ -543,13 +543,13 @@
         <h3>Найзууд</h3>
       </div>
       <div class="friends-window-body">
-        <div id="fw-pending-section" style="display:none">
+        <div id="fw-pending-section">
           <div class="dm-section-label">📨 Хүсэлтүүд</div>
           <ul id="fw-pending-list" class="dm-users-list"></ul>
         </div>
-        <div class="dm-section-label" id="fw-online-label" style="display:none">🟢 Онлайн найзууд</div>
+        <div class="dm-section-label" id="fw-online-label">🟢 Онлайн найзууд</div>
         <ul id="fw-online-list" class="dm-users-list"></ul>
-        <div class="dm-section-label" id="fw-offline-label" style="display:none">⚫ Офлайн найзууд</div>
+        <div class="dm-section-label" id="fw-offline-label">⚫ Офлайн найзууд</div>
         <ul id="fw-offline-list" class="dm-users-list"></ul>
         <p id="fw-no-friends" class="empty-text pad-empty">Найз байхгүй байна</p>
       </div>
@@ -564,7 +564,7 @@
         <h3 id="dm-window-title">DM</h3>
       </div>
       <div id="dm-window-messages" class="dm-messages"></div>
-      <div id="dm-window-typing" class="typing-indicator" style="display:none"></div>
+      <div id="dm-window-typing" class="typing-indicator"></div>
       <div class="chat-input-row dm-input-row">
         <input id="dm-window-input" type="text" placeholder="Мессеж бичих..." class="input" />
         <button type="button" id="dm-window-send" class="btn btn-primary btn-icon-only" title="Илгээх">
