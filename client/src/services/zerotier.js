@@ -61,18 +61,22 @@ async function ensureInstalled() {
     return false;
   }
 
-  // Temp хавтас руу хуулах (зам дотор зай байхгүй газар)
-  const tmpDir = path.join(os.tmpdir(), 'zt-install');
-  if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
-  const tmpMsi = path.join(tmpDir, 'ZeroTierOne.msi');
-  fs.copyFileSync(msiPath, tmpMsi);
+  // C:\ProgramData руу хуулах — elevated процесс хандах боломжтой газар
+  const installDir = 'C:\\ProgramData\\zt-install';
+  if (!fs.existsSync(installDir)) fs.mkdirSync(installDir, { recursive: true });
+  const targetMsi = path.join(installDir, 'ZeroTierOne.msi');
+  fs.copyFileSync(msiPath, targetMsi);
 
-  console.log('[ZeroTier] Суулгаж байна... MSI:', tmpMsi);
+  console.log('[ZeroTier] Суулгаж байна... MSI:', targetMsi);
   try {
-    // PowerShell скрипт файлаар ажиллуулах (escaping асуудал гарахгүй)
-    const psScript = path.join(tmpDir, 'install.ps1');
-    fs.writeFileSync(psScript, `Start-Process msiexec.exe -ArgumentList '/i "${tmpMsi}" /qn /norestart' -Verb RunAs -Wait`, 'utf8');
-    execSync(`powershell -ExecutionPolicy Bypass -File "${psScript}"`, { stdio: 'pipe', timeout: 120000 });
+    // .cmd batch файл ашиглах — quoting асуудал гарахгүй
+    const cmdScript = path.join(installDir, 'install.cmd');
+    fs.writeFileSync(cmdScript, `msiexec /i "${targetMsi}" /qn /norestart\r\n`, 'utf8');
+    // Batch файлыг admin эрхээр ажиллуулах
+    execSync(
+      `powershell -Command "Start-Process cmd.exe -ArgumentList '/c','${cmdScript.replace(/'/g, "''")}' -Verb RunAs -Wait"`,
+      { stdio: 'pipe', timeout: 120000 }
+    );
   } catch (e) {
     console.error('[ZeroTier] Суулгалт алдаа:', e.message);
     return false;
@@ -81,6 +85,10 @@ async function ensureInstalled() {
   // Суулгалтын дараа service эхлэхийг хүлээх
   await new Promise(r => setTimeout(r, 5000));
   _ztCmd = null; // cache цэвэрлэх
+
+  // Staging файлууд цэвэрлэх
+  try { fs.rmSync(installDir, { recursive: true, force: true }); } catch { /* ignore */ }
+
   const ok = isInstalled();
   console.log('[ZeroTier] Суулгалт:', ok ? 'амжилттай' : 'амжилтгүй');
   return ok;
