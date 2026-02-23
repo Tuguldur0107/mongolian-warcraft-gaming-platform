@@ -108,7 +108,7 @@ app.on('before-quit', async (e) => {
       }
     }
   } catch {}
-  gameRelayService.stop();
+  gameRelayService.stopAll();
   zerotierService.disconnect();
   replayService.stopWatcher();
   app.quit();
@@ -410,7 +410,7 @@ ipcMain.handle('rooms:start', async (event, roomId) => {
 });
 
 ipcMain.handle('rooms:close', async (event, roomId) => {
-  gameRelayService.stop();
+  gameRelayService.stopAll();
   try { return await apiService.closeRoom(roomId); } catch (err) { throw apiError(err); }
 });
 
@@ -420,7 +420,7 @@ ipcMain.handle('rooms:kick', async (event, roomId, targetUserId) => {
 
 ipcMain.handle('rooms:leave', async (event, roomId) => {
   const result = await apiService.leaveRoom(roomId);
-  gameRelayService.stop();
+  gameRelayService.stopAll();
   zerotierService.disconnect();
   replayService.stopWatcher();
   return result;
@@ -716,17 +716,21 @@ ipcMain.handle('discord:openInvite', async (_, url) => {
 ipcMain.handle('zt:status', (_, networkId) => zerotierService.getStatus(networkId));
 ipcMain.handle('zt:ip',     (_, networkId) => zerotierService.getMyIp(networkId));
 
-// Game Relay (Host WC3 broadcast → тоглогчид)
-ipcMain.handle('relay:start', (_, playerIps) => {
-  gameRelayService.start(playerIps);
+// Game Relay — Host: capture+forward, Player: search+rebroadcast
+ipcMain.handle('relay:startHost', (_, playerIps) => {
+  gameRelayService.startHost(playerIps);
+  return true;
+});
+ipcMain.handle('relay:startFinder', (_, hostIp) => {
+  gameRelayService.startFinder(hostIp);
   return true;
 });
 ipcMain.handle('relay:stop', () => {
-  gameRelayService.stop();
+  gameRelayService.stopAll();
   return true;
 });
-ipcMain.handle('relay:addPlayer', (_, ip) => {
-  gameRelayService.addPlayerIp(ip);
+ipcMain.handle('relay:addHostPlayer', (_, ip) => {
+  gameRelayService.addHostPlayerIp(ip);
   return true;
 });
 

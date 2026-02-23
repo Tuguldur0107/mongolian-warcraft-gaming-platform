@@ -230,26 +230,34 @@ async function connectSocket() {
     }
   });
 
-  // Host IP хүлээн авах (бусад тоглогчид)
-  socket.on('room:host_ip', ({ ip, hostUsername }) => {
+  // Host IP хүлээн авах (бусад тоглогчид) → Game Finder автомат эхлүүлэх
+  socket.on('room:host_ip', async ({ ip, hostUsername }) => {
     showHostIp(ip);
-    appendSysMsg(`🎯 ${hostUsername} тоглоом host хийлээ — IP: ${ip}`);
-    appendSysMsg('📡 WC3 LAN жагсаалтад тоглоом автоматаар харагдана.');
+    appendSysMsg(`🎯 ${hostUsername} тоглоом host хийлээ`);
+    // PLAYER: Game Finder эхлүүлэх — host руу SEARCHGAME илгээж тоглоом олно
+    if (!currentRoom?.isHost) {
+      try {
+        await window.api.startGameFinder(ip);
+        appendSysMsg('📡 Тоглоом хайж байна... WC3 LAN жагсаалтад удахгүй харагдана.');
+      } catch {}
+    }
   });
 
-  // Тоглогчдын ZeroTier IP жагсаалт — Host relay эхлүүлэхэд хэрэглэнэ
+  // Тоглогчдын ZeroTier IP жагсаалт
   socket.on('room:zt_ips', async ({ ips }) => {
-    if (!currentRoom?.isHost || !ips) return;
+    if (!ips) return;
     const myId = String(currentUser?.id);
-    // Зөвхөн бусад тоглогчдын IP (өөрийнхөө биш)
-    const playerIps = Object.entries(ips)
-      .filter(([uid]) => uid !== myId)
-      .map(([, ip]) => ip);
-    if (playerIps.length > 0) {
-      try {
-        await window.api.startRelay(playerIps);
-        appendSysMsg(`📡 Game relay эхэллээ — ${playerIps.length} тоглогчид автомат дамжуулж байна`);
-      } catch {}
+    if (currentRoom?.isHost) {
+      // HOST: тоглогчдын IP-р relay эхлүүлэх/шинэчлэх
+      const playerIps = Object.entries(ips)
+        .filter(([uid]) => uid !== myId)
+        .map(([, ip]) => ip);
+      if (playerIps.length > 0) {
+        try {
+          await window.api.startHostRelay(playerIps);
+          appendSysMsg(`📡 Game relay: ${playerIps.length} тоглогчид дамжуулж байна`);
+        } catch {}
+      }
     }
   });
 

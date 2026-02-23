@@ -49,10 +49,11 @@ contextBridge.exposeInMainWorld('api', {
   getZerotierStatus: (networkId) => ipcRenderer.invoke('zt:status', networkId),
   getZerotierIp:     (networkId) => ipcRenderer.invoke('zt:ip', networkId),
 
-  // Game Relay (Host → тоглогчид UDP forward)
-  startRelay:    (playerIps) => ipcRenderer.invoke('relay:start', playerIps),
-  stopRelay:     ()          => ipcRenderer.invoke('relay:stop'),
-  addRelayPlayer:(ip)        => ipcRenderer.invoke('relay:addPlayer', ip),
+  // Game Relay — Host: capture+forward, Player: search+rebroadcast
+  startHostRelay:  (playerIps) => ipcRenderer.invoke('relay:startHost', playerIps),
+  startGameFinder: (hostIp)    => ipcRenderer.invoke('relay:startFinder', hostIp),
+  stopRelay:       ()          => ipcRenderer.invoke('relay:stop'),
+  addRelayPlayer:  (ip)        => ipcRenderer.invoke('relay:addHostPlayer', ip),
 
   // Тоглоом эхлүүлэх
   launchGame: (gameType) => ipcRenderer.invoke('game:launch', gameType),
