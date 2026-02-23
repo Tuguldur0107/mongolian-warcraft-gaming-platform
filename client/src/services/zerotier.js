@@ -1,5 +1,6 @@
 const { execSync, exec } = require('child_process');
 const fs = require('fs');
+const path = require('path');
 
 // ZeroTier суулгалтын боломжит замууд (32-bit болон 64-bit)
 const ZT_PATHS = [
@@ -35,6 +36,101 @@ function isRunning() {
     return false;
   }
 }
+
+// ═══════════════════════════════════════════════════════════
+// Автомат суулгалт & тохиргоо
+// ═══════════════════════════════════════════════════════════
+
+async function ensureInstalled() {
+  if (isInstalled()) return true;
+
+  // Bundled MSI-г олох (extraResources-д байгаа)
+  const msiPath = path.join(process.resourcesPath, 'ZeroTierOne.msi');
+  if (!fs.existsSync(msiPath)) {
+    console.error('[ZeroTier] MSI файл олдсонгүй:', msiPath);
+    return false;
+  }
+
+  console.log('[ZeroTier] Суулгаж байна...');
+  try {
+    // PowerShell-ээр UAC elevation + silent install
+    execSync(
+      `powershell -Command "Start-Process msiexec -ArgumentList '/i','\\"${msiPath}\\"','/qn','/norestart' -Verb RunAs -Wait"`,
+      { stdio: 'pipe', timeout: 120000 }
+    );
+  } catch (e) {
+    console.error('[ZeroTier] Суулгалт алдаа:', e.message);
+    return false;
+  }
+
+  // Суулгалтын дараа service эхлэхийг хүлээх
+  await new Promise(r => setTimeout(r, 5000));
+  _ztCmd = null; // cache цэвэрлэх
+  const ok = isInstalled();
+  console.log('[ZeroTier] Суулгалт:', ok ? 'амжилттай' : 'амжилтгүй');
+  return ok;
+}
+
+async function ensureRunning() {
+  if (isRunning()) return true;
+
+  console.log('[ZeroTier] Сервис эхлүүлж байна...');
+  try {
+    // Эхлээд admin-гүйгээр оролдох
+    execSync('net start ZeroTierOneService', { stdio: 'pipe', timeout: 15000 });
+  } catch {
+    try {
+      // Admin шаардлагатай бол elevation ашиглах
+      execSync(
+        `powershell -Command "Start-Process net -ArgumentList 'start','ZeroTierOneService' -Verb RunAs -Wait"`,
+        { stdio: 'pipe', timeout: 30000 }
+      );
+    } catch (e) {
+      console.error('[ZeroTier] Сервис эхлүүлж чадсангүй:', e.message);
+      return false;
+    }
+  }
+
+  await new Promise(r => setTimeout(r, 3000));
+  const ok = isRunning();
+  console.log('[ZeroTier] Сервис:', ok ? 'ажиллаж байна' : 'эхлүүлж чадсангүй');
+  return ok;
+}
+
+async function autoSetup(networkId) {
+  if (!networkId) return { ok: false, error: 'no-network-id' };
+
+  // 1. Суулгалт шалгах
+  const installed = await ensureInstalled();
+  if (!installed) return { ok: false, error: 'install-failed' };
+
+  // 2. Сервис шалгах
+  const running = await ensureRunning();
+  if (!running) return { ok: false, error: 'service-failed' };
+
+  // 3. Network-д нэгдэх
+  try {
+    await joinNetwork(networkId);
+  } catch (e) {
+    console.error('[ZeroTier] join алдаа:', e.message);
+    return { ok: false, error: 'join-failed' };
+  }
+
+  // 4. IP хаяг хүлээх (15 сек хүртэл)
+  for (let i = 0; i < 15; i++) {
+    await new Promise(r => setTimeout(r, 1000));
+    const ip = getMyIp(networkId);
+    if (ip) {
+      console.log(`[ZeroTier] Бэлэн! IP: ${ip}`);
+      return { ok: true, ip };
+    }
+  }
+
+  console.log('[ZeroTier] IP хаяг олдсонгүй, гэхдээ холбогдсон');
+  return { ok: true, ip: null };
+}
+
+// ═══════════════════════════════════════════════════════════
 
 async function joinNetwork(networkId) {
   if (!networkId) return false;
@@ -109,4 +205,8 @@ function disconnect() {
   }
 }
 
-module.exports = { joinNetwork, disconnect, isInstalled, isRunning, getMyIp, getStatus };
+module.exports = {
+  joinNetwork, disconnect,
+  isInstalled, isRunning, getMyIp, getStatus,
+  ensureInstalled, ensureRunning, autoSetup,
+};

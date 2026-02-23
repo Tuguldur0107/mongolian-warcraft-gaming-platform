@@ -102,6 +102,9 @@ contextBridge.exposeInMainWorld('api', {
   deleteDiscordServer: (id)       => ipcRenderer.invoke('discord:deleteServer', id),
   openDiscordInvite:   (url)      => ipcRenderer.invoke('discord:openInvite', url),
 
+  // ZeroTier автомат тохиргоо
+  onZtSetupComplete: (cb) => ipcRenderer.on('zt:setup-complete', (_, result) => cb(result)),
+
   // Auto-update
   onUpdateAvailable: (cb) => ipcRenderer.on('update:available', (_, info) => cb(info)),
   onUpdateProgress:  (cb) => ipcRenderer.on('update:progress',  (_, pct)  => cb(pct)),

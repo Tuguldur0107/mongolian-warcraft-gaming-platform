@@ -174,8 +174,8 @@ router.post('/', strictAuth, async (req, res) => {
       const room = r.rows[0];
       await db.query('INSERT INTO room_players (room_id, user_id) VALUES ($1,$2)', [room.id, userId]);
 
-      // ZeroTier: Central API → үгүй бол default network ашиглана
-      const ztNetId = (await ztCreateNetwork(name)) || process.env.ZEROTIER_DEFAULT_NETWORK || null;
+      // Глобал ZeroTier network ашиглана (бүх тоглогчид нэг сүлжээнд)
+      const ztNetId = process.env.ZEROTIER_DEFAULT_NETWORK || null;
       if (ztNetId) {
         await db.query('UPDATE rooms SET zerotier_network_id=$1 WHERE id=$2', [ztNetId, room.id]);
         room.zerotier_network_id = ztNetId;
@@ -282,11 +282,9 @@ router.post('/:id/leave', strictAuth, async (req, res) => {
       await db.query('DELETE FROM room_players WHERE room_id=$1 AND user_id=$2', [id, userId]);
       const rr = await db.query('SELECT * FROM rooms WHERE id=$1', [id]);
       if (rr.rows[0]?.host_id === userId || String(rr.rows[0]?.host_id) === String(userId)) {
-        const ztId = rr.rows[0]?.zerotier_network_id;
         await db.query('DELETE FROM rooms WHERE id=$1', [id]);
         if (_io) _io.to(id).emit('room:closed', { reason: 'Өрөөний эзэн гарлаа' });
         emitRoomsUpdated();
-        ztDeleteNetwork(ztId); // fire-and-forget
         return res.json({ message: 'Өрөө устгагдлаа' });
       }
       emitRoomsUpdated();
@@ -311,15 +309,13 @@ router.delete('/:id', strictAuth, async (req, res) => {
 
   if (await dbOk()) {
     try {
-      const rr = await db.query('SELECT host_id, zerotier_network_id FROM rooms WHERE id=$1', [id]);
+      const rr = await db.query('SELECT host_id FROM rooms WHERE id=$1', [id]);
       if (!rr.rows[0]) return res.status(404).json({ error: 'Өрөө олдсонгүй' });
       if (String(rr.rows[0].host_id) !== String(userId))
         return res.status(403).json({ error: 'Зөвхөн өрөөний эзэн хаах эрхтэй' });
-      const ztId = rr.rows[0].zerotier_network_id;
       await db.query('DELETE FROM rooms WHERE id=$1', [id]);
       if (_io) _io.to(id).emit('room:closed', { reason: 'Өрөөний эзэн өрөөг хаалаа' });
       emitRoomsUpdated();
-      ztDeleteNetwork(ztId); // fire-and-forget
       return res.json({ message: 'Өрөө хаагдлаа' });
     } catch (e) { console.error(e); }
   }

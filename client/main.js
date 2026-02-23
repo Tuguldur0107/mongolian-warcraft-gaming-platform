@@ -5,11 +5,14 @@ const { spawn } = require('child_process');
 const QRCode = require('qrcode');
 const { autoUpdater } = require('electron-updater');
 
+const axios = require('axios');
 const authService = require('./src/services/auth');
 const replayService = require('./src/services/replay');
 const zerotierService = require('./src/services/zerotier');
 const apiService = require('./src/services/api');
 const gameRelayService = require('./src/services/gameRelay');
+
+const SERVER_URL = process.env.SERVER_URL || 'https://mongolian-warcraft-gaming-platform-production.up.railway.app';
 
 // ── Auto-updater тохиргоо ─────────────────────────────────
 autoUpdater.autoDownload    = true;   // суллагдмагц дэвсгэрт татна
@@ -69,6 +72,34 @@ if (!gotLock) {
   app.quit();
 }
 
+// ── ZeroTier автомат суулгалт & тохиргоо ─────────────────
+async function initZeroTier() {
+  try {
+    // 1. Серверээс глобал network ID авах
+    const { data } = await axios.get(`${SERVER_URL}/config`);
+    const networkId = data?.zerotierNetworkId;
+    if (!networkId) {
+      console.warn('[ZT] Серверт глобал network тохируулаагүй байна');
+      mainWindow?.webContents.send('zt:setup-complete', { ok: false, error: 'no-network-id' });
+      return;
+    }
+
+    // 2. Автомат суулгалт + тохиргоо
+    console.log('[ZT] Автомат тохиргоо эхэлж байна... Network:', networkId);
+    const result = await zerotierService.autoSetup(networkId);
+    console.log('[ZT] Автомат тохиргоо:', result);
+
+    // 3. Settings-д хадгалах
+    writeSettings({ zerotierNetworkId: networkId });
+
+    // 4. Renderer-д мэдэгдэх
+    mainWindow?.webContents.send('zt:setup-complete', result);
+  } catch (e) {
+    console.error('[ZT] Автомат тохиргоо алдаа:', e.message);
+    mainWindow?.webContents.send('zt:setup-complete', { ok: false, error: e.message });
+  }
+}
+
 app.whenReady().then(() => {
   createWindow();
 
@@ -77,10 +108,12 @@ app.whenReady().then(() => {
   if (deepLinkUrl) handleDeepLink(deepLinkUrl);
 
   // Апп бэлэн болсноос 5 секундийн дараа update шалгах
-  // (dev горимд алгасах)
   if (app.isPackaged) {
     setTimeout(() => autoUpdater.checkForUpdates().catch(() => {}), 5000);
   }
+
+  // ZeroTier автомат тохиргоо (3 сек хүлээж, UI ачаалах хугацаа)
+  setTimeout(() => initZeroTier(), 3000);
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -109,7 +142,6 @@ app.on('before-quit', async (e) => {
     }
   } catch {}
   gameRelayService.stopAll();
-  zerotierService.disconnect();
   replayService.stopWatcher();
   app.quit();
 });
@@ -356,7 +388,6 @@ ipcMain.handle('auth:logout', async () => {
   dmWindows.clear();
   authService.clearToken();
   replayService.stopWatcher();
-  zerotierService.disconnect();
   return true;
 });
 
@@ -421,7 +452,6 @@ ipcMain.handle('rooms:kick', async (event, roomId, targetUserId) => {
 ipcMain.handle('rooms:leave', async (event, roomId) => {
   const result = await apiService.leaveRoom(roomId);
   gameRelayService.stopAll();
-  zerotierService.disconnect();
   replayService.stopWatcher();
   return result;
 });

@@ -47,6 +47,45 @@ app.get('/', (req, res) => {
   res.json({ status: 'ok', message: 'Mongolian Warcraft Gaming Platform Server ажиллаж байна' });
 });
 
+// ── Глобал ZeroTier сүлжээ автомат үүсгэх ────────────────
+let _globalZtNetwork = process.env.ZEROTIER_DEFAULT_NETWORK || null;
+
+async function ensureGlobalZtNetwork() {
+  if (_globalZtNetwork) return _globalZtNetwork;
+  const token = process.env.ZEROTIER_API_TOKEN;
+  if (!token) return null;
+  try {
+    const axios = require('axios');
+    const { data } = await axios.post('https://api.zerotier.com/api/v1/network', {
+      config: {
+        name: 'WC3-Platform-Global',
+        private: false,
+        enableBroadcast: true,
+        v4AssignMode: { zt: true },
+        ipAssignmentPools: [{ ipRangeStart: '10.147.20.1', ipRangeEnd: '10.147.20.254' }],
+        routes: [{ target: '10.147.20.0/24' }],
+      },
+    }, { headers: { Authorization: `token ${token}` } });
+    _globalZtNetwork = data.id;
+    process.env.ZEROTIER_DEFAULT_NETWORK = data.id; // rooms.js-д ашиглагдана
+    console.log(`[ZeroTier] Глобал network үүслээ: ${data.id}`);
+    console.log(`[ZeroTier] ⚠ Railway-д ZEROTIER_DEFAULT_NETWORK=${data.id} тохируулна уу!`);
+    return data.id;
+  } catch (e) {
+    console.error('[ZeroTier] Глобал network үүсгэж чадсангүй:', e.message);
+    return null;
+  }
+}
+
+// Серверт эхлэхдээ глобал network бэлдэх
+ensureGlobalZtNetwork();
+
+// Глобал тохиргоо (auth шаардахгүй)
+app.get('/config', async (req, res) => {
+  const networkId = _globalZtNetwork || await ensureGlobalZtNetwork();
+  res.json({ zerotierNetworkId: networkId });
+});
+
 // ── DB migration: бүх хүснэгтийг автоматаар үүсгэх ──────
 let dbForMigration;
 try { dbForMigration = require('./config/db'); } catch {}

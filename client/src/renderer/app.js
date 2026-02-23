@@ -413,6 +413,21 @@ async function init() {
     showToast(`Шинэчлэлийн алдаа: ${msg}`, 'error', 6000);
   });
 
+  // ── ZeroTier автомат тохиргоо статус ─────────────────
+  window.api.onZtSetupComplete?.((result) => {
+    if (result.ok) {
+      console.log('[ZT] Автомат тохиргоо амжилттай. IP:', result.ip || 'хүлээж байна');
+    } else {
+      const msgs = {
+        'install-failed': 'ZeroTier суулгалт амжилтгүй болсон. Гараар суулгана уу: zerotier.com/download',
+        'service-failed': 'ZeroTier сервис эхлүүлж чадсангүй. Компьютерээ дахин асаагаад оролдоно уу.',
+        'join-failed':    'ZeroTier сүлжээнд нэгдэж чадсангүй.',
+        'no-network-id':  'Серверт ZeroTier сүлжээ тохируулаагүй байна.',
+      };
+      showToast(msgs[result.error] || `ZeroTier алдаа: ${result.error}`, 'error', 10000);
+    }
+  });
+
   // ── Хувилбар харуулах + гараар шалгах ─────────────────
   window.api.getAppVersion?.().then(v => {
     const el = document.getElementById('app-version');
