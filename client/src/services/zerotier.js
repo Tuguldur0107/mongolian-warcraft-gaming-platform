@@ -1,6 +1,7 @@
 const { execSync, exec } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 
 // ZeroTier суулгалтын боломжит замууд (32-bit болон 64-bit)
 const ZT_PATHS = [
@@ -60,12 +61,18 @@ async function ensureInstalled() {
     return false;
   }
 
-  console.log('[ZeroTier] Суулгаж байна... MSI:', msiPath);
+  // Temp хавтас руу хуулах (зам дотор зай байхгүй газар)
+  const tmpDir = path.join(os.tmpdir(), 'zt-install');
+  if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
+  const tmpMsi = path.join(tmpDir, 'ZeroTierOne.msi');
+  fs.copyFileSync(msiPath, tmpMsi);
+
+  console.log('[ZeroTier] Суулгаж байна... MSI:', tmpMsi);
   try {
-    // PowerShell-ээр UAC elevation + silent install
-    // Зам дотор зай байж болох тул single-quote ашиглана
-    const psCmd = `Start-Process -FilePath 'msiexec.exe' -ArgumentList '/i ""${msiPath}"" /qn /norestart' -Verb RunAs -Wait`;
-    execSync(`powershell -Command "${psCmd}"`, { stdio: 'pipe', timeout: 120000 });
+    // PowerShell скрипт файлаар ажиллуулах (escaping асуудал гарахгүй)
+    const psScript = path.join(tmpDir, 'install.ps1');
+    fs.writeFileSync(psScript, `Start-Process msiexec.exe -ArgumentList '/i "${tmpMsi}" /qn /norestart' -Verb RunAs -Wait`, 'utf8');
+    execSync(`powershell -ExecutionPolicy Bypass -File "${psScript}"`, { stdio: 'pipe', timeout: 120000 });
   } catch (e) {
     console.error('[ZeroTier] Суулгалт алдаа:', e.message);
     return false;
