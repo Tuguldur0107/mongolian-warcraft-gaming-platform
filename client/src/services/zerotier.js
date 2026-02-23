@@ -67,50 +67,56 @@ async function ensureInstalled() {
   const targetMsi = path.join(installDir, 'ZeroTierOne.msi');
   fs.copyFileSync(msiPath, targetMsi);
 
-  console.log('[ZeroTier] Суулгаж байна... MSI:', targetMsi);
+  // MSI файл бодитоор хуулагдсан эсэх шалгах
+  if (!fs.existsSync(targetMsi)) {
+    console.error('[ZeroTier] MSI хуулагдсангүй:', targetMsi);
+    return false;
+  }
+  const msiSize = fs.statSync(targetMsi).size;
+  console.log(`[ZeroTier] MSI хуулагдлаа: ${targetMsi} (${msiSize} bytes)`);
+
   const logFile = path.join(installDir, 'install.log');
   try {
-    // .cmd batch файл — /passive горимд progress bar харуулна
-    const cmdScript = path.join(installDir, 'install.cmd');
-    fs.writeFileSync(cmdScript, [
-      `msiexec /i "${targetMsi}" /passive /norestart /L*V "${logFile}"`,
-      `if %ERRORLEVEL% NEQ 0 (`,
-      `  echo INSTALL FAILED: %ERRORLEVEL% >> "${logFile}"`,
-      `)`,
-      '',
+    // PS1 скрипт файл — msiexec-г шууд elevate хийнэ (CMD завсаргүй)
+    const psScript = path.join(installDir, 'install.ps1');
+    fs.writeFileSync(psScript, [
+      `$msi = '${targetMsi}'`,
+      `$log = '${logFile}'`,
+      `$p = Start-Process msiexec.exe -ArgumentList "/i $msi /passive /norestart /L*V $log" -Verb RunAs -Wait -PassThru`,
+      `exit $p.ExitCode`,
     ].join('\r\n'), 'utf8');
-    // Batch файлыг admin эрхээр ажиллуулах
+
+    console.log('[ZeroTier] Суулгаж байна...');
     execSync(
-      `powershell -Command "Start-Process cmd.exe -ArgumentList '/c','${cmdScript.replace(/'/g, "''")}' -Verb RunAs -Wait"`,
+      `powershell -ExecutionPolicy Bypass -File "${psScript}"`,
       { stdio: 'pipe', timeout: 180000 }
     );
   } catch (e) {
     console.error('[ZeroTier] Суулгалт алдаа:', e.message);
-    // Log файл уншиж дебаг мэдээлэл авах
-    try {
-      const log = fs.readFileSync(logFile, 'utf16le');
-      const last = log.split('\n').slice(-20).join('\n');
-      console.error('[ZeroTier] Install log (tail):', last);
-    } catch {}
-    return false;
+  }
+
+  // Log файл уншиж дебаг мэдээлэл авах
+  try {
+    const log = fs.readFileSync(logFile, 'utf16le');
+    const last = log.split('\n').slice(-15).join('\n');
+    console.log('[ZeroTier] Install log (tail):', last);
+  } catch (e) {
+    console.log('[ZeroTier] Log файл олдсонгүй:', e.message);
   }
 
   // Суулгалтын дараа service эхлэхийг хүлээх
   await new Promise(r => setTimeout(r, 8000));
   _ztCmd = null; // cache цэвэрлэх
 
-  // Log файл шалгах (debug зориулалтаар хэвлэх)
-  try {
-    const log = fs.readFileSync(logFile, 'utf16le');
-    const last = log.split('\n').slice(-10).join('\n');
-    console.log('[ZeroTier] Install log (tail):', last);
-  } catch {}
-
-  // Staging файлууд цэвэрлэх
-  try { fs.rmSync(installDir, { recursive: true, force: true }); } catch { /* ignore */ }
-
   const ok = isInstalled();
   console.log('[ZeroTier] Суулгалт:', ok ? 'амжилттай' : 'амжилтгүй');
+
+  // Амжилттай бол staging цэвэрлэх, амжилтгүй бол log хадгалах
+  if (ok) {
+    try { fs.rmSync(installDir, { recursive: true, force: true }); } catch {}
+  } else {
+    console.log('[ZeroTier] Log файл хадгалагдлаа:', logFile);
+  }
   return ok;
 }
 
