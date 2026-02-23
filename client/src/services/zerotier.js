@@ -17,7 +17,15 @@ function getZtCmd() {
   if (_ztCmd) return _ztCmd;
   for (const p of ZT_PATHS) {
     if (fs.existsSync(p)) {
-      _ztCmd = `"${p}" -q`;
+      // ZeroTier 1.16+ нь authtoken.secret-д admin шаарддаг
+      // User-level token ашиглах (AppData\Local\ZeroTier)
+      const userToken = path.join(os.homedir(), 'AppData', 'Local', 'ZeroTier', 'authtoken.secret');
+      if (fs.existsSync(userToken)) {
+        const token = fs.readFileSync(userToken, 'utf8').trim();
+        _ztCmd = `"${p}" -q -T${token}`;
+      } else {
+        _ztCmd = `"${p}" -q`;
+      }
       return _ztCmd;
     }
   }

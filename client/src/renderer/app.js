@@ -7,6 +7,9 @@ let currentUser = null;
 // Өрөөний мэдээлэл кэш (roomCard onclick-д ашиглана)
 let roomsCache = {}; // id → room object
 
+// ── ZeroTier IP хадгалалт ────────────────────────────────
+let roomZtIps = {}; // userId → ip
+
 // ── Чат төлөв ─────────────────────────────────────────────
 const dmConversations = {};
 let activeDmUserId = null;
@@ -108,7 +111,7 @@ async function connectSocket() {
 
   // Өрөөний чат
   socket.on('chat:message',         (msg)        => appendMessage(msg));
-  socket.on('room:members',         (members)    => renderMembers(members));
+  socket.on('room:members',         (members)    => { if (currentRoom) currentRoom.members = members; renderMembers(members); });
   socket.on('room:user_joined',     ({ username }) => appendSysMsg(`${username} нэгдлээ`));
   socket.on('room:user_left',       ({ username }) => appendSysMsg(`${username} гарлаа`));
   socket.on('room:user_reconnecting', ({ username }) => appendSysMsg(`⚠ ${username} холболт тасарлаа, дахин холбогдохыг хүлээж байна...`));
@@ -253,6 +256,11 @@ async function connectSocket() {
   // Тоглогчдын ZeroTier IP жагсаалт
   socket.on('room:zt_ips', async ({ ips }) => {
     if (!ips) return;
+    // IP-уудыг хадгалах (members list-д харуулахад ашиглана)
+    roomZtIps = ips;
+    // Members жагсаалтыг дахин render хийж IP харуулах
+    if (currentRoom?.members) renderMembers(currentRoom.members);
+
     const myId = String(currentUser?.id);
     if (currentRoom?.isHost) {
       // HOST: тоглогчдын IP-р relay эхлүүлэх/шинэчлэх
@@ -941,6 +949,9 @@ function _enterRoomUI(id, name, gameType, isHost, hostId, status, ztNetId) {
 
   if (socket && currentUser) {
     socket.emit('room:join', { roomId: id });
+    // Өрөөний ZT IP-уудыг авах
+    roomZtIps = {};
+    socket.emit('room:get_zt_ips', { roomId: id });
     // ZeroTier IP-г серверт мэдэгдэх (relay-д хэрэгтэй)
     setTimeout(async () => {
       try {
@@ -963,6 +974,7 @@ document.getElementById('btn-leave-room').onclick = async () => {
   }
   try { await window.api.leaveRoom(currentRoom.id); } catch {}
   currentRoom = null;
+  roomZtIps = {};
   if (isRoomMode()) { window.close(); }
   else { showPage('page-main'); loadRooms(); }
 };
@@ -1136,8 +1148,12 @@ function renderMembers(members) {
       ? `<button class="btn btn-sm btn-danger kick-btn" data-id="${id}" data-name="${name}">Kick</button>`
       : '';
     const nameSpan = (!isMe && id) ? `<span class="clickable-name" data-user-id="${id}">${name}</span>` : name;
+    const ztIp = id && roomZtIps[id] ? `<span class="member-zt-ip">${roomZtIps[id]}</span>` : '';
     return `<li class="${isMe ? 'me' : ''}">
-      ${isRoomHost ? '👑 ' : ''}${nameSpan}${isMe ? ' (Та)' : ''}
+      <div class="member-info">
+        <div>${isRoomHost ? '👑 ' : ''}${nameSpan}${isMe ? ' (Та)' : ''}</div>
+        ${ztIp}
+      </div>
       ${kickBtn}
     </li>`;
   }).join('');

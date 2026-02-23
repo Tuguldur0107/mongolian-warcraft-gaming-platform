@@ -357,6 +357,8 @@ tr:hover td { background: var(--card); }
   transition: background 0.2s;
 }
 .members-list li::before { content: '●'; color: var(--green); font-size: 0.6rem; }
+.member-info { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.member-zt-ip { font-size: 0.7rem; color: var(--accent); opacity: 0.8; font-family: monospace; }
 
 .hint { font-size: 0.82rem; color: var(--text2); line-height: 1.5; margin-bottom: 12px; }
 
