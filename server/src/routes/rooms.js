@@ -24,6 +24,7 @@ async function ztCreateNetwork(roomName) {
       config: {
         name: `WC3-${roomName}`.slice(0, 64),
         private: false, // authorization хэрэггүй — автоматаар нэгдэнэ
+        enableBroadcast: true, // WC3 LAN game discovery-д заавал хэрэгтэй
         v4AssignMode: { zt: true },
         ipAssignmentPools: [{ ipRangeStart: '10.147.20.1', ipRangeEnd: '10.147.20.254' }],
         routes: [{ target: '10.147.20.0/24' }],

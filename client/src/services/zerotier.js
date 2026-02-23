@@ -62,6 +62,37 @@ async function joinNetwork(networkId) {
   });
 }
 
+// ZeroTier IP хаяг олох (listnetworks output-аас парсдах)
+// Output формат: <nwid> <name> <mac> <status> <type> <dev> <ips>
+function getMyIp(networkId) {
+  const nid = networkId || currentNetworkId;
+  if (!nid) return null;
+  const cmd = getZtCmd();
+  if (!cmd) return null;
+  try {
+    const out = execSync(`${cmd} listnetworks`, { stdio: 'pipe', encoding: 'utf8' });
+    const lines = out.trim().split('\n');
+    for (const line of lines) {
+      if (!line.includes(nid)) continue;
+      // IP хаяг нь мөрний сүүлд байна: "10.147.20.x/24" гэсэн формат
+      const ipMatch = line.match(/(\d+\.\d+\.\d+\.\d+)\/\d+/);
+      if (ipMatch) return ipMatch[1];
+    }
+  } catch (e) {
+    console.error('[ZeroTier] listnetworks алдаа:', e.message);
+  }
+  return null;
+}
+
+// ZeroTier-ийн бүрэн статус буцаах
+function getStatus(networkId) {
+  const installed = isInstalled();
+  const running   = installed && isRunning();
+  const nid       = networkId || currentNetworkId;
+  const ip        = running && nid ? getMyIp(nid) : null;
+  return { installed, running, connected: !!ip, networkId: nid || null, ip };
+}
+
 function disconnect() {
   if (!currentNetworkId) return;
   const cmd = getZtCmd();
@@ -78,4 +109,4 @@ function disconnect() {
   }
 }
 
-module.exports = { joinNetwork, disconnect, isInstalled, isRunning };
+module.exports = { joinNetwork, disconnect, isInstalled, isRunning, getMyIp, getStatus };

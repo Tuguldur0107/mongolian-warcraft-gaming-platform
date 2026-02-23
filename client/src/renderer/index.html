@@ -165,7 +165,7 @@
         <button type="button" class="nav-btn" data-tab="ranking">Ranking</button>
         <button type="button" class="nav-btn" data-tab="discord">Discord</button>
         <button type="button" class="nav-btn" data-tab="profile">Профайл</button>
-        <button type="button" class="nav-btn" data-tab="settings">⚙️</button>
+        <button type="button" class="nav-btn" data-tab="settings">Тохиргоо</button>
       </nav>
       <div class="header-right">
         <span id="connection-status" class="connection-status online">🟢 Холбогдсон</span>
@@ -474,8 +474,14 @@
         <div class="card">
           <h3>🎮 Тоглоом</h3>
           <p class="hint" id="room-info-text"></p>
-          <div id="zt-info" class="hint">
-            🌐 ZeroTier: <code id="zt-network-id"></code>
+          <div id="zt-info" class="hint" style="display:none">
+            <div>🌐 ZeroTier: <code id="zt-network-id"></code></div>
+            <div id="zt-my-ip" style="display:none">📍 Миний IP: <code id="zt-my-ip-val"></code></div>
+            <div id="zt-host-ip" style="display:none; margin-top:4px; padding:6px 8px; background:rgba(76,175,80,0.15); border-radius:6px; border:1px solid rgba(76,175,80,0.3)">
+              🎯 Host IP: <code id="zt-host-ip-val" style="font-size:1.05em; font-weight:bold; color:#4caf50"></code>
+              <button type="button" id="btn-copy-host-ip" class="btn btn-sm" style="margin-left:8px; padding:2px 8px; font-size:0.8em" title="IP хуулах">📋</button>
+            </div>
+            <div id="zt-status-warn" style="display:none; color:#ff9800; margin-top:4px"></div>
           </div>
           <button type="button" id="btn-launch-wc3" class="btn btn-primary btn-block btn-with-icon">
             <svg class="btn-icon-svg"><use href="#ico-play"/></svg>

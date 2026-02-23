@@ -9,6 +9,7 @@ const authService = require('./src/services/auth');
 const replayService = require('./src/services/replay');
 const zerotierService = require('./src/services/zerotier');
 const apiService = require('./src/services/api');
+const gameRelayService = require('./src/services/gameRelay');
 
 // ── Auto-updater тохиргоо ─────────────────────────────────
 autoUpdater.autoDownload    = true;   // суллагдмагц дэвсгэрт татна
@@ -107,6 +108,7 @@ app.on('before-quit', async (e) => {
       }
     }
   } catch {}
+  gameRelayService.stop();
   zerotierService.disconnect();
   replayService.stopWatcher();
   app.quit();
@@ -388,9 +390,16 @@ ipcMain.handle('rooms:create', async (event, { name, max_players, game_type, pas
 ipcMain.handle('rooms:join', async (event, roomId, password) => {
   try {
     const result = await apiService.joinRoom(roomId, password);
+    let ztJoined = false;
     if (result?.room?.zerotier_network_id) {
-      zerotierService.joinNetwork(result.room.zerotier_network_id).catch(() => {});
+      try {
+        await zerotierService.joinNetwork(result.room.zerotier_network_id);
+        ztJoined = true;
+      } catch (e) {
+        console.warn('[ZT] join failed:', e.message);
+      }
     }
+    result.ztJoined = ztJoined;
     try { replayService.startWatcher(roomId); } catch {}
     return result;
   } catch (err) { throw apiError(err); }
@@ -401,6 +410,7 @@ ipcMain.handle('rooms:start', async (event, roomId) => {
 });
 
 ipcMain.handle('rooms:close', async (event, roomId) => {
+  gameRelayService.stop();
   try { return await apiService.closeRoom(roomId); } catch (err) { throw apiError(err); }
 });
 
@@ -410,6 +420,7 @@ ipcMain.handle('rooms:kick', async (event, roomId, targetUserId) => {
 
 ipcMain.handle('rooms:leave', async (event, roomId) => {
   const result = await apiService.leaveRoom(roomId);
+  gameRelayService.stop();
   zerotierService.disconnect();
   replayService.stopWatcher();
   return result;
@@ -699,6 +710,24 @@ ipcMain.handle('discord:openInvite', async (_, url) => {
   if (/^https?:\/\/(discord\.gg|discord\.com\/invite)\/[\w-]+$/.test(url)) {
     await shell.openExternal(url);
   }
+});
+
+// ZeroTier статус & IP
+ipcMain.handle('zt:status', (_, networkId) => zerotierService.getStatus(networkId));
+ipcMain.handle('zt:ip',     (_, networkId) => zerotierService.getMyIp(networkId));
+
+// Game Relay (Host WC3 broadcast → тоглогчид)
+ipcMain.handle('relay:start', (_, playerIps) => {
+  gameRelayService.start(playerIps);
+  return true;
+});
+ipcMain.handle('relay:stop', () => {
+  gameRelayService.stop();
+  return true;
+});
+ipcMain.handle('relay:addPlayer', (_, ip) => {
+  gameRelayService.addPlayerIp(ip);
+  return true;
 });
 
 // Тоглоом эхлүүлэх (gameType нэрээр тохирох exe хайна)

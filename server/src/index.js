@@ -212,6 +212,8 @@ const roomMessages = {};
 // Rejoin grace period: userId → { timer, roomId, username }
 const disconnectTimers = {};
 const REJOIN_GRACE_MS = 45000; // 45 секунд
+// Тоглогчдын ZeroTier IP хадгалах (roomId → Map<userId, ztIp>)
+const roomZtIps = {};
 
 // ── Socket.io JWT middleware ──────────────────────────────
 io.use((socket, next) => {
@@ -362,6 +364,37 @@ io.on('connection', (socket) => {
     io.to(String(roomId)).emit('chat:message', msg);
   });
 
+  // Host-ын IP хаягийг өрөөний тоглогчдод дамжуулах
+  socket.on('room:host_ip', ({ roomId, ip }) => {
+    if (!ip || !roomId) return;
+    // Зөвхөн тухайн өрөөнд байгаа тоглогчдод broadcast
+    socket.to(String(roomId)).emit('room:host_ip', {
+      ip,
+      hostUsername: socket.user.username,
+      hostUserId: String(socket.user.id),
+    });
+  });
+
+  // Тоглогчийн ZeroTier IP бүртгэх — relay-д хэрэгтэй
+  socket.on('room:zt_ip', ({ roomId, ip }) => {
+    if (!ip || !roomId) return;
+    const userId = String(socket.user.id);
+    if (!roomZtIps[roomId]) roomZtIps[roomId] = new Map();
+    roomZtIps[roomId].set(userId, ip);
+    // Өрөөний бүх тоглогчдод шинэчилсэн IP жагсаалт илгээх
+    io.to(String(roomId)).emit('room:zt_ips', {
+      ips: Object.fromEntries(roomZtIps[roomId]),
+    });
+    console.log(`[ZT-IP] ${socket.user.username} → ${ip} (room ${roomId})`);
+  });
+
+  // Host relay-д зориулсан тоглогчдын IP жагсаалт авах
+  socket.on('room:get_zt_ips', ({ roomId }) => {
+    if (!roomId) return;
+    const ips = roomZtIps[roomId] ? Object.fromEntries(roomZtIps[roomId]) : {};
+    socket.emit('room:zt_ips', { ips });
+  });
+
   // Тоглолт эхлэхэд статус 'in_game' болгох
   socket.on('room:game_started', () => {
     const username = socket.user.username;
@@ -454,6 +487,7 @@ io.on('connection', (socket) => {
                 await dbForMigration.query('DELETE FROM rooms WHERE id=$1', [roomId]);
                 io.to(roomId).emit('room:closed', { reason: 'Өрөөний эзэн гарлаа' });
                 delete roomMessages[roomId];
+                delete roomZtIps[roomId];
                 io.emit('rooms:updated');
                 console.log(`[AutoClose] Host timeout → room ${roomId} хаагдлаа`);
               }

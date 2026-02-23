@@ -45,6 +45,15 @@ contextBridge.exposeInMainWorld('api', {
   removeGame:            (id)   => ipcRenderer.invoke('settings:removeGame', id),
   setZerotierNetwork:    (id)   => ipcRenderer.invoke('settings:setZerotierNetwork', id),
 
+  // ZeroTier статус
+  getZerotierStatus: (networkId) => ipcRenderer.invoke('zt:status', networkId),
+  getZerotierIp:     (networkId) => ipcRenderer.invoke('zt:ip', networkId),
+
+  // Game Relay (Host → тоглогчид UDP forward)
+  startRelay:    (playerIps) => ipcRenderer.invoke('relay:start', playerIps),
+  stopRelay:     ()          => ipcRenderer.invoke('relay:stop'),
+  addRelayPlayer:(ip)        => ipcRenderer.invoke('relay:addPlayer', ip),
+
   // Тоглоом эхлүүлэх
   launchGame: (gameType) => ipcRenderer.invoke('game:launch', gameType),
 
