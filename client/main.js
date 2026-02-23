@@ -641,6 +641,26 @@ ipcMain.handle('dm:openWindow', (event, { userId, username }) => {
   dmWindows.set(uid, dmWin);
 });
 
+// ── Найзуудын тусдаа цонх ─────────────────────────────────
+let friendsWindow = null;
+ipcMain.handle('friends:openWindow', () => {
+  if (friendsWindow && !friendsWindow.isDestroyed()) { friendsWindow.focus(); return; }
+  friendsWindow = new BrowserWindow({
+    width: 420, height: 600,
+    minWidth: 360, minHeight: 450,
+    title: 'Найзууд — Mongolian Warcraft Gaming Platform',
+    icon: path.join(__dirname, 'src/renderer/icon.png'),
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+    backgroundColor: '#0d0d1a',
+  });
+  friendsWindow.loadFile('src/renderer/index.html', { query: { mode: 'friends' } });
+  friendsWindow.on('closed', () => { friendsWindow = null; });
+});
+
 ipcMain.handle('dm:isWindowOpen', (_, userId) => {
   const uid = String(userId);
   return dmWindows.has(uid) && !dmWindows.get(uid).isDestroyed();

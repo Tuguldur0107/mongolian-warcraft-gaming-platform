@@ -292,6 +292,7 @@ io.on('connection', (socket) => {
     if (!text?.trim()) return;
     if (checkRateLimit(socket)) return;
     const msg = {
+      userId: socket.user.id,
       username: socket.user.username,
       text: escapeHtml(text.trim().slice(0, 500)),
       time: new Date().toISOString(),
@@ -392,6 +393,7 @@ io.on('connection', (socket) => {
     if (!text?.trim() || !roomId) return;
     if (checkRateLimit(socket)) return;
     const msg = {
+      userId: socket.user.id,
       username: socket.user.username,
       text: escapeHtml(text.trim().slice(0, 500)),
       time: new Date().toISOString(),

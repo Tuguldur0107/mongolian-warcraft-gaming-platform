@@ -269,6 +269,7 @@
               <span id="dm-online-badge" class="dm-tab-badge">0</span>
             </button>
             <button type="button" class="dm-tab" data-dm-tab="blocked">Хаасан</button>
+            <button type="button" id="btn-open-friends-window" class="btn btn-sm" title="Тусдаа цонхоор нээх" style="margin-left:auto;padding:2px 8px;font-size:0.75rem">📤</button>
           </div>
           <!-- Friends tab content -->
           <div id="dm-tab-friends" class="dm-tab-content active">
@@ -421,11 +422,6 @@
     <div id="tab-discord" class="tab">
       <h2>Discord Серверүүд</h2>
       <p class="hint mb-8">Өөрийн Discord серверийн урилга холбоосыг нэмж нийтэлнэ үү</p>
-      <button type="button" id="btn-add-discord-server" class="btn btn-primary btn-with-icon mb-16">
-        <svg class="btn-icon-svg"><use href="#ico-plus"/></svg>
-        + Сервер нэмэх
-      </button>
-
       <!-- Сервер нэмэх форм -->
       <div id="discord-server-form" class="card hidden mb-16">
         <h3 class="mb-8">Шинэ Discord сервер нэмэх</h3>
@@ -535,6 +531,27 @@
         <button type="button" id="btn-dm-send" class="btn btn-primary btn-icon-only" title="Илгээх">
           <svg class="btn-icon-svg"><use href="#ico-send"/></svg>
         </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Найзуудын тусдаа цонх горим (full page) -->
+  <div id="friends-fullpage" class="page friends-fullpage">
+    <div class="friends-window-container">
+      <div class="friends-window-header">
+        <span>👥</span>
+        <h3>Найзууд</h3>
+      </div>
+      <div class="friends-window-body">
+        <div id="fw-pending-section" style="display:none">
+          <div class="dm-section-label">📨 Хүсэлтүүд</div>
+          <ul id="fw-pending-list" class="dm-users-list"></ul>
+        </div>
+        <div class="dm-section-label" id="fw-online-label" style="display:none">🟢 Онлайн найзууд</div>
+        <ul id="fw-online-list" class="dm-users-list"></ul>
+        <div class="dm-section-label" id="fw-offline-label" style="display:none">⚫ Офлайн найзууд</div>
+        <ul id="fw-offline-list" class="dm-users-list"></ul>
+        <p id="fw-no-friends" class="empty-text pad-empty">Найз байхгүй байна</p>
       </div>
     </div>
   </div>

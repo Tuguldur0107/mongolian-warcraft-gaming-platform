@@ -64,6 +64,8 @@ contextBridge.exposeInMainWorld('api', {
 
   // DM тусдаа цонх
   openDMWindow:      (data) => ipcRenderer.invoke('dm:openWindow', data),
+  // Найзуудын тусдаа цонх
+  openFriendsWindow: () => ipcRenderer.invoke('friends:openWindow'),
   isDMWindowOpen:    (userId) => ipcRenderer.invoke('dm:isWindowOpen', userId),
   onDMWindowClosed:  (cb)   => ipcRenderer.on('dm:window-closed', (_, data) => cb(data)),
 

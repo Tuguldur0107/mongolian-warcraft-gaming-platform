@@ -45,6 +45,9 @@ function isRoomMode() {
 function isDMMode() {
   return new URLSearchParams(window.location.search).get('mode') === 'dm';
 }
+function isFriendsMode() {
+  return new URLSearchParams(window.location.search).get('mode') === 'friends';
+}
 
 async function connectSocket() {
   if (socket) socket.disconnect();
@@ -140,6 +143,7 @@ async function connectSocket() {
     onlineUserIds = new Set(users.map(u => String(typeof u === 'object' ? u.userId : u)));
     renderOnlineUsers(users);
     renderFriendsTab();
+    if (isFriendsMode()) renderFriendsWindow();
     // Найз онлайн болсон мэдэгдэл
     myFriends.forEach(f => {
       const uid = String(f.id);
@@ -315,6 +319,19 @@ document.querySelectorAll('.auth-tab').forEach(btn => {
 
 // ── Эхлүүлэх ─────────────────────────────────────────────
 async function init() {
+  // Найзуудын тусдаа цонх горим
+  if (isFriendsMode()) {
+    document.getElementById('page-login').classList.remove('active');
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    const user = await window.api.getUser();
+    if (!user) { window.close(); return; }
+    currentUser = user;
+    connectSocket();
+    document.getElementById('friends-fullpage').classList.add('active');
+    initFriendsWindowMode();
+    return;
+  }
+
   // DM тусдаа цонх горим
   if (isDMMode()) {
     document.getElementById('page-login').classList.remove('active');
@@ -646,6 +663,11 @@ document.querySelectorAll('.dm-tab').forEach(btn => {
   };
 });
 
+// Найзуудын тусдаа цонх нээх товч
+document.getElementById('btn-open-friends-window')?.addEventListener('click', () => {
+  window.api.openFriendsWindow?.();
+});
+
 // ── Lobby — өрөөнүүд ─────────────────────────────────────
 async function loadRooms() {
   const waiting = document.getElementById('rooms-waiting');
@@ -674,8 +696,11 @@ function roomCard(r, inProgress) {
   const myId     = String(currentUser?.id);
   const isMyRoom = String(r.host_id) === myId ||
                    (r.members || []).some(m => String(m.id) === myId);
-  const names    = (r.members || []).map(m => m.name || m).slice(0, 6).join(', ');
-  const overflow = (r.members?.length || 0) > 6 ? '...' : '';
+  const memberSpans = (r.members || []).map(m => {
+    const mid = m.id ? String(m.id) : '';
+    const mname = m.name || m;
+    return `<span class="clickable-name" data-user-id="${mid}">${escHtml(mname)}</span>`;
+  }).join(', ');
 
   let joinBtn;
   if (isMyRoom) {
@@ -694,7 +719,7 @@ function roomCard(r, inProgress) {
         ${isMyRoom ? '<span class="my-room-tag">Миний өрөө</span>' : ''}
       </div>
       <div class="meta">👥 ${r.player_count}/${r.max_players} &nbsp;|&nbsp; Эзэн: ${r.host_name}</div>
-      ${names ? `<div class="room-members">${names}${overflow}</div>` : ''}
+      ${memberSpans ? `<div class="room-members">${memberSpans}</div>` : ''}
       ${joinBtn}
     </div>
   `;
@@ -715,6 +740,16 @@ async function joinPlayingRoom(id, name, gameType, hostId) {
 }
 
 document.getElementById('btn-refresh').onclick = loadRooms;
+
+// Room card дотор нэр дарахад profile нээх
+document.addEventListener('click', e => {
+  const nameEl = e.target.closest('.room-members .clickable-name');
+  if (nameEl && nameEl.dataset.userId) {
+    e.stopPropagation();
+    openUserProfile(nameEl.dataset.userId);
+    return;
+  }
+});
 
 // Өрөөний товч event delegation (data-attribute ашиглан)
 document.addEventListener('click', e => {
@@ -1040,17 +1075,21 @@ document.getElementById('btn-launch-wc3').onclick = async () => {
 };
 
 // ── Өрөөний чат ──────────────────────────────────────────
-function appendMessage({ username, text, time }) {
+function appendMessage({ userId, username, text, time }) {
   const box  = document.getElementById('chat-messages');
   const isMe = username === currentUser?.username;
   const t    = new Date(time).toLocaleTimeString('mn-MN', { hour: '2-digit', minute: '2-digit' });
   const div  = document.createElement('div');
   div.className = `msg ${isMe ? 'me' : 'other'}`;
+  const nameEl = isMe ? 'Та' : `<span class="clickable-name" data-user-id="${userId}">${escHtml(username)}</span>`;
   div.innerHTML = `
-    <div class="msg-name">${isMe ? 'Та' : escHtml(username)}</div>
+    <div class="msg-name">${nameEl}</div>
     <div class="msg-bubble">${escHtml(text)}</div>
     <div class="msg-time">${t}</div>
   `;
+  if (!isMe && userId) {
+    div.querySelector('.clickable-name')?.addEventListener('click', () => openUserProfile(userId));
+  }
   box.appendChild(div);
   box.scrollTop = box.scrollHeight;
 }
@@ -1096,14 +1135,18 @@ function renderMembers(members) {
     const kickBtn = (isHost && !isMe)
       ? `<button class="btn btn-sm btn-danger kick-btn" data-id="${id}" data-name="${name}">Kick</button>`
       : '';
+    const nameSpan = (!isMe && id) ? `<span class="clickable-name" data-user-id="${id}">${name}</span>` : name;
     return `<li class="${isMe ? 'me' : ''}">
-      ${isRoomHost ? '👑 ' : ''}${name}${isMe ? ' (Та)' : ''}
+      ${isRoomHost ? '👑 ' : ''}${nameSpan}${isMe ? ' (Та)' : ''}
       ${kickBtn}
     </li>`;
   }).join('');
 
   ul.querySelectorAll('.kick-btn').forEach(btn => {
-    btn.onclick = () => kickPlayer(btn.dataset.id, btn.dataset.name);
+    btn.onclick = (e) => { e.stopPropagation(); kickPlayer(btn.dataset.id, btn.dataset.name); };
+  });
+  ul.querySelectorAll('.clickable-name').forEach(el => {
+    el.addEventListener('click', () => openUserProfile(el.dataset.userId));
   });
 }
 
@@ -1119,18 +1162,22 @@ async function kickPlayer(targetId, targetName) {
 }
 
 // ── Нийтийн лобби чат ────────────────────────────────────
-function appendLobbyMessage({ username, text, time }, isHistory = false) {
+function appendLobbyMessage({ userId, username, text, time }, isHistory = false) {
   const box = document.getElementById('lobby-chat-messages');
   if (!box) return;
   const isMe = username === currentUser?.username;
   const t    = new Date(time).toLocaleTimeString('mn-MN', { hour: '2-digit', minute: '2-digit' });
   const div  = document.createElement('div');
   div.className = `msg ${isMe ? 'me' : 'other'}`;
+  const nameEl = isMe ? 'Та' : `<span class="clickable-name" data-user-id="${userId}">${escHtml(username)}</span>`;
   div.innerHTML = `
-    <div class="msg-name">${isMe ? 'Та' : escHtml(username)}</div>
+    <div class="msg-name">${nameEl}</div>
     <div class="msg-bubble">${escHtml(text)}</div>
     <div class="msg-time">${t}</div>
   `;
+  if (!isMe && userId) {
+    div.querySelector('.clickable-name')?.addEventListener('click', () => openUserProfile(userId));
+  }
   box.appendChild(div);
   box.scrollTop = box.scrollHeight;
 
@@ -1531,6 +1578,98 @@ async function removeFriendClick(friendId, friendName) {
     renderFriendsTab();
     renderOnlineUsersFromCache();
   } catch (err) { showToast(err.message, 'error'); }
+}
+
+// ── Найзуудын тусдаа цонх горим ──────────────────────────
+async function initFriendsWindowMode() {
+  // Нийгмийн мэдээлэл ачаалах
+  try {
+    const [friends, pending, blocked] = await Promise.all([
+      window.api.getFriends(),
+      window.api.getPendingRequests(),
+      window.api.getBlockedUsers(),
+    ]);
+    myFriends = friends || [];
+    pendingRequests = pending || [];
+    blockedUsers = blocked || [];
+  } catch {}
+  renderFriendsWindow();
+}
+
+function renderFriendsWindow() {
+  const pendingSection = document.getElementById('fw-pending-section');
+  const pendingList    = document.getElementById('fw-pending-list');
+  const onlineList     = document.getElementById('fw-online-list');
+  const offlineList    = document.getElementById('fw-offline-list');
+  const onlineLabel    = document.getElementById('fw-online-label');
+  const offlineLabel   = document.getElementById('fw-offline-label');
+  const noFriends      = document.getElementById('fw-no-friends');
+  if (!onlineList) return;
+
+  // Хүсэлтүүд
+  if (pendingRequests.length > 0) {
+    pendingSection.style.display = 'block';
+    pendingList.innerHTML = pendingRequests.map(p => `
+      <li class="pending-item" data-id="${p.id}" data-username="${escHtml(p.username)}">
+        <span class="dm-username clickable-name" data-user-id="${p.id}">${escHtml(p.username)}</span>
+        <div class="pending-actions">
+          <button class="btn btn-sm btn-primary pending-accept-btn">✓</button>
+          <button class="btn btn-sm btn-danger pending-decline-btn">✕</button>
+        </div>
+      </li>
+    `).join('');
+    pendingList.querySelectorAll('.pending-accept-btn').forEach(btn => {
+      const li = btn.closest('li');
+      btn.addEventListener('click', () => acceptFriend(li.dataset.id, li.dataset.username));
+    });
+    pendingList.querySelectorAll('.pending-decline-btn').forEach(btn => {
+      const li = btn.closest('li');
+      btn.addEventListener('click', () => declineFriend(li.dataset.id));
+    });
+  } else {
+    pendingSection.style.display = 'none';
+  }
+
+  const onlineFriends  = myFriends.filter(f => onlineUserIds.has(String(f.id)));
+  const offlineFriends = myFriends.filter(f => !onlineUserIds.has(String(f.id)));
+  noFriends.style.display = myFriends.length > 0 || pendingRequests.length > 0 ? 'none' : 'block';
+
+  onlineLabel.style.display = onlineFriends.length > 0 ? 'block' : 'none';
+  onlineList.innerHTML = onlineFriends.map(f => fwFriendItem(f, true)).join('');
+  bindFwEvents(onlineList);
+
+  offlineLabel.style.display = offlineFriends.length > 0 ? 'block' : 'none';
+  offlineList.innerHTML = offlineFriends.map(f => fwFriendItem(f, false)).join('');
+  bindFwEvents(offlineList);
+}
+
+function fwFriendItem(f, isOnline) {
+  const dot = isOnline ? 'dm-status-dot' : 'dm-status-dot offline';
+  return `<li data-id="${f.id}" data-username="${escHtml(f.username)}">
+    <span class="${dot}"></span>
+    <span class="dm-username clickable-name" data-user-id="${f.id}">${escHtml(f.username)}</span>
+    ${isOnline ? '<button class="btn btn-sm dm-btn fw-dm-btn">DM</button>' : ''}
+    <button class="btn btn-sm fw-profile-btn" title="Профайл">👤</button>
+    <button class="btn btn-sm btn-danger-soft fw-remove-btn" title="Хасах">✕</button>
+  </li>`;
+}
+
+function bindFwEvents(ul) {
+  ul.querySelectorAll('.fw-dm-btn').forEach(btn => {
+    const li = btn.closest('li');
+    btn.addEventListener('click', e => { e.stopPropagation(); openDM(li.dataset.id, li.dataset.username); });
+  });
+  ul.querySelectorAll('.fw-profile-btn').forEach(btn => {
+    const li = btn.closest('li');
+    btn.addEventListener('click', e => { e.stopPropagation(); openUserProfile(li.dataset.id); });
+  });
+  ul.querySelectorAll('.fw-remove-btn').forEach(btn => {
+    const li = btn.closest('li');
+    btn.addEventListener('click', e => { e.stopPropagation(); removeFriendClick(li.dataset.id, li.dataset.username); });
+  });
+  ul.querySelectorAll('.clickable-name').forEach(el => {
+    el.addEventListener('click', e => { e.stopPropagation(); openUserProfile(el.dataset.userId); });
+  });
 }
 
 // ── Хаасан хэрэглэгчдийн tab дүрслэх ─────────────────────
@@ -2408,9 +2547,7 @@ async function loadDiscordServers() {
     const addCard = _discordAddCard();
     if (!servers.length) {
       list.innerHTML = addCard;
-      list.querySelector('#discord-add-card').addEventListener('click', () => {
-        document.getElementById('btn-add-discord-server').click();
-      });
+      list.querySelector('#discord-add-card').addEventListener('click', () => toggleDiscordForm());
       return;
     }
     list.innerHTML = addCard + servers.map(s => {
@@ -2456,9 +2593,7 @@ async function loadDiscordServers() {
         </div>`;
     }).join('');
 
-    list.querySelector('#discord-add-card')?.addEventListener('click', () => {
-      document.getElementById('btn-add-discord-server').click();
-    });
+    list.querySelector('#discord-add-card')?.addEventListener('click', () => toggleDiscordForm());
     list.querySelectorAll('.btn-discord-join').forEach(btn => {
       btn.onclick = () => window.api.openDiscordInvite(btn.dataset.url);
     });
@@ -2513,11 +2648,10 @@ async function loadDiscordServers() {
   }
 }
 
-document.getElementById('btn-add-discord-server').onclick = () => {
+function toggleDiscordForm() {
   const form = document.getElementById('discord-server-form');
   const isHidden = form.classList.contains('hidden');
   if (isHidden) {
-    // Засах горимоос арилгаж нэмэх горимд шилжүүлэх
     const title = form.querySelector('h3');
     const submitBtn = document.getElementById('btn-ds-submit');
     delete form.dataset.editingId;

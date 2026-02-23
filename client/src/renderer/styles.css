@@ -859,6 +859,31 @@ body.light #icon-moon { display: block !important; }
 .dm-window-header h3 { font-size: 1rem; margin: 0; color: var(--text); }
 #popup-friend-btn-wrap { display: flex; gap: 8px; margin-top: 10px; }
 
+/* ── Clickable name (profile нээх) ────────────────── */
+.clickable-name {
+  cursor: pointer;
+  color: var(--accent);
+  transition: opacity 0.15s;
+}
+.clickable-name:hover {
+  opacity: 0.8;
+  text-decoration: underline;
+}
+
+/* ── Найзуудын тусдаа цонх ──────────────────────── */
+.friends-fullpage { display: none; flex-direction: column; height: 100vh; background: var(--bg); }
+.friends-fullpage.active { display: flex; }
+.friends-window-container { display: flex; flex-direction: column; height: 100%; }
+.friends-window-header {
+  display: flex; align-items: center; gap: 8px;
+  padding: 12px 16px; border-bottom: 1px solid var(--border);
+  background: var(--bg2); flex-shrink: 0;
+}
+.friends-window-header h3 { font-size: 1rem; margin: 0; color: var(--text); }
+.friends-window-body {
+  flex: 1; overflow-y: auto; padding: 8px 12px;
+}
+
 /* ── Responsive ─────────────────────────────────────── */
 @media (max-width: 900px) {
   .rooms-grid { grid-template-columns: 1fr !important; }
