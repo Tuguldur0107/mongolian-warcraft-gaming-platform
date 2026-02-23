@@ -68,23 +68,43 @@ async function ensureInstalled() {
   fs.copyFileSync(msiPath, targetMsi);
 
   console.log('[ZeroTier] Суулгаж байна... MSI:', targetMsi);
+  const logFile = path.join(installDir, 'install.log');
   try {
-    // .cmd batch файл ашиглах — quoting асуудал гарахгүй
+    // .cmd batch файл — /passive горимд progress bar харуулна
     const cmdScript = path.join(installDir, 'install.cmd');
-    fs.writeFileSync(cmdScript, `msiexec /i "${targetMsi}" /qn /norestart\r\n`, 'utf8');
+    fs.writeFileSync(cmdScript, [
+      `msiexec /i "${targetMsi}" /passive /norestart /L*V "${logFile}"`,
+      `if %ERRORLEVEL% NEQ 0 (`,
+      `  echo INSTALL FAILED: %ERRORLEVEL% >> "${logFile}"`,
+      `)`,
+      '',
+    ].join('\r\n'), 'utf8');
     // Batch файлыг admin эрхээр ажиллуулах
     execSync(
       `powershell -Command "Start-Process cmd.exe -ArgumentList '/c','${cmdScript.replace(/'/g, "''")}' -Verb RunAs -Wait"`,
-      { stdio: 'pipe', timeout: 120000 }
+      { stdio: 'pipe', timeout: 180000 }
     );
   } catch (e) {
     console.error('[ZeroTier] Суулгалт алдаа:', e.message);
+    // Log файл уншиж дебаг мэдээлэл авах
+    try {
+      const log = fs.readFileSync(logFile, 'utf16le');
+      const last = log.split('\n').slice(-20).join('\n');
+      console.error('[ZeroTier] Install log (tail):', last);
+    } catch {}
     return false;
   }
 
   // Суулгалтын дараа service эхлэхийг хүлээх
-  await new Promise(r => setTimeout(r, 5000));
+  await new Promise(r => setTimeout(r, 8000));
   _ztCmd = null; // cache цэвэрлэх
+
+  // Log файл шалгах (debug зориулалтаар хэвлэх)
+  try {
+    const log = fs.readFileSync(logFile, 'utf16le');
+    const last = log.split('\n').slice(-10).join('\n');
+    console.log('[ZeroTier] Install log (tail):', last);
+  } catch {}
 
   // Staging файлууд цэвэрлэх
   try { fs.rmSync(installDir, { recursive: true, force: true }); } catch { /* ignore */ }
