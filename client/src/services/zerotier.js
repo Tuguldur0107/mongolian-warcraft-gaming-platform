@@ -3,8 +3,9 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
-// ZeroTier суулгалтын боломжит замууд (32-bit болон 64-bit)
+// ZeroTier суулгалтын боломжит замууд (шинэ 1.16+ болон хуучин хувилбар)
 const ZT_PATHS = [
+  'C:\\ProgramData\\ZeroTier\\One\\zerotier-one_x64.exe',
   'C:\\Program Files (x86)\\ZeroTier\\One\\zerotier-one_x64.exe',
   'C:\\Program Files\\ZeroTier\\One\\zerotier-one_x64.exe',
 ];
