@@ -217,14 +217,17 @@ async function connectSocket() {
     }, 1500);
   });
 
-  // Тоглолт эхэлсэн (эзэн биш тоглогчдод)
+  // Тоглолт эхэлсэн (эзэн биш тоглогчдод) — WC3 автомат нээгдэнэ
   socket.on('room:started', async () => {
     appendSysMsg('▶ Тоглолт эхэллээ! WC3 нээж байна...');
     socket.emit('room:game_started');
-    setLaunchBtnRejoin(); // товчийг "↩ Дахин нэвтрэх" болгоно
+    // "Дахин нэвтрэх" товчийг харуулах
+    const launchBtn = document.getElementById('btn-launch-wc3');
+    if (launchBtn) launchBtn.style.display = '';
+    setLaunchBtnRejoin();
     try {
       await window.api.launchGame(currentRoom?.gameType || '');
-      appendSysMsg('✓ Тоглоом нээгдлээ. LAN горимд нэгдэнэ үү.');
+      appendSysMsg('✓ Тоглоом нээгдлээ. Тоглоом хайж байна...');
     } catch (err) {
       appendSysMsg(`⚠️ WC3 нээхэд алдаа: ${err.message}`);
     }
@@ -858,11 +861,17 @@ function _enterRoomUI(id, name, gameType, isHost, hostId, status, ztNetId) {
   document.getElementById('btn-leave-room').style.display = isHost ? 'none' : '';
   document.getElementById('btn-close-room').classList.remove('hidden');
 
-  // Playing горимд орвол "Дахин нэвтрэх", үгүй бол анхны текст
+  // Host биш бол "Тоглолт эхлүүлэх" товчийг нуух — host эхлүүлэхэд автоматаар нээгдэнэ
+  const launchBtn = document.getElementById('btn-launch-wc3');
   if (status === 'playing') {
+    launchBtn.style.display = '';
     setLaunchBtnRejoin();
-  } else {
+  } else if (isHost) {
+    launchBtn.style.display = '';
     resetLaunchBtn(isHost);
+  } else {
+    // Бусад тоглогч: товч нуугдана, host эхлүүлэхэд WC3 автомат нээгдэнэ
+    launchBtn.style.display = 'none';
   }
 
   showPage('page-room');
