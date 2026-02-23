@@ -170,11 +170,17 @@ async function ensureRunning() {
 async function autoSetup(networkId) {
   if (!networkId) return { ok: false, error: 'no-network-id' };
 
-  // 1. Суулгалт шалгах
-  const installed = await ensureInstalled();
-  if (!installed) return { ok: false, error: 'install-failed' };
+  // 1. Суулгалт шалгах / суулгах
+  const alreadyInstalled = isInstalled();
+  if (alreadyInstalled) {
+    console.log('[ZeroTier] Аль хэдийн суулгасан байна, тохиргоо хийж байна...');
+  } else {
+    console.log('[ZeroTier] Суулгаагүй, суулгаж байна...');
+    const installed = await ensureInstalled();
+    if (!installed) return { ok: false, error: 'install-failed' };
+  }
 
-  // 2. Сервис шалгах
+  // 2. Сервис шалгах / эхлүүлэх
   const running = await ensureRunning();
   if (!running) return { ok: false, error: 'service-failed' };
 
