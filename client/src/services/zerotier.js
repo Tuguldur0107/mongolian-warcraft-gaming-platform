@@ -193,13 +193,19 @@ async function autoSetup(networkId) {
   }
 
   // 4. IP хаяг хүлээх (15 сек хүртэл)
+  let myIp = null;
   for (let i = 0; i < 15; i++) {
     await new Promise(r => setTimeout(r, 1000));
-    const ip = getMyIp(networkId);
-    if (ip) {
-      console.log(`[ZeroTier] Бэлэн! IP: ${ip}`);
-      return { ok: true, ip };
-    }
+    myIp = getMyIp(networkId);
+    if (myIp) break;
+  }
+
+  // 5. ZeroTier adapter-г WC3 LAN-д зориулж хамгийн өндөр priority болгох
+  boostAdapterPriority();
+
+  if (myIp) {
+    console.log(`[ZeroTier] Бэлэн! IP: ${myIp}`);
+    return { ok: true, ip: myIp };
   }
 
   console.log('[ZeroTier] IP хаяг олдсонгүй, гэхдээ холбогдсон');
@@ -265,6 +271,24 @@ function getStatus(networkId) {
   return { installed, running, connected: !!ip, networkId: nid || null, ip };
 }
 
+// ZeroTier adapter-ийн priority-г хамгийн өндөр болгох (WC3 LAN-д шаардлагатай)
+function boostAdapterPriority() {
+  try {
+    // PowerShell-ээр ZeroTier adapter олж metric=1 болгох (admin elevation)
+    const psCmd = `$zt = Get-NetAdapter | Where-Object { $_.InterfaceDescription -like '*ZeroTier*' }; if ($zt) { Set-NetIPInterface -InterfaceIndex $zt.ifIndex -InterfaceMetric 1 }`;
+    execSync(
+      `powershell -Command "Start-Process powershell -ArgumentList '-Command','${psCmd.replace(/'/g, "''")}' -Verb RunAs -Wait"`,
+      { stdio: 'pipe', timeout: 15000 }
+    );
+    console.log('[ZeroTier] Adapter priority тохируулагдлаа (metric=1)');
+    return true;
+  } catch (e) {
+    // UAC цуцалсан эсвэл алдаа — critical биш
+    console.warn('[ZeroTier] Adapter priority тохируулж чадсангүй:', e.message);
+    return false;
+  }
+}
+
 function disconnect() {
   if (!currentNetworkId) return;
   const cmd = getZtCmd();
@@ -284,5 +308,5 @@ function disconnect() {
 module.exports = {
   joinNetwork, disconnect,
   isInstalled, isRunning, getMyIp, getNodeId, getStatus,
-  ensureInstalled, ensureRunning, autoSetup,
+  ensureInstalled, ensureRunning, autoSetup, boostAdapterPriority,
 };
