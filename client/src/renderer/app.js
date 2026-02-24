@@ -206,6 +206,8 @@ async function connectSocket() {
   socket.on('room:closed', ({ reason }) => {
     if (!currentRoom) return;
     appendSysMsg(`⚠️ ${reason || 'Өрөө хаагдлаа'}`);
+    _hostRelayStarted = false;
+    try { window.api.stopRelay(); } catch {}
     setTimeout(() => {
       currentRoom = null;
       if (isRoomMode()) { window.close(); }
@@ -217,6 +219,8 @@ async function connectSocket() {
   socket.on('room:kicked', ({ userId }) => {
     if (!currentUser || String(userId) !== String(currentUser.id)) return;
     appendSysMsg('⚠️ Та өрөөнөөс гаргагдлаа!');
+    _hostRelayStarted = false;
+    try { window.api.stopRelay(); } catch {}
     setTimeout(() => {
       currentRoom = null;
       if (isRoomMode()) { window.close(); }
@@ -268,10 +272,18 @@ async function connectSocket() {
         .filter(([uid]) => uid !== myId)
         .map(([, ip]) => ip);
       if (playerIps.length > 0) {
-        try {
-          await window.api.startHostRelay(playerIps);
-          appendSysMsg(`📡 Game relay: ${playerIps.length} тоглогчид дамжуулж байна`);
-        } catch {}
+        if (_hostRelayStarted) {
+          // Relay аль хэдийн ажиллаж байвал зөвхөн шинэ IP нэмнэ
+          for (const ip of playerIps) {
+            try { await window.api.addRelayPlayer(ip); } catch {}
+          }
+        } else {
+          try {
+            await window.api.startHostRelay(playerIps);
+            _hostRelayStarted = true;
+            appendSysMsg(`📡 Game relay: ${playerIps.length} тоглогчид дамжуулж байна`);
+          } catch {}
+        }
       }
     }
   });
@@ -377,12 +389,13 @@ async function init() {
 
     _enterRoomUI(id, name, gameType, isHost, hostId, status, ztNetId);
 
-    // Цонх хаагдахад өрөөнөөс гарах
+    // Цонх хаагдахад өрөөнөөс гарах + relay зогсоох
     window.addEventListener('beforeunload', () => {
       if (currentRoom) {
         if (socket) {
           socket.emit('room:leave', { roomId: currentRoom.id });
         }
+        window.api.stopRelay().catch(() => {});
         window.api.leaveRoom(currentRoom.id).catch(() => {});
       }
     });
@@ -442,6 +455,15 @@ async function init() {
   window.api.onZtSetupComplete?.(async (result) => {
     if (result.ok) {
       console.log('[ZT] Автомат тохиргоо амжилттай. IP:', result.ip || 'хүлээж байна');
+
+      // Adapter priority / Firewall амжилтгүй бол warning харуулах
+      if (result.metricSet === false) {
+        showToast('ZeroTier adapter priority тохируулж чадсангүй. Тоглоом олдохгүй бол апп-г admin эрхтэй нээнэ үү.', 'warning', 12000);
+      }
+      if (result.firewallSet === false) {
+        showToast('Windows Firewall rule нэмж чадсангүй. Тоглоом олдохгүй бол Firewall-г шалгана уу.', 'warning', 10000);
+      }
+
       // Серверээр автоматаар authorize хийлгэх (private network-д шаардлагатай)
       try {
         const nodeId = await window.api.getZerotierNodeId();
@@ -913,6 +935,10 @@ function enterRoom(id, name, gameType, isHost, hostId, status, ztNetId) {
 
 // Өрөөний цонхны UI тохируулга (room цонхноос шууд дуудагдана)
 function _enterRoomUI(id, name, gameType, isHost, hostId, status, ztNetId) {
+  // Хуучин relay зогсоож, state reset хийх
+  _hostRelayStarted = false;
+  _launchInProgress = false;
+  try { window.api.stopRelay(); } catch {}
   currentRoom = { id, name, gameType, isHost, hostId: hostId || String(currentUser?.id) };
 
   document.getElementById('room-title').textContent = name;
@@ -960,15 +986,21 @@ function _enterRoomUI(id, name, gameType, isHost, hostId, status, ztNetId) {
     // Өрөөний ZT IP-уудыг авах
     roomZtIps = {};
     socket.emit('room:get_zt_ips', { roomId: id });
-    // ZeroTier IP-г серверт мэдэгдэх (relay-д хэрэгтэй)
-    setTimeout(async () => {
-      try {
-        const myIp = await window.api.getZerotierIp();
-        if (myIp && socket) {
-          socket.emit('room:zt_ip', { roomId: id, ip: myIp });
-        }
-      } catch {}
-    }, 2000); // ZeroTier IP assignment-д хэдэн секунд хүлээх
+    // ZeroTier IP-г серверт мэдэгдэх (relay-д хэрэгтэй) — retry логиктой
+    (async () => {
+      for (let attempt = 0; attempt < 5; attempt++) {
+        await new Promise(r => setTimeout(r, 2000));
+        try {
+          const myIp = await window.api.getZerotierIp();
+          if (myIp && socket) {
+            socket.emit('room:zt_ip', { roomId: id, ip: myIp });
+            console.log('[ZT] IP бүртгэгдлээ:', myIp);
+            return;
+          }
+        } catch {}
+      }
+      console.warn('[ZT] IP бүртгэж чадсангүй (5 оролдлого)');
+    })();
   }
   appendSysMsg(`"${name}" өрөөнд нэгдлээ.`);
 }
@@ -976,6 +1008,7 @@ function _enterRoomUI(id, name, gameType, isHost, hostId, status, ztNetId) {
 // ── Өрөөний товчнууд ──────────────────────────────────────
 document.getElementById('btn-leave-room').onclick = async () => {
   if (!currentRoom) return;
+  _hostRelayStarted = false;
   try { await window.api.stopRelay(); } catch {}
   if (socket && currentUser) {
     socket.emit('room:leave', { roomId: currentRoom.id });
@@ -990,6 +1023,8 @@ document.getElementById('btn-leave-room').onclick = async () => {
 document.getElementById('btn-close-room').onclick = async () => {
   if (!currentRoom) return;
   if (!await showConfirm('Өрөө хаах', `"${currentRoom.name}" өрөөг хаах уу? Бүх тоглогчид гарна.`)) return;
+  _hostRelayStarted = false;
+  try { await window.api.stopRelay(); } catch {}
   try {
     await window.api.closeRoom(currentRoom.id);
     currentRoom = null;
@@ -1063,10 +1098,30 @@ function showHostIp(ip) {
 }
 
 // Тоглоом эхлүүлэх / дахин нэвтрэх
+let _hostRelayStarted = false;
+let _launchInProgress = false;
 document.getElementById('btn-launch-wc3').onclick = async () => {
+  if (_launchInProgress) return; // Double-click хамгаалалт
+  _launchInProgress = true;
   const gameType = currentRoom?.gameType || '';
   const isRejoin = document.getElementById('btn-launch-wc3').querySelector('span')?.textContent?.includes('Дахин');
   appendSysMsg(isRejoin ? '↩ WC3 дахин нээж байна...' : `"${gameType}" тоглоом эхлүүлж байна...`);
+
+  // HOST: Relay-г WC3 нээхээс ӨМНӨ эхлүүлэх (broadcast алдахгүй)
+  if (!isRejoin && currentRoom?.isHost && !_hostRelayStarted) {
+    try {
+      const myId = String(currentUser?.id);
+      const earlyIps = Object.entries(roomZtIps || {})
+        .filter(([uid]) => uid !== myId)
+        .map(([, ip]) => ip);
+      if (earlyIps.length > 0) {
+        await window.api.startHostRelay(earlyIps);
+        _hostRelayStarted = true;
+        appendSysMsg(`📡 Relay эхэллээ: ${earlyIps.length} тоглогч`);
+      }
+    } catch {}
+  }
+
   try {
     await window.api.launchGame(gameType);
     appendSysMsg('✓ Тоглоом нээгдлээ. LAN горим сонгоно уу.');
@@ -1076,14 +1131,14 @@ document.getElementById('btn-launch-wc3').onclick = async () => {
         appendSysMsg('▶ Тоглолт эхэллээ!');
         if (socket) socket.emit('room:game_started');
         setLaunchBtnRejoin();
-        // Host IP-г олж бусад тоглогчдод broadcast хийх + relay эхлүүлэх
+        // Host IP-г олж бусад тоглогчдод broadcast хийх
         try {
           const ip = await window.api.getZerotierIp();
           if (ip && socket) {
             socket.emit('room:host_ip', { roomId: currentRoom.id, ip });
             showHostIp(ip);
             appendSysMsg(`🎯 Таны IP: ${ip}`);
-            // Тоглогчдын ZT IP жагсаалт авч relay эхлүүлэх
+            // Тоглогчдын ZT IP жагсаалт авч relay шинэчлэх
             socket.emit('room:get_zt_ips', { roomId: currentRoom.id });
           }
         } catch {}
@@ -1091,6 +1146,8 @@ document.getElementById('btn-launch-wc3').onclick = async () => {
     }
   } catch (err) {
     appendSysMsg(`⚠️ ${err.message}`);
+  } finally {
+    _launchInProgress = false;
   }
 };
 

@@ -439,6 +439,9 @@ io.on('connection', (socket) => {
   // Тоглогчийн ZeroTier IP бүртгэх — relay-д хэрэгтэй
   socket.on('room:zt_ip', ({ roomId, ip }) => {
     if (!ip || !roomId) return;
+    if (checkRateLimit(socket)) return;
+    // IP формат шалгах (IPv4 only)
+    if (!/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(ip)) return;
     const userId = String(socket.user.id);
     if (!roomZtIps[roomId]) roomZtIps[roomId] = new Map();
     roomZtIps[roomId].set(userId, ip);
@@ -497,6 +500,13 @@ io.on('connection', (socket) => {
       io.to(roomId).emit('room:user_left', { username });
       io.to(roomId).emit('room:members', [...roomMembers[roomId]]);
     }
+    // Гарсан тоглогчийн ZT IP-г устгаж, бусдад шинэчилсэн жагсаалт илгээх
+    if (roomZtIps[roomId]) {
+      roomZtIps[roomId].delete(userId);
+      io.to(String(roomId)).emit('room:zt_ips', {
+        ips: Object.fromEntries(roomZtIps[roomId]),
+      });
+    }
     // Онлайн статус шинэчлэх
     if (onlineUsers.has(socket.id)) {
       onlineUsers.set(socket.id, { username, userId, status: 'online' });
@@ -549,6 +559,7 @@ io.on('connection', (socket) => {
                 io.to(roomId).emit('room:closed', { reason: 'Өрөөний эзэн гарлаа' });
                 delete roomMessages[roomId];
                 delete roomZtIps[roomId];
+                delete roomMembers[roomId];
                 io.emit('rooms:updated');
                 console.log(`[AutoClose] Host timeout → room ${roomId} хаагдлаа`);
               }

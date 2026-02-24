@@ -200,16 +200,16 @@ async function autoSetup(networkId) {
     if (myIp) break;
   }
 
-  // 5. ZeroTier adapter-г WC3 LAN-д зориулж хамгийн өндөр priority болгох
-  boostAdapterPriority();
+  // 5. ZeroTier adapter priority + Firewall rules (НЭГ UAC промпт)
+  const netSetup = elevatedNetworkSetup();
 
   if (myIp) {
     console.log(`[ZeroTier] Бэлэн! IP: ${myIp}`);
-    return { ok: true, ip: myIp };
+    return { ok: true, ip: myIp, metricSet: netSetup.metric, firewallSet: netSetup.firewall };
   }
 
   console.log('[ZeroTier] IP хаяг олдсонгүй, гэхдээ холбогдсон');
-  return { ok: true, ip: null };
+  return { ok: true, ip: null, metricSet: netSetup.metric, firewallSet: netSetup.firewall };
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -271,21 +271,50 @@ function getStatus(networkId) {
   return { installed, running, connected: !!ip, networkId: nid || null, ip };
 }
 
-// ZeroTier adapter-ийн priority-г хамгийн өндөр болгох (WC3 LAN-д шаардлагатай)
-function boostAdapterPriority() {
+// ZeroTier adapter priority + Windows Firewall — НЭГ UAC промпт-оор
+function elevatedNetworkSetup() {
   try {
-    // PowerShell-ээр ZeroTier adapter олж metric=1 болгох (admin elevation)
-    const psCmd = `$zt = Get-NetAdapter | Where-Object { $_.InterfaceDescription -like '*ZeroTier*' }; if ($zt) { Set-NetIPInterface -InterfaceIndex $zt.ifIndex -InterfaceMetric 1 }`;
+    // PS1 скрипт файлд бичнэ — аргумент дамжуулахад алдаа гарахгүй
+    const scriptDir = path.join(os.tmpdir(), 'wc3-zt-setup');
+    if (!fs.existsSync(scriptDir)) fs.mkdirSync(scriptDir, { recursive: true });
+    const scriptPath = path.join(scriptDir, 'network-setup.ps1');
+
+    fs.writeFileSync(scriptPath, [
+      '# WC3 LAN — ZeroTier adapter priority + Firewall rules',
+      '',
+      '# 1. ZeroTier adapter metric=1 (хамгийн өндөр priority)',
+      '$zt = Get-NetAdapter | Where-Object { $_.InterfaceDescription -like "*ZeroTier*" }',
+      'if ($zt) {',
+      '  Set-NetIPInterface -InterfaceIndex $zt.ifIndex -InterfaceMetric 1 -ErrorAction SilentlyContinue',
+      '  Write-Output "METRIC_OK"',
+      '} else {',
+      '  Write-Output "METRIC_NO_ADAPTER"',
+      '}',
+      '',
+      '# 2. Firewall rules — аль хэдийн байвал алгасна',
+      '$existing = netsh advfirewall firewall show rule name="WC3 LAN UDP In" 2>&1',
+      'if ($existing -match "WC3 LAN UDP In") {',
+      '  Write-Output "FIREWALL_ALREADY"',
+      '} else {',
+      '  netsh advfirewall firewall add rule name="WC3 LAN UDP In" dir=in action=allow protocol=UDP localport=6112 profile=any | Out-Null',
+      '  netsh advfirewall firewall add rule name="WC3 LAN UDP Out" dir=out action=allow protocol=UDP localport=6112 profile=any | Out-Null',
+      '  netsh advfirewall firewall add rule name="WC3 LAN TCP In" dir=in action=allow protocol=TCP localport=6112 profile=any | Out-Null',
+      '  netsh advfirewall firewall add rule name="WC3 LAN TCP Out" dir=out action=allow protocol=TCP localport=6112 profile=any | Out-Null',
+      '  Write-Output "FIREWALL_OK"',
+      '}',
+    ].join('\r\n'), 'utf8');
+
     execSync(
-      `powershell -Command "Start-Process powershell -ArgumentList '-Command','${psCmd.replace(/'/g, "''")}' -Verb RunAs -Wait"`,
-      { stdio: 'pipe', timeout: 15000 }
+      `powershell -ExecutionPolicy Bypass -Command "Start-Process powershell -ArgumentList '-ExecutionPolicy','Bypass','-File','${scriptPath}' -Verb RunAs -Wait"`,
+      { stdio: 'pipe', timeout: 20000 }
     );
-    console.log('[ZeroTier] Adapter priority тохируулагдлаа (metric=1)');
-    return true;
+
+    console.log('[ZeroTier] Network setup хийгдлээ (metric + firewall)');
+    try { fs.rmSync(scriptDir, { recursive: true, force: true }); } catch {}
+    return { metric: true, firewall: true };
   } catch (e) {
-    // UAC цуцалсан эсвэл алдаа — critical биш
-    console.warn('[ZeroTier] Adapter priority тохируулж чадсангүй:', e.message);
-    return false;
+    console.warn('[ZeroTier] Elevated network setup алдаа:', e.message);
+    return { metric: false, firewall: false };
   }
 }
 
@@ -308,5 +337,5 @@ function disconnect() {
 module.exports = {
   joinNetwork, disconnect,
   isInstalled, isRunning, getMyIp, getNodeId, getStatus,
-  ensureInstalled, ensureRunning, autoSetup, boostAdapterPriority,
+  ensureInstalled, ensureRunning, autoSetup, elevatedNetworkSetup,
 };
