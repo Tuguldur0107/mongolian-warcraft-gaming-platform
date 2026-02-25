@@ -99,11 +99,12 @@ async function connectSocket() {
     showRoomInvite(fromUsername, roomId, roomName);
   });
 
-  socket.on('disconnect', () => {
-    console.log('Socket салгагдлаа');
+  socket.on('disconnect', (reason) => {
+    console.log('Socket салгагдлаа:', reason);
     updateConnectionStatus('offline');
-    // Өрөөнд байсан бол reconnecting мессеж харуулах
-    if (currentRoom) {
+    // ZT setup-ийн үед routing table өөрчлөгдөж түр тасрах нь хэвийн
+    // Socket.io автомат дахин холбогдоно — хэрэглэгчид мэдэгдэх шаардлагагүй
+    if (currentRoom && !_ztSetupInProgress) {
       appendSysMsg('⚠ Холболт тасарлаа. Дахин холбогдож байна...');
     }
   });
@@ -454,7 +455,9 @@ async function init() {
   });
 
   // ── ZeroTier автомат тохиргоо статус ─────────────────
+  _ztSetupInProgress = true;
   window.api.onZtSetupComplete?.(async (result) => {
+    _ztSetupInProgress = false;
     if (result.ok) {
       console.log('[ZT] Автомат тохиргоо амжилттай. IP:', result.ip || 'хүлээж байна');
 
@@ -1102,6 +1105,7 @@ function showHostIp(ip) {
 // Тоглоом эхлүүлэх / дахин нэвтрэх
 let _hostRelayStarted = false;
 let _launchInProgress = false;
+let _ztSetupInProgress = false;
 document.getElementById('btn-launch-wc3').onclick = async () => {
   if (_launchInProgress) return; // Double-click хамгаалалт
   _launchInProgress = true;
