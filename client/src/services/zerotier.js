@@ -109,7 +109,7 @@ async function ensureInstalled() {
 
     console.log('[ZeroTier] Суулгаж байна...');
     execSync(
-      `powershell -ExecutionPolicy Bypass -File "${psScript}"`,
+      `powershell -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "${psScript}"`,
       { stdio: 'pipe', timeout: 180000 }
     );
   } catch (e) {
@@ -152,7 +152,7 @@ async function ensureRunning() {
     try {
       // Admin шаардлагатай бол elevation ашиглах
       execSync(
-        `powershell -Command "Start-Process net -ArgumentList 'start','ZeroTierOneService' -Verb RunAs -Wait"`,
+        `powershell -NoProfile -WindowStyle Hidden -Command "Start-Process net -ArgumentList 'start','ZeroTierOneService' -Verb RunAs -Wait -WindowStyle Hidden"`,
         { stdio: 'pipe', timeout: 30000 }
       );
     } catch (e) {
@@ -305,7 +305,7 @@ function elevatedNetworkSetup() {
     ].join('\r\n'), 'utf8');
 
     execSync(
-      `powershell -ExecutionPolicy Bypass -Command "Start-Process powershell -ArgumentList '-ExecutionPolicy','Bypass','-File','${scriptPath}' -Verb RunAs -Wait"`,
+      `powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process powershell -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-WindowStyle','Hidden','-File','${scriptPath}' -Verb RunAs -Wait -WindowStyle Hidden"`,
       { stdio: 'pipe', timeout: 20000 }
     );
 
