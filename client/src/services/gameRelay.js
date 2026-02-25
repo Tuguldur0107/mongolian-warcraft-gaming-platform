@@ -6,9 +6,9 @@
  *   - Тоглогч бүрийн IP руу port 6112-оос forward (WC3 зөвхөн :6112-оос хүлээн авна)
  *
  * PLAYER MODE (startFinder):
- *   - Port 6112 дээр catcher сонсож, relay-ээс ирсэн GAMEINFO-г барина
- *   - GAMEINFO-г 255.255.255.255:6112 + 127.0.0.1:6112 руу дахин broadcast
- *   - W3GS_SEARCHGAME packet-ыг host IP руу илгээнэ
+ *   - W3GS_SEARCHGAME packet-ыг host IP руу илгээж GAMEINFO trigger хийнэ
+ *   - Port 6112-г WC3-д үлдээнэ (bind зөрчилгүй)
+ *   - Host relay GAMEINFO-г port 6112-оос илгээдэг → WC3 шууд хүлээн авна
  *
  * WC3 protocol: 0xF7 header, UDP port 6112
  */
@@ -61,10 +61,23 @@ function startHost(playerIps) {
 
   const state = { ips, running: true, listener: null, sender: null };
 
-  // Sender — зөвхөн SEARCHGAME-г localhost WC3 руу forward хийхэд ашиглана
+  // Sender — SEARCHGAME-г localhost WC3 руу forward + WC3-ийн хариу GAMEINFO-г барих
   // (listener-ээр localhost руу илгээвэл loop үүснэ)
   state.sender = dgram.createSocket('udp4');
   state.sender.on('error', (e) => console.error('[GameRelay:Host] sender:', e.message));
+
+  // WC3 SEARCHGAME-д хариулж GAMEINFO илгээхэд sender-ээр барьж,
+  // listener (port 6112) ашиглан тоглогчид руу forward хийнэ
+  state.sender.on('message', (msg, rinfo) => {
+    if (!state.running) return;
+    if (!msg.length || msg[0] !== W3_HEADER) return;
+    if (msg[1] !== W3_GAMEINFO) return;
+    for (const ip of state.ips) {
+      try {
+        state.listener.send(msg, 0, msg.length, WC3_PORT, ip);
+      } catch {}
+    }
+  });
 
   // Listener — port 6112 дээр WC3 broadcast capture + GAMEINFO forward
   state.listener = dgram.createSocket({ type: 'udp4', reuseAddr: true });
@@ -120,7 +133,11 @@ function addHostPlayerIp(ip) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// PLAYER MODE — Game Finder (catcher + SEARCHGAME → broadcast)
+// PLAYER MODE — Game Finder (SEARCHGAME → WC3 шууд хүлээн авна)
+//
+// Port 6112-г WC3-д үлдээнэ (bind зөрчилгүй).
+// Host relay GAMEINFO-г port 6112-оос илгээдэг тул WC3 шууд хүлээн авна.
+// Finder зөвхөн SEARCHGAME илгээж host WC3-г trigger хийнэ.
 // ═══════════════════════════════════════════════════════════
 function startFinder(hostIp) {
   stopFinder();
@@ -133,56 +150,36 @@ function startFinder(hostIp) {
     hostIp,
     running: true,
     socket: null,
-    broadcaster: null,
-    catcher: null,       // Port 6112 дээр GAMEINFO барих
     timer: null,
     foundVersion: null,
   };
 
-  // Socket — SEARCHGAME илгээх + GAMEINFO хүлээн авах (random port)
+  // Socket — SEARCHGAME илгээх + GAMEINFO хүлээн авах (random port, version detect-д ашиглана)
   state.socket = dgram.createSocket('udp4');
   state.socket.on('error', (e) => console.error('[GameRelay:Finder] socket:', e.message));
 
   state.socket.on('message', (msg, rinfo) => {
     if (!state.running) return;
     if (!msg.length || msg[0] !== W3_HEADER) return;
-    if (msg[1] === W3_GAMEINFO) {
-      console.log(`[GameRelay:Finder] GAMEINFO (socket): ${rinfo.address}:${rinfo.port}, ${msg.length}b`);
-      handleGameInfo(state, msg);
+    if (msg[1] === W3_GAMEINFO && !state.foundVersion) {
+      // Хувилбар илрүүлэх (зөвхөн нэг удаа)
+      if (msg.length >= 12) {
+        try {
+          const product = msg.toString('ascii', 4, 8);
+          const version = msg.readUInt32LE(8);
+          if (SEARCH_VERSIONS.some(v => v.product === product && v.version === version)) {
+            state.foundVersion = { product, version };
+          }
+        } catch {}
+      }
+      if (!state.foundVersion) state.foundVersion = SEARCH_VERSIONS[0];
+      console.log(`[GameRelay:Finder] WC3 хувилбар: ${state.foundVersion.product} v${state.foundVersion.version}`);
     }
   });
 
-  // Broadcaster — GAMEINFO-г 255.255.255.255:6112 + 127.0.0.1:6112 руу broadcast
-  state.broadcaster = dgram.createSocket({ type: 'udp4', reuseAddr: true });
-  state.broadcaster.on('error', (e) => console.error('[GameRelay:Finder] broadcaster:', e.message));
-  state.broadcaster.bind(0, '0.0.0.0', () => {
-    try { state.broadcaster.setBroadcast(true); } catch {}
-  });
-
-  // CATCHER — port 6112 дээр reuseAddr-ээр сонсож, relay-ээс ирсэн GAMEINFO-г барина
-  // WC3 нь unicast GAMEINFO хүлээн авахгүй байж болно, тиймээс
-  // бид барьж аваад 255.255.255.255 + 127.0.0.1 руу дахин broadcast хийнэ
-  state.catcher = dgram.createSocket({ type: 'udp4', reuseAddr: true });
-  state.catcher.on('error', (e) => console.error('[GameRelay:Finder] catcher:', e.message));
-
-  state.catcher.on('message', (msg, rinfo) => {
-    if (!state.running) return;
-    if (!msg.length || msg[0] !== W3_HEADER) return;
-    // ЗӨВХӨН host IP-ээс ирсэн GAMEINFO-г хүлээн авна
-    // Бусад тоглогчийн rebroadcast-ыг алгасна → broadcast storm-аас хамгаална
-    if (rinfo.address !== state.hostIp) return;
-    if (msg[1] === W3_GAMEINFO) {
-      console.log(`[GameRelay:Finder] GAMEINFO (catcher :6112): ${rinfo.address}:${rinfo.port}, ${msg.length}b`);
-      handleGameInfo(state, msg);
-    }
-  });
-
-  state.catcher.bind(WC3_PORT, '0.0.0.0', () => {
-    try { state.catcher.setBroadcast(true); } catch {}
-    console.log('[GameRelay:Finder] Catcher port 6112 дээр сонсож байна');
-  });
-
-  // SEARCHGAME илгээх — бүх хувилбарыг НЭГ ЗЭРЭГ
+  // SEARCHGAME илгээх — host WC3-г GAMEINFO broadcast хийхэд trigger хийнэ
+  // Host relay GAMEINFO-г port 6112-оос тоглогч руу forward хийдэг →
+  // WC3 port 6112 дээр шууд хүлээн авна (source port 6112 учир WC3 зөвшөөрнө)
   function sendSearch() {
     if (!state.running) return;
     try {
@@ -200,42 +197,8 @@ function startFinder(hostIp) {
   }
 
   sendSearch();
-  console.log(`[GameRelay:Finder] Эхэллээ — host: ${hostIp}`);
+  console.log(`[GameRelay:Finder] Эхэллээ — host: ${hostIp} (WC3 port 6112 шууд хүлээн авна)`);
   _finder = state;
-}
-
-function handleGameInfo(state, msg) {
-  // Олдсон хувилбарыг санах (parse амжилтгүй байсан ч broadcast хийнэ)
-  if (!state.foundVersion) {
-    if (msg.length >= 12) {
-      try {
-        const product = msg.toString('ascii', 4, 8);
-        const version = msg.readUInt32LE(8);
-        if (SEARCH_VERSIONS.some(v => v.product === product && v.version === version)) {
-          state.foundVersion = { product, version };
-        }
-      } catch {}
-    }
-    if (!state.foundVersion) state.foundVersion = SEARCH_VERSIONS[0];
-    console.log(`[GameRelay:Finder] WC3 хувилбар: ${state.foundVersion.product} v${state.foundVersion.version}`);
-  }
-
-  // GAMEINFO-г локал broadcast хийх → WC3 тоглоом харуулна
-  broadcastGameInfo(state, msg);
-}
-
-function broadcastGameInfo(state, gameInfoPacket) {
-  if (!state.broadcaster) return;
-  // 255.255.255.255 — бүх adapter дээр broadcast
-  try {
-    state.broadcaster.send(gameInfoPacket, 0, gameInfoPacket.length, WC3_PORT, '255.255.255.255');
-  } catch (e) {
-    console.error('[GameRelay:Finder] broadcast алдаа:', e.message);
-  }
-  // 127.0.0.1 — localhost fallback (broadcast амжилтгүй байсан ч WC3 авна)
-  try {
-    state.broadcaster.send(gameInfoPacket, 0, gameInfoPacket.length, WC3_PORT, '127.0.0.1');
-  } catch {}
 }
 
 function stopFinder() {
@@ -243,8 +206,6 @@ function stopFinder() {
   _finder.running = false;
   if (_finder.timer) clearTimeout(_finder.timer);
   try { _finder.socket?.close(); } catch {}
-  try { _finder.broadcaster?.close(); } catch {}
-  try { _finder.catcher?.close(); } catch {}
   _finder = null;
   console.log('[GameRelay:Finder] Зогслоо');
 }

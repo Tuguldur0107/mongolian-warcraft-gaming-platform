@@ -230,6 +230,8 @@ async function connectSocket() {
 
   // Тоглолт эхэлсэн (эзэн биш тоглогчдод) — WC3 автомат нээгдэнэ
   socket.on('room:started', async () => {
+    // Host аль хэдийн WC3 нээсэн (btn-launch-wc3 handler-ээс) — давхар нээхгүй
+    if (currentRoom?.isHost) return;
     appendSysMsg('▶ Тоглолт эхэллээ! WC3 нээж байна...');
     socket.emit('room:game_started');
     // "Дахин нэвтрэх" товчийг харуулах
