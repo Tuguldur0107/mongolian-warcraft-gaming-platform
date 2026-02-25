@@ -30,7 +30,8 @@
             "x64"
           ]
         }
-      ]
+      ],
+      "artifactName": "${productName} ${version}.${ext}"
     },
     "nsis": {
       "oneClick": false,
@@ -38,7 +39,8 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "Mongolian Warcraft Platform",
-      "include": "nsis-extra.nsh"
+      "include": "nsis-extra.nsh",
+      "artifactName": "${productName} Setup ${version}.${ext}"
     },
     "extraResources": [
       {
