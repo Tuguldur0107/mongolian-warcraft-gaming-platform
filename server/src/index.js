@@ -237,8 +237,13 @@ function checkRateLimit(socket) {
 }
 
 // ── Socket.io — Чат & өрөөний event ─────────────────────
-// roomId → Set of usernames
+// roomId → Map<username, userId>
 const roomMembers = {};
+// Helper: Map-аас [{id, name}] массив үүсгэх
+function membersArray(roomId) {
+  if (!roomMembers[roomId]) return [];
+  return [...roomMembers[roomId].entries()].map(([name, id]) => ({ id, name }));
+}
 // socketId → { username, userId, status } (лобби дахь онлайн тоглогчид)
 const onlineUsers = new Map();
 // String(userId) → socketId (private мессеж илгээхэд хэрэг)
@@ -337,7 +342,7 @@ io.on('connection', (socket) => {
     socket.data.roomId   = roomId;
     socket.data.username = username;
 
-    if (!roomMembers[roomId]) roomMembers[roomId] = new Set();
+    if (!roomMembers[roomId]) roomMembers[roomId] = new Map();
 
     // Хэрэв өөр өрөөний grace period байвал цуцлаад тэр өрөөнөөс гарна
     if (disconnectTimers[userId] && disconnectTimers[userId].roomId !== String(roomId)) {
@@ -347,7 +352,7 @@ io.on('connection', (socket) => {
       if (roomMembers[prev.roomId]) {
         roomMembers[prev.roomId].delete(prev.username);
         io.to(prev.roomId).emit('room:user_left', { username: prev.username });
-        io.to(prev.roomId).emit('room:members', [...roomMembers[prev.roomId]]);
+        io.to(prev.roomId).emit('room:members', membersArray(prev.roomId));
       }
     }
 
@@ -359,7 +364,7 @@ io.on('connection', (socket) => {
       socket.to(roomId).emit('room:user_rejoined', { username });
       console.log(`[Rejoin] ${username} дахин нэгдлээ → өрөө ${roomId}`);
     } else {
-      roomMembers[roomId].add(username);
+      roomMembers[roomId].set(username, userId);
       socket.to(roomId).emit('room:user_joined', { username });
       console.log(`[Socket] ${username} → өрөө ${roomId}`);
     }
@@ -370,7 +375,7 @@ io.on('connection', (socket) => {
       io.emit('lobby:online_users', [...onlineUsers.values()]);
     }
 
-    io.to(roomId).emit('room:members', [...roomMembers[roomId]]);
+    io.to(roomId).emit('room:members', membersArray(roomId));
     // Өрөөний чатын түүх илгээх (хожуу нэгдсэн тоглогчид)
     socket.emit('room:history', roomMessages[roomId] || []);
   });
@@ -469,6 +474,35 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Host WC3 хаагдсан — бүх тоглогчдод мэдэгдэх, room status → waiting
+  socket.on('room:host_game_ended', async ({ roomId }) => {
+    if (!roomId) return;
+    const userId = String(socket.user.id);
+    // Host эсэхийг шалгах
+    if (dbForMigration) {
+      try {
+        const rr = await dbForMigration.query(
+          'SELECT host_id FROM rooms WHERE id=$1', [roomId]
+        );
+        if (!rr.rows[0] || String(rr.rows[0].host_id) !== userId) return;
+        // Room status → waiting (дахин эхлүүлэх боломжтой)
+        await dbForMigration.query(
+          "UPDATE rooms SET status='waiting' WHERE id=$1", [roomId]
+        );
+      } catch (e) { console.error('[HostGameEnded] DB:', e.message); }
+    }
+    // Бүх тоглогчдод broadcast
+    socket.to(String(roomId)).emit('room:host_game_ended');
+    io.emit('rooms:updated');
+    // Онлайн статус шинэчлэх
+    const username = socket.user.username;
+    if (onlineUsers.has(socket.id)) {
+      onlineUsers.set(socket.id, { username, userId, status: 'in_room' });
+      io.emit('lobby:online_users', [...onlineUsers.values()]);
+    }
+    console.log(`[HostGameEnded] ${username} → room ${roomId} waiting`);
+  });
+
   // Typing indicator (DM)
   socket.on('typing:start', ({ toUserId }) => {
     const toSocketId = userSockets.get(String(toUserId));
@@ -498,7 +532,7 @@ io.on('connection', (socket) => {
     if (roomMembers[roomId]) {
       roomMembers[roomId].delete(username);
       io.to(roomId).emit('room:user_left', { username });
-      io.to(roomId).emit('room:members', [...roomMembers[roomId]]);
+      io.to(roomId).emit('room:members', membersArray(roomId));
     }
     // Гарсан тоглогчийн ZT IP-г устгаж, бусдад шинэчилсэн жагсаалт илгээх
     if (roomZtIps[roomId]) {
@@ -544,7 +578,7 @@ io.on('connection', (socket) => {
           if (roomMembers[roomId]) {
             roomMembers[roomId].delete(username);
             io.to(roomId).emit('room:user_left', { username });
-            io.to(roomId).emit('room:members', [...roomMembers[roomId]]);
+            io.to(roomId).emit('room:members', membersArray(roomId));
           }
           // Хост байсан бол DB-с өрөөг автоматаар устгах
           if (dbForMigration && userId) {

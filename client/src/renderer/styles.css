@@ -359,6 +359,10 @@ tr:hover td { background: var(--card); }
 .members-list li::before { content: '●'; color: var(--green); font-size: 0.6rem; }
 .member-info { display: flex; flex-direction: column; flex: 1; min-width: 0; }
 .member-zt-ip { font-size: 0.7rem; color: var(--accent); opacity: 0.8; font-family: monospace; }
+.zt-settings-row { display: flex; align-items: center; gap: 16px; }
+.max-players-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.max-players-row label { margin-bottom: 0; }
+.select-sm { padding: 3px 8px; font-size: 0.82rem; border-radius: 6px; background: var(--bg2); color: var(--text1); border: 1px solid var(--bg3); }
 
 .hint { font-size: 0.82rem; color: var(--text2); line-height: 1.5; margin-bottom: 12px; }
 

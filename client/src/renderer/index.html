@@ -407,6 +407,20 @@
       </div>
 
       <div class="card settings-card mt-8">
+        <h3>🌐 ZeroTier сүлжээ</h3>
+        <div class="zt-settings-row">
+          <span class="hint hint-no-margin">IP хаяг: <strong id="settings-zt-ip">---</strong></span>
+          <span class="hint hint-no-margin" id="settings-zt-status"></span>
+        </div>
+        <p class="hint mt-8" id="zt-refresh-msg" style="font-family:monospace;font-size:0.78rem"></p>
+        <button type="button" id="btn-zt-refresh" class="btn btn-primary btn-with-icon mt-8">
+          <svg class="btn-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          IP шинэчлэх
+        </button>
+        <p class="hint mt-4" style="font-size:0.75rem;color:var(--text2)">IP олдохгүй бол энэ товчийг дарж ZeroTier-г дахин тохируулна.</p>
+      </div>
+
+      <div class="card settings-card mt-8">
         <h3>🔄 Програмын шинэчлэл</h3>
         <div class="update-header-row">
           <span class="hint hint-no-margin">Одоогийн хувилбар: <strong id="app-version">...</strong></span>
@@ -465,6 +479,17 @@
       <div class="side-panel">
         <div class="card">
           <h3>👥 Тоглогчид <span id="members-count" class="hint"></span></h3>
+          <div id="max-players-row" class="max-players-row hidden">
+            <label class="hint">Дээд хязгаар:</label>
+            <select id="select-max-players" class="select-sm">
+              <option value="2">2</option>
+              <option value="4">4</option>
+              <option value="6">6</option>
+              <option value="8">8</option>
+              <option value="10" selected>10</option>
+              <option value="12">12</option>
+            </select>
+          </div>
           <ul id="members-list" class="members-list"></ul>
         </div>
         <div class="card">
@@ -472,7 +497,9 @@
           <p class="hint" id="room-info-text"></p>
           <div id="zt-info" class="hint">
             <div>🌐 ZeroTier: <code id="zt-network-id"></code></div>
-            <div id="zt-my-ip">📍 Миний IP: <code id="zt-my-ip-val"></code></div>
+            <div id="zt-my-ip">📍 Миний IP: <code id="zt-my-ip-val"></code>
+              <button type="button" id="btn-refresh-zt-ip" class="btn btn-sm" title="IP шинэчлэх">🔄</button>
+            </div>
             <div id="zt-host-ip">
               🎯 Host IP: <code id="zt-host-ip-val"></code>
               <button type="button" id="btn-copy-host-ip" class="btn btn-sm" title="IP хуулах">📋</button>

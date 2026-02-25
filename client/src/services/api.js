@@ -75,6 +75,11 @@ async function updateRoomNetwork(roomId, networkId) {
   return data;
 }
 
+async function updateRoom(roomId, updates) {
+  const { data } = await getClient().patch(`/rooms/${roomId}`, updates);
+  return data;
+}
+
 async function getPlayerStats(discordId) {
   const { data } = await getClient().get(`/stats/player/${discordId}`);
   return data;
@@ -224,6 +229,7 @@ module.exports = {
   closeRoom,
   kickPlayer,
   updateRoomNetwork,
+  updateRoom,
   getPlayerStats,
   getPlayerStatsById,
   getRanking,

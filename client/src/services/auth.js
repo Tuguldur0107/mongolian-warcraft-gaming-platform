@@ -4,9 +4,20 @@ const { app } = require('electron');
 
 const TOKEN_PATH = path.join(app.getPath('userData'), 'token.json');
 
-function saveToken(token) {
+function saveToken(token, userData) {
   const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString());
-  fs.writeFileSync(TOKEN_PATH, JSON.stringify({ token, user: payload }), 'utf-8');
+  // userData байвал бүрэн хэрэглэгчийн мэдээлэл хадгална (avatar_url, email, wins, losses г.м.)
+  const user = userData ? { ...payload, ...userData } : payload;
+  fs.writeFileSync(TOKEN_PATH, JSON.stringify({ token, user }), 'utf-8');
+}
+
+function updateUser(updates) {
+  try {
+    const data = JSON.parse(fs.readFileSync(TOKEN_PATH, 'utf-8'));
+    data.user = { ...data.user, ...updates };
+    fs.writeFileSync(TOKEN_PATH, JSON.stringify(data), 'utf-8');
+    return data.user;
+  } catch { return null; }
 }
 
 function getToken() {
@@ -44,4 +55,4 @@ function clearToken() {
   } catch {}
 }
 
-module.exports = { saveToken, getToken, getUser, clearToken };
+module.exports = { saveToken, getToken, getUser, updateUser, clearToken };

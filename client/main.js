@@ -172,7 +172,10 @@ function handleDeepLink(url) {
     const token = parsed.searchParams.get('token');
     if (token) {
       authService.saveToken(token);
-      mainWindow?.webContents.send('auth:success', authService.getUser());
+      // Серверээс бүрэн мэдээлэл (avatar_url г.м.) авах
+      fetchAndSaveUser().then(() => {
+        mainWindow?.webContents.send('auth:success', authService.getUser());
+      });
     }
   }
 }
@@ -205,7 +208,9 @@ ipcMain.handle('auth:login', () => {
       if (token) {
         authWin.close();
         authService.saveToken(token);
-        mainWindow?.webContents.send('auth:success', authService.getUser());
+        fetchAndSaveUser().then(() => {
+          mainWindow?.webContents.send('auth:success', authService.getUser());
+        });
       }
       return true;
     }
@@ -263,7 +268,9 @@ ipcMain.handle('auth:qr', async () => {
         if (data.token) {
           clearInterval(poll);
           authService.saveToken(data.token);
-          mainWindow?.webContents.send('auth:success', authService.getUser());
+          fetchAndSaveUser().then(() => {
+            mainWindow?.webContents.send('auth:success', authService.getUser());
+          });
           console.log('[QR] Нэвтэрлээ!');
         }
       } catch {}
@@ -282,12 +289,26 @@ function apiError(err) {
   return new Error(msg);
 }
 
+// Серверээс хэрэглэгчийн бүрэн мэдээлэл авч локал хадгалах
+async function fetchAndSaveUser() {
+  const token = authService.getToken();
+  if (!token) return null;
+  try {
+    const axios = require('axios');
+    const { data } = await axios.get(`${apiService.SERVER_URL}/auth/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (data) authService.updateUser(data);
+    return data;
+  } catch { return null; }
+}
+
 // Имэйл бүртгэл
 ipcMain.handle('auth:register', async (_, { username, email, password }) => {
   const axios = require('axios');
   try {
     const { data } = await axios.post(`${apiService.SERVER_URL}/auth/register`, { username, email, password });
-    if (data.token) authService.saveToken(data.token);
+    if (data.token) authService.saveToken(data.token, data.user);
     return data;
   } catch (err) { throw apiError(err); }
 });
@@ -297,7 +318,7 @@ ipcMain.handle('auth:emailLogin', async (_, { email, password }) => {
   const axios = require('axios');
   try {
     const { data } = await axios.post(`${apiService.SERVER_URL}/auth/login`, { email, password });
-    if (data.token) authService.saveToken(data.token);
+    if (data.token) authService.saveToken(data.token, data.user);
     return data;
   } catch (err) { throw apiError(err); }
 });
@@ -392,6 +413,7 @@ ipcMain.handle('auth:logout', async () => {
 });
 
 ipcMain.handle('auth:getUser',  () => authService.getUser());
+ipcMain.handle('auth:refreshUser', () => fetchAndSaveUser());
 ipcMain.handle('auth:getToken', () => authService.getToken());
 
 // Өрөөнүүд
@@ -438,6 +460,10 @@ ipcMain.handle('rooms:join', async (event, roomId, password) => {
 
 ipcMain.handle('rooms:start', async (event, roomId) => {
   try { return await apiService.startRoom(roomId); } catch (err) { throw apiError(err); }
+});
+
+ipcMain.handle('rooms:update', async (event, roomId, updates) => {
+  try { return await apiService.updateRoom(roomId, updates); } catch (err) { throw apiError(err); }
 });
 
 ipcMain.handle('rooms:close', async (event, roomId) => {
@@ -698,6 +724,7 @@ ipcMain.handle('auth:uploadAvatar', async () => {
       { headers: { Authorization: `Bearer ${token}` } }
     );
     if (data.token) authService.saveToken(data.token);
+    authService.updateUser({ avatar_url: base64 });
     return { avatar_url: base64 };
   } catch (err) { throw apiError(err); }
 });
@@ -766,6 +793,22 @@ ipcMain.handle('discord:openInvite', async (_, url) => {
 ipcMain.handle('zt:status', (_, networkId) => zerotierService.getStatus(networkId));
 ipcMain.handle('zt:ip',     (_, networkId) => zerotierService.getMyIp(networkId));
 ipcMain.handle('zt:nodeId', ()             => zerotierService.getNodeId());
+ipcMain.handle('zt:refresh', async () => {
+  // Settings-аас network ID авах, эсвэл серверээс
+  const s = migrateSettings(readSettings());
+  let networkId = s.zerotierNetworkId;
+  if (!networkId) {
+    try {
+      const { data } = await axios.get(`${SERVER_URL}/config`);
+      networkId = data?.zerotierNetworkId;
+    } catch {}
+  }
+  if (!networkId) return { ok: false, error: 'no-network-id', installed: false, running: false, ip: null, nodeId: null };
+  // Бүрэн autoSetup — суулгах, сервис, join, IP хүлээх, metric+firewall
+  const result = await zerotierService.autoSetup(networkId);
+  const nodeId = zerotierService.getNodeId();
+  return { ...result, nodeId, networkId };
+});
 
 // Game Relay — Host: capture+forward, Player: search+rebroadcast
 ipcMain.handle('relay:startHost', (_, playerIps) => {
@@ -786,6 +829,8 @@ ipcMain.handle('relay:addHostPlayer', (_, ip) => {
 });
 
 // Тоглоом эхлүүлэх (gameType нэрээр тохирох exe хайна)
+let _gameProc = null;
+
 ipcMain.handle('game:launch', (_, gameType) => {
   const s = migrateSettings(readSettings());
   const games = s.games;
@@ -796,11 +841,22 @@ ipcMain.handle('game:launch', (_, gameType) => {
     throw new Error(`"${game.name}" файл олдсонгүй: ${game.path}`);
   }
   const proc = spawn(game.path, [], { detached: false, stdio: 'ignore' });
+  _gameProc = proc;
 
   // WC3 хаагдахад renderer-т мэдэгдэнэ
   proc.on('exit', () => {
+    _gameProc = null;
     mainWindow?.webContents.send('game:exited');
   });
 
+  return true;
+});
+
+// WC3-г force kill хийх (host хаахад тоглогчдыг гаргах)
+ipcMain.handle('game:kill', () => {
+  if (_gameProc) {
+    try { _gameProc.kill(); } catch {}
+    _gameProc = null;
+  }
   return true;
 });

@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('api', {
   getQR:        () => ipcRenderer.invoke('auth:qr'),
   logout:       () => ipcRenderer.invoke('auth:logout'),
   getUser:      () => ipcRenderer.invoke('auth:getUser'),
+  refreshUser:  () => ipcRenderer.invoke('auth:refreshUser'),
   getToken:     () => ipcRenderer.invoke('auth:getToken'),
   onAuthSuccess:(cb) => ipcRenderer.on('auth:success', (_, user) => cb(user)),
 
@@ -21,6 +22,7 @@ contextBridge.exposeInMainWorld('api', {
   joinRoom:   (id, pass)       => ipcRenderer.invoke('rooms:join', id, pass),
   leaveRoom:  (id)             => ipcRenderer.invoke('rooms:leave', id),
   closeRoom:  (id)             => ipcRenderer.invoke('rooms:close', id),
+  updateRoom: (id, updates)    => ipcRenderer.invoke('rooms:update', id, updates),
   startRoom:  (id)             => ipcRenderer.invoke('rooms:start', id),
   kickPlayer: (roomId, userId) => ipcRenderer.invoke('rooms:kick', roomId, userId),
 
@@ -33,6 +35,7 @@ contextBridge.exposeInMainWorld('api', {
   // Тоглоом дуусах event
   onGameResult: (cb) => ipcRenderer.on('game:result', (_, data) => cb(data)),
   onGameExited: (cb) => ipcRenderer.on('game:exited', () => cb()),
+  killGame:     ()   => ipcRenderer.invoke('game:kill'),
 
   // Socket events (main → renderer)
   onRoomClosed: (cb) => ipcRenderer.on('room:closed', (_, d) => cb(d)),
@@ -49,6 +52,7 @@ contextBridge.exposeInMainWorld('api', {
   getZerotierStatus: (networkId) => ipcRenderer.invoke('zt:status', networkId),
   getZerotierIp:     (networkId) => ipcRenderer.invoke('zt:ip', networkId),
   getZerotierNodeId: ()          => ipcRenderer.invoke('zt:nodeId'),
+  refreshZerotier:   ()          => ipcRenderer.invoke('zt:refresh'),
 
   // Game Relay — Host: capture+forward, Player: search+rebroadcast
   startHostRelay:  (playerIps) => ipcRenderer.invoke('relay:startHost', playerIps),

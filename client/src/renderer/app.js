@@ -122,6 +122,11 @@ async function connectSocket() {
   socket.on('room:updated', (room) => {
     if (currentRoom) {
       if (room.name) document.getElementById('room-title').textContent = room.name;
+      if (room.max_players) {
+        currentRoom.maxPlayers = room.max_players;
+        const sel = document.getElementById('select-max-players');
+        if (sel) sel.value = String(room.max_players);
+      }
       appendSysMsg(`⚙ Өрөөний тохиргоо шинэчлэгдлээ`);
     }
   });
@@ -291,12 +296,41 @@ async function connectSocket() {
     }
   });
 
-  // WC3 хаагдсан → rejoin мэдэгдэл
+  // WC3 хаагдсан
+  let _hostKilledGame = false; // host хаасан учир game:exited давхар харуулахгүй
   window.api.onGameExited(() => {
     if (!currentRoom) return;
-    appendSysMsg('⚠ WC3 хаагдлаа. Дахин нэвтрэхийн тулд доорх товчийг дарна уу.');
-    setLaunchBtnRejoin();
-    showToast('WC3 хаагдлаа — "↩ Дахин нэвтрэх" дарж буцаж орно уу', 'warning', 8000);
+    if (currentRoom.isHost) {
+      // HOST: тоглогчдод мэдэгдэж, дахин эхлүүлэх товч харуулах
+      if (socket) socket.emit('room:host_game_ended', { roomId: currentRoom.id });
+      _hostRelayStarted = false;
+      try { window.api.stopRelay(); } catch {}
+      appendSysMsg('⚠ WC3 хаагдлаа. "▶ Тоглолт эхлүүлэх" дарж дахин эхлүүлнэ үү.');
+      resetLaunchBtn(true);
+      const launchBtn = document.getElementById('btn-launch-wc3');
+      if (launchBtn) launchBtn.style.display = '';
+    } else {
+      // PLAYER: host хаасан үед killGame() → game:exited гарна, давхардуулахгүй
+      if (_hostKilledGame) { _hostKilledGame = false; return; }
+      appendSysMsg('⚠ WC3 хаагдлаа. Дахин нэвтрэхийн тулд доорх товчийг дарна уу.');
+      setLaunchBtnRejoin();
+      showToast('WC3 хаагдлаа — "↩ Дахин нэвтрэх" дарж буцаж орно уу', 'warning', 8000);
+    }
+  });
+
+  // Host WC3 хаагдсан — тоглогчийн WC3-г автомат хаах
+  socket.on('room:host_game_ended', async () => {
+    if (!currentRoom || currentRoom.isHost) return;
+    _hostKilledGame = true; // game:exited давхар handler-г зогсоох
+    appendSysMsg('⚠ Host тоглоомыг хаалаа. Таны WC3 хаагдаж байна...');
+    showToast('Host тоглоомыг хаалаа', 'warning', 5000);
+    // WC3 kill + relay зогсоох
+    try { await window.api.killGame(); } catch {}
+    try { window.api.stopRelay(); } catch {}
+    // Товчийг нуух — host дахин эхлүүлэхэд автомат нээгдэнэ
+    const launchBtn = document.getElementById('btn-launch-wc3');
+    if (launchBtn) launchBtn.style.display = 'none';
+    appendSysMsg('⏳ Host дахин тоглоом эхлүүлэхийг хүлээж байна...');
   });
 }
 
@@ -417,6 +451,11 @@ async function init() {
     loadRooms();
     connectSocket();
     loadUnreadDMCounts();
+    // Серверээс бүрэн мэдээлэл (avatar_url г.м.) шинэчлэх
+    window.api.refreshUser?.().then(async () => {
+      const fresh = await window.api.getUser();
+      if (fresh) { currentUser = fresh; setUserUI(fresh); }
+    }).catch(() => {});
   } else {
     showPage('page-login');
     loadQR();
@@ -944,7 +983,8 @@ function _enterRoomUI(id, name, gameType, isHost, hostId, status, ztNetId) {
   _hostRelayStarted = false;
   _launchInProgress = false;
   try { window.api.stopRelay(); } catch {}
-  currentRoom = { id, name, gameType, isHost, hostId: hostId || String(currentUser?.id) };
+  const cached = roomsCache[id] || {};
+  currentRoom = { id, name, gameType, isHost, hostId: hostId || String(currentUser?.id), maxPlayers: cached.max_players || 10 };
 
   document.getElementById('room-title').textContent = name;
   document.getElementById('room-badge').textContent = gameType;
@@ -957,6 +997,25 @@ function _enterRoomUI(id, name, gameType, isHost, hostId, status, ztNetId) {
   document.getElementById('btn-close-room').style.display = isHost ? 'block' : 'none';
   document.getElementById('btn-leave-room').style.display = isHost ? 'none' : 'block';
   document.getElementById('btn-close-room').classList.remove('hidden');
+
+  // Host: гишүүний дээд хязгаар тохируулах
+  const maxRow = document.getElementById('max-players-row');
+  if (maxRow) {
+    if (isHost) {
+      maxRow.classList.remove('hidden');
+      const sel = document.getElementById('select-max-players');
+      sel.value = String(currentRoom.maxPlayers || 10);
+      sel.onchange = async () => {
+        try {
+          await window.api.updateRoom(currentRoom.id, { max_players: Number(sel.value) });
+          currentRoom.maxPlayers = Number(sel.value);
+          appendSysMsg(`⚙ Дээд хязгаар: ${sel.value} тоглогч`);
+        } catch {}
+      };
+    } else {
+      maxRow.classList.add('hidden');
+    }
+  }
 
   // Host биш бол "Тоглолт эхлүүлэх" товчийг нуух — host эхлүүлэхэд автоматаар нээгдэнэ
   const launchBtn = document.getElementById('btn-launch-wc3');
@@ -1090,6 +1149,40 @@ document.getElementById('btn-copy-host-ip')?.addEventListener('click', () => {
       showToast('IP хуулагдлаа!', 'success', 2000);
     }).catch(() => {});
   }
+});
+
+// Өрөө доторх IP шинэчлэх товч
+document.getElementById('btn-refresh-zt-ip')?.addEventListener('click', async () => {
+  const btn = document.getElementById('btn-refresh-zt-ip');
+  btn.disabled = true;
+  btn.textContent = '...';
+  try {
+    // Бүрэн re-setup хийх (join, authorize, metric, firewall)
+    const result = await window.api.refreshZerotier();
+    if (result.ip) {
+      document.getElementById('zt-my-ip-val').textContent = result.ip;
+      document.getElementById('zt-my-ip').style.display = 'block';
+      // Серверт шинэ IP мэдэгдэх
+      if (socket && currentRoom) {
+        socket.emit('room:zt_ip', { roomId: currentRoom.id, ip: result.ip });
+      }
+      // Серверээр authorize дахин хийлгэх
+      if (result.nodeId && result.networkId && socket) {
+        socket.emit('zt:authorize', { nodeId: result.nodeId, networkId: result.networkId });
+      }
+      showToast(`IP: ${result.ip}`, 'success', 3000);
+    } else {
+      // IP байхгүй бол authorize оролдох
+      if (result.nodeId && result.networkId && socket) {
+        socket.emit('zt:authorize', { nodeId: result.nodeId, networkId: result.networkId });
+        showToast('Authorize хүсэлт илгээгдлээ. 10 секундын дараа дахин оролдоно уу.', 'warning', 6000);
+      } else {
+        showToast('IP олдсонгүй. ZeroTier суулгасан эсэхийг шалгана уу.', 'warning', 5000);
+      }
+    }
+  } catch {}
+  btn.disabled = false;
+  btn.textContent = '🔄';
 });
 
 // Host IP-г UI-д харуулах helper
@@ -2133,6 +2226,8 @@ let gameHistoryPage = 1;
 
 async function loadProfile() {
   try {
+    // Серверээс бүрэн мэдээлэл шинэчлэх (avatar_url, wins, losses г.м.)
+    await window.api.refreshUser?.();
     const user = await window.api.getUser();
     if (!user) return;
     document.getElementById('profile-name').textContent  = user.username;
@@ -2326,8 +2421,77 @@ async function loadSettings() {
     renderGamesList();
     populateRoomTypeSelect();
   } catch {}
+  // ZeroTier статус харуулах
+  try {
+    const st = await window.api.getZerotierStatus();
+    const ipEl = document.getElementById('settings-zt-ip');
+    const stEl = document.getElementById('settings-zt-status');
+    if (ipEl) ipEl.textContent = st.ip || '---';
+    if (stEl) {
+      if (!st.installed) stEl.textContent = '(суулгаагүй)';
+      else if (!st.running) stEl.textContent = '(сервис зогссон)';
+      else if (!st.connected) stEl.textContent = '(холбогдоогүй)';
+      else stEl.textContent = '(холбогдсон)';
+    }
+    // Node ID харуулах (диагностик)
+    const nodeId = await window.api.getZerotierNodeId();
+    const msgEl = document.getElementById('zt-refresh-msg');
+    if (msgEl && (nodeId || st.networkId)) {
+      const parts = [];
+      if (nodeId) parts.push(`Node ID: ${nodeId}`);
+      if (st.networkId) parts.push(`Network: ${st.networkId}`);
+      msgEl.innerHTML = parts.join('<br>');
+      msgEl.style.color = '';
+    }
+  } catch {}
 }
 
+// ZeroTier IP шинэчлэх товч (Тохируулга)
+document.getElementById('btn-zt-refresh')?.addEventListener('click', async () => {
+  const btn = document.getElementById('btn-zt-refresh');
+  const msgEl = document.getElementById('zt-refresh-msg');
+  btn.disabled = true;
+  if (btn.querySelector('svg')) {
+    // SVG icon байвал зөвхөн текстийг солих
+    btn.lastChild.textContent = ' Тохируулж байна...';
+  } else {
+    btn.textContent = 'Тохируулж байна...';
+  }
+  if (msgEl) { msgEl.textContent = ''; msgEl.style.color = ''; }
+  try {
+    const result = await window.api.refreshZerotier();
+    const ipEl = document.getElementById('settings-zt-ip');
+    const stEl = document.getElementById('settings-zt-status');
+    if (ipEl) ipEl.textContent = result.ip || '---';
+    if (stEl) {
+      if (result.ok && result.ip) stEl.textContent = '(холбогдсон)';
+      else if (result.ok) stEl.textContent = '(IP хүлээж байна)';
+      else stEl.textContent = `(${result.error || 'алдаа'})`;
+    }
+    if (msgEl) {
+      const lines = [];
+      if (result.nodeId) lines.push(`Node ID: ${result.nodeId}`);
+      if (result.networkId) lines.push(`Network: ${result.networkId}`);
+      if (result.ip) {
+        lines.push(`IP: ${result.ip}`);
+        msgEl.style.color = 'var(--green)';
+      } else {
+        lines.push('IP олдсонгүй — authorize хийгдээгүй эсвэл сүлжээ өөр байж магадгүй');
+        msgEl.style.color = 'var(--red)';
+      }
+      msgEl.innerHTML = lines.join('<br>');
+    }
+  } catch (err) {
+    if (msgEl) { msgEl.textContent = `Алдаа: ${err.message}`; msgEl.style.color = 'var(--red)'; }
+  } finally {
+    btn.disabled = false;
+    if (btn.querySelector('svg')) {
+      btn.lastChild.textContent = ' IP шинэчлэх';
+    } else {
+      btn.textContent = 'IP шинэчлэх';
+    }
+  }
+});
 
 function renderGamesList() {
   const ul = document.getElementById('games-list');
