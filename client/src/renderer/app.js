@@ -128,7 +128,17 @@ async function connectSocket() {
 
   // Өрөөний чат
   socket.on('chat:message',         (msg)        => appendMessage(msg));
-  socket.on('room:members',         (members)    => { if (currentRoom) currentRoom.members = members; renderMembers(members); });
+  socket.on('room:members',         (members)    => {
+    if (currentRoom) {
+      currentRoom.members = members;
+      // Replay service-д гишүүдийг дамжуулах (player matching)
+      window.api.setReplayMembers?.(members.map(m => ({
+        id: m.id !== undefined ? m.id : null,
+        name: m.name !== undefined ? m.name : String(m),
+      }))).catch(() => {});
+    }
+    renderMembers(members);
+  });
   socket.on('room:user_joined',     ({ username }) => appendSysMsg(`${username} нэгдлээ`));
   socket.on('room:user_left',       ({ username }) => appendSysMsg(`${username} гарлаа`));
   socket.on('room:user_reconnecting', ({ username }) => appendSysMsg(`⚠ ${username} холболт тасарлаа, дахин холбогдохыг хүлээж байна...`));
@@ -183,11 +193,10 @@ async function connectSocket() {
 
   // Лобби чатын түүх (нэвтрэхэд нэг удаа ирнэ)
   socket.on('lobby:history', (msgs) => {
+    lobbyMessages.length = 0; // Хуучин мессежүүдийг цэвэрлэх
     const box = document.getElementById('lobby-chat-messages');
-    if (!box) return;
-    box.innerHTML = '';
-    msgs.forEach(msg => appendLobbyMessage(msg, true)); // true = историйн мессеж (тоолохгүй)
-    box.scrollTop = box.scrollHeight;
+    if (box) box.innerHTML = '';
+    msgs.forEach(msg => appendLobbyMessage(msg, true));
   });
 
   // Өрөөний чатын түүх
@@ -387,6 +396,7 @@ function showTab(name) {
     chatUnreadCount = 0;
     updateChatBadge();
     loadSocialData();
+    rerenderLobbyMessages();
     setTimeout(() => {
       const box = document.getElementById('lobby-chat-messages');
       if (box) box.scrollTop = box.scrollHeight;
@@ -1375,9 +1385,28 @@ async function kickPlayer(targetId, targetName) {
 }
 
 // ── Нийтийн лобби чат ────────────────────────────────────
+const lobbyMessages = []; // Лобби чатын мессежүүд санах ойд хадгалагдана
+
 function appendLobbyMessage({ userId, username, text, time }, isHistory = false) {
+  // Санах ойд хадгалах
+  lobbyMessages.push({ userId, username, text, time });
+  // Хэт олон мессеж хуримтлагдахаас сэргийлэх (сүүлийн 200)
+  if (lobbyMessages.length > 200) lobbyMessages.splice(0, lobbyMessages.length - 200);
+
   const box = document.getElementById('lobby-chat-messages');
   if (!box) return;
+  _appendLobbyMsgDOM(box, { userId, username, text, time });
+
+  if (username !== currentUser?.username && !isHistory) {
+    const chatTab = document.getElementById('tab-chat');
+    if (!chatTab?.classList.contains('active')) {
+      chatUnreadCount++;
+      updateChatBadge();
+    }
+  }
+}
+
+function _appendLobbyMsgDOM(box, { userId, username, text, time }) {
   const isMe = username === currentUser?.username;
   const t    = new Date(time).toLocaleTimeString('mn-MN', { hour: '2-digit', minute: '2-digit' });
   const div  = document.createElement('div');
@@ -1393,14 +1422,13 @@ function appendLobbyMessage({ userId, username, text, time }, isHistory = false)
   }
   box.appendChild(div);
   box.scrollTop = box.scrollHeight;
+}
 
-  if (!isMe && !isHistory) {
-    const chatTab = document.getElementById('tab-chat');
-    if (!chatTab?.classList.contains('active')) {
-      chatUnreadCount++;
-      updateChatBadge();
-    }
-  }
+function rerenderLobbyMessages() {
+  const box = document.getElementById('lobby-chat-messages');
+  if (!box || box.children.length > 0) return; // Аль хэдийн рендэрлэгдсэн бол дахин хийхгүй
+  lobbyMessages.forEach(msg => _appendLobbyMsgDOM(box, msg));
+  box.scrollTop = box.scrollHeight;
 }
 
 function sendLobbyMessage() {
@@ -1841,12 +1869,8 @@ function handleIncomingDM({ fromUsername, fromUserId, text, time }) {
   if (activePopups.has(uid)) {
     const state = activePopups.get(uid);
     if (state.minimized) {
-      dmConversations[uid].unread = (dmConversations[uid].unread || 0) + 1;
-      const badge = state.element.querySelector('.dm-popup-unread-badge');
-      if (badge) {
-        badge.textContent = dmConversations[uid].unread;
-        badge.style.display = 'inline-block';
-      }
+      // Minimized → автоматаар нээх (restore)
+      togglePopupMinimize(uid);
     } else {
       window.api.markDMRead(uid).catch(() => {});
     }
@@ -1854,15 +1878,8 @@ function handleIncomingDM({ fromUsername, fromUserId, text, time }) {
     return;
   }
 
-  // Тусдаа DM цонх нээлттэй эсэхийг шалгах
-  window.api.isDMWindowOpen(uid).then(isOpen => {
-    if (isOpen) return;
-    dmConversations[uid].unread = (dmConversations[uid].unread || 0) + 1;
-    renderDMUsersBadges();
-    chatUnreadCount++;
-    updateChatBadge();
-    showDMNotification(`${fromUsername}-аас мессеж ирлээ`);
-  });
+  // Popup нээгдээгүй — автоматаар popup нээж шууд харуулах
+  openDM(uid, fromUsername);
 }
 
 function handleSentDM({ fromUsername, toUserId, text, time }) {
@@ -2497,9 +2514,17 @@ document.getElementById('btn-close-user-profile').onclick = () => {
 // ── Profile ───────────────────────────────────────────────
 let gameHistoryPage = 1;
 
+// ── Rank систем ───────────────────────────────────────────
+function getRank(wins) {
+  if (wins >= 50) return { name: 'Diamond',  icon: '⚡', css: 'rank-diamond' };
+  if (wins >= 30) return { name: 'Platinum', icon: '💎', css: 'rank-platinum' };
+  if (wins >= 15) return { name: 'Gold',     icon: '👑', css: 'rank-gold' };
+  if (wins >= 5)  return { name: 'Silver',   icon: '🗡️', css: 'rank-silver' };
+  return              { name: 'Bronze',  icon: '⚔️', css: 'rank-bronze' };
+}
+
 async function loadProfile() {
   try {
-    // Серверээс бүрэн мэдээлэл шинэчлэх (avatar_url, wins, losses г.м.)
     await window.api.refreshUser?.();
     const user = await window.api.getUser();
     if (!user) return;
@@ -2518,6 +2543,14 @@ async function loadProfile() {
     document.getElementById('stat-wins').textContent    = user.wins || 0;
     document.getElementById('stat-losses').textContent  = user.losses || 0;
     document.getElementById('stat-winrate').textContent = winrate + '%';
+
+    // Rank badge
+    const rank = getRank(user.wins || 0);
+    const rankEl = document.getElementById('profile-rank');
+    if (rankEl) {
+      rankEl.className = `rank-badge ${rank.css}`;
+      rankEl.textContent = `${rank.icon} ${rank.name}`;
+    }
 
     const linkedEl   = document.getElementById('discord-linked');
     const linkBtnEl  = document.getElementById('btn-link-discord');
@@ -2836,13 +2869,62 @@ async function removeGameClick(id) {
 
 // ── Тоглоом дуусах ───────────────────────────────────────
 function showGameResult(data) {
-  document.getElementById('result-text').textContent =
-    `Баг ${data.winner_team} хожлоо! Үргэлжлэлт: ${data.duration_minutes} мин`;
-  document.getElementById('result-modal').style.display = 'flex';
+  const modal = document.getElementById('result-modal');
+  const content = document.getElementById('result-content');
+  if (!modal || !content) return;
+
+  // Алдаатай бол
+  if (data.error) {
+    content.innerHTML = `
+      <h2>⚠️ Тоглоом дууслаа</h2>
+      <p class="result-error">${data.error}</p>
+      <button type="button" id="btn-close-result" class="btn btn-primary">Хаах</button>
+    `;
+    modal.style.display = 'flex';
+    document.getElementById('btn-close-result').onclick = () => { modal.style.display = 'none'; };
+    return;
+  }
+
+  const winners = (data.players || []).filter(p => p.team === data.winner_team);
+  const losers  = (data.players || []).filter(p => p.team !== data.winner_team);
+
+  const raceEmoji = { Human: '🏰', Orc: '⚔️', 'Night Elf': '🌙', NightElf: '🌙', Undead: '💀', Random: '🎲' };
+
+  const renderPlayers = (list, isWinner) => list.map(p => {
+    const race = raceEmoji[p.race] || '';
+    const matched = p.user_id ? '✓' : '';
+    return `<div class="result-player ${isWinner ? 'winner' : 'loser'}">
+      <span class="result-player-name">${race} ${p.name} ${matched}</span>
+      ${p.apm ? `<span class="result-player-apm">${p.apm} APM</span>` : ''}
+    </div>`;
+  }).join('');
+
+  const savedMsg = data.saved
+    ? '<p class="result-saved">✅ Статистик амжилттай хадгалагдлаа</p>'
+    : data.saveError
+    ? `<p class="result-save-error">⚠️ ${data.saveError}</p>`
+    : '';
+
+  content.innerHTML = `
+    <h2>🏆 Тоглоом дууслаа!</h2>
+    <p class="result-duration">Үргэлжлэлт: ${data.duration_minutes || 0} мин</p>
+    <div class="result-teams">
+      <div class="result-team result-team-win">
+        <h3>🏆 Хожсон</h3>
+        ${renderPlayers(winners, true)}
+      </div>
+      <div class="result-team result-team-lose">
+        <h3>💀 Хожигдсон</h3>
+        ${renderPlayers(losers, false)}
+      </div>
+    </div>
+    ${savedMsg}
+    <button type="button" id="btn-close-result" class="btn btn-primary" style="margin-top:12px">Хаах</button>
+  `;
+
+  modal.style.display = 'flex';
+  document.getElementById('btn-close-result').onclick = () => { modal.style.display = 'none'; };
 }
-document.getElementById('btn-close-result').onclick = () => {
-  document.getElementById('result-modal').style.display = 'none';
-};
 
 // ── Update notification bar ───────────────────────────────
 function showUpdateBar(message, showInstallBtn, percent = null) {

@@ -526,6 +526,12 @@ replayService.onResult((data) => {
   mainWindow?.webContents.send('game:result', data);
 });
 
+// Өрөөний гишүүдийг replay service-д дамжуулах (player matching)
+ipcMain.handle('replay:setMembers', (_, members) => {
+  replayService.setMembers(members);
+  return true;
+});
+
 // ── Тохируулга (settings.json in userData) ────────────────
 function getSettingsPath() {
   return path.join(app.getPath('userData'), 'settings.json');

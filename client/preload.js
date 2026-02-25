@@ -36,6 +36,7 @@ contextBridge.exposeInMainWorld('api', {
   onGameResult: (cb) => ipcRenderer.on('game:result', (_, data) => cb(data)),
   onGameExited: (cb) => ipcRenderer.on('game:exited', () => cb()),
   killGame:     ()   => ipcRenderer.invoke('game:kill'),
+  setReplayMembers: (members) => ipcRenderer.invoke('replay:setMembers', members),
 
   // Socket events (main → renderer)
   onRoomClosed: (cb) => ipcRenderer.on('room:closed', (_, d) => cb(d)),

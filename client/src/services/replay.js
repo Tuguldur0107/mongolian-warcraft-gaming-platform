@@ -1,12 +1,15 @@
 const chokidar = require('chokidar');
 const path = require('path');
 const os = require('os');
+const fs = require('fs');
 const W3GReplay = require('w3gjs');
 const apiService = require('./api');
 
 let watcher = null;
 let currentRoomId = null;
 let resultCallback = null;
+let roomMembers = []; // [{id, name}] — өрөөний гишүүд (user_id + username)
+let processedReplays = new Set(); // аль хэдийн parse хийсэн файлуудыг давтахгүй
 
 // WC3 replays хавтас автоматаар олох
 function getReplayPath() {
@@ -22,29 +25,69 @@ function getReplayPath() {
   );
 }
 
+// Өрөөний гишүүдийг тохируулах (player matching-д ашиглана)
+function setMembers(members) {
+  roomMembers = (members || []).map(m => ({
+    id: m.id !== undefined ? String(m.id) : null,
+    name: m.name !== undefined ? m.name : String(m),
+  }));
+  console.log(`[Replay] Өрөөний гишүүд шинэчлэгдлээ: ${roomMembers.map(m => m.name).join(', ')}`);
+}
+
+// Replay тоглогчийн нэрийг platform user-тай тааруулах
+function matchPlayerToMember(playerName) {
+  if (!roomMembers.length) return null;
+  const pLower = playerName.toLowerCase().trim();
+
+  // 1. Яг таарч байвал
+  const exact = roomMembers.find(m => m.name.toLowerCase() === pLower);
+  if (exact) return exact;
+
+  // 2. Нэг нь нөгөөгөө агуулж байвал (WC3 нэр ≠ platform нэр байж болно)
+  const partial = roomMembers.find(m =>
+    pLower.includes(m.name.toLowerCase()) || m.name.toLowerCase().includes(pLower)
+  );
+  if (partial) return partial;
+
+  return null;
+}
+
 // Replay watcher эхлүүлэх
 function startWatcher(roomId) {
   stopWatcher();
   currentRoomId = roomId;
+  processedReplays.clear();
 
   const replayDir = getReplayPath();
-  console.log(`Replay хавтас хянаж байна: ${replayDir}`);
+
+  // Хавтас байгаа эсэхийг шалгах
+  if (!fs.existsSync(replayDir)) {
+    console.warn(`[Replay] Хавтас олдсонгүй: ${replayDir}`);
+    return;
+  }
+
+  console.log(`[Replay] Хавтас хянаж байна: ${replayDir}`);
 
   watcher = chokidar.watch(`${replayDir}/**/*.w3g`, {
-    ignoreInitial: true,  // Байгаа файлуудыг үл хамрах
+    ignoreInitial: true,
     awaitWriteFinish: {
-      stabilityThreshold: 2000, // Файл бичигдэж дуусахыг хүлээх
+      stabilityThreshold: 3000,
       pollInterval: 500,
     },
   });
 
   watcher.on('add', async (filePath) => {
-    console.log(`Шинэ replay олдлоо: ${filePath}`);
+    // Давтагдсан файл шалгах
+    const normalized = path.resolve(filePath);
+    if (processedReplays.has(normalized)) return;
+    processedReplays.add(normalized);
+
+    console.log(`[Replay] Шинэ replay олдлоо: ${filePath}`);
     await parseReplay(filePath);
   });
 
   watcher.on('error', (err) => {
-    console.error('Replay watcher алдаа:', err);
+    console.error('[Replay] Watcher алдаа:', err);
   });
 }
 
@@ -54,19 +97,29 @@ async function parseReplay(filePath) {
     const parser = new W3GReplay();
     const replay = await parser.parse(filePath);
 
-    const duration = Math.round(replay.duration / 60000); // ms -> минут
-    const players = replay.players.map((p) => ({
-      name: p.name,
-      team: p.teamid,
-      discord_id: null, // Тоглогчдын discord_id-г lobby-аас match хийнэ (хожим)
-    }));
+    const duration = Math.round(replay.duration / 60000);
+    const players = replay.players.map((p) => {
+      const matched = matchPlayerToMember(p.name);
+      return {
+        name: p.name,
+        team: p.teamid,
+        race: p.race || null,
+        apm: p.apm || 0,
+        user_id: matched ? Number(matched.id) : null,
+        discord_id: null,
+      };
+    });
 
     // Хожсон багийг тодорхойлох
     const winnerTeam = getWinnerTeam(replay);
     if (winnerTeam === null) {
-      console.warn('Хожсон баг тодорхойлж чадсангүй, үр дүн илгээхгүй');
+      console.warn('[Replay] Хожсон баг тодорхойлж чадсангүй, үр дүн илгээхгүй');
+      if (resultCallback) resultCallback({ error: 'Хожсон баг тодорхойлж чадсангүй', players });
       return;
     }
+
+    const matchedCount = players.filter(p => p.user_id).length;
+    console.log(`[Replay] ${players.length} тоглогчдоос ${matchedCount} тааруулсан`);
 
     const result = {
       room_id: currentRoomId,
@@ -76,15 +129,23 @@ async function parseReplay(filePath) {
       players,
     };
 
-    console.log('Тоглоомын үр дүн:', result);
+    console.log('[Replay] Тоглоомын үр дүн:', JSON.stringify(result, null, 2));
 
     // Серверт илгээх
-    await apiService.postGameResult(result);
+    try {
+      const serverRes = await apiService.postGameResult(result);
+      console.log('[Replay] Серверт амжилттай илгээлээ:', serverRes?.message);
+      result.saved = true;
+    } catch (err) {
+      console.error('[Replay] Серверт илгээх алдаа:', err.response?.data?.error || err.message);
+      result.saved = false;
+      result.saveError = err.response?.data?.error || err.message;
+    }
 
     // Renderer-т мэдэгдэх
     if (resultCallback) resultCallback(result);
   } catch (err) {
-    console.error('Replay parse алдаа:', err.message);
+    console.error('[Replay] Parse алдаа:', err.message);
   }
 }
 
@@ -122,7 +183,8 @@ function stopWatcher() {
     watcher.close();
     watcher = null;
     currentRoomId = null;
-    console.log('Replay watcher зогслоо');
+    roomMembers = [];
+    console.log('[Replay] Watcher зогслоо');
   }
 }
 
@@ -131,4 +193,4 @@ function onResult(cb) {
   resultCallback = cb;
 }
 
-module.exports = { startWatcher, stopWatcher, onResult };
+module.exports = { startWatcher, stopWatcher, onResult, setMembers };

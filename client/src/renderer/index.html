@@ -342,10 +342,11 @@
         </div>
         <p id="username-edit-error" class="form-error"></p>
         <p id="profile-email" class="hint"></p>
+        <div id="profile-rank" class="rank-badge"></div>
         <div class="stats-row">
-          <div class="stat"><span id="stat-wins">0</span><label>Хожил</label></div>
-          <div class="stat"><span id="stat-losses">0</span><label>Хожигдол</label></div>
-          <div class="stat"><span id="stat-winrate">0%</span><label>Win rate</label></div>
+          <div class="stat stat-wins"><span class="stat-icon">🏆</span><span id="stat-wins">0</span><label>Хожил</label></div>
+          <div class="stat stat-losses"><span class="stat-icon">💀</span><span id="stat-losses">0</span><label>Хожигдол</label></div>
+          <div class="stat stat-winrate"><span class="stat-icon">📊</span><span id="stat-winrate">0%</span><label>Win rate</label></div>
         </div>
         <div id="discord-link-section" class="mt-16">
           <div id="discord-linked" class="discord-badge hidden">
@@ -535,7 +536,7 @@
 
   <!-- Тоглоом дуусах -->
   <div id="result-modal" class="modal hidden">
-    <div class="modal-box">
+    <div class="modal-box result-modal-box" id="result-content">
       <h2>🏆 Тоглоом дууслаа!</h2>
       <p id="result-text"></p>
       <button type="button" id="btn-close-result" class="btn btn-primary">Хаах</button>

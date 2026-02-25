@@ -151,7 +151,7 @@ router.get('/ranking', async (req, res) => {
   res.json({ players: [], total: 0, page: 1, totalPages: 0 });
 });
 
-// Replay parse хийсний дараа үр дүн хадгалах (зөвхөн өрөөний эзэн)
+// Replay parse хийсний дараа үр дүн хадгалах (өрөөний гишүүн)
 router.post('/result', auth, async (req, res) => {
   const { room_id, winner_team, duration_minutes, replay_path, players } = req.body;
 
@@ -162,10 +162,9 @@ router.post('/result', auth, async (req, res) => {
     return res.status(400).json({ error: 'winner_team 1 эсвэл 2 байх ёстой' });
   }
 
-  // room_id байгаа бол room membership болон host шалгах
+  // room_id байгаа бол room membership шалгах + давхар бүртгэл сэргийлэх
   if (room_id) {
     try {
-      // Тухайн хэрэглэгч өрөөний гишүүн эсэх
       const membership = await db.query(
         'SELECT 1 FROM room_players WHERE room_id=$1 AND user_id=$2',
         [room_id, req.user.id]
@@ -173,14 +172,17 @@ router.post('/result', auth, async (req, res) => {
       if (!membership.rows[0])
         return res.status(403).json({ error: 'Энэ өрөөний гишүүн биш байна' });
 
-      // Зөвхөн эзэн үр дүн бичих эрхтэй
       const room = await db.query('SELECT host_id, status FROM rooms WHERE id=$1', [room_id]);
       if (!room.rows[0])
         return res.status(404).json({ error: 'Өрөө олдсонгүй' });
-      if (String(room.rows[0].host_id) !== String(req.user.id))
-        return res.status(403).json({ error: 'Зөвхөн өрөөний эзэн үр дүн бичих эрхтэй' });
-      if (room.rows[0].status !== 'playing')
-        return res.status(400).json({ error: 'Тоглолт эхлээгүй өрөөнд үр дүн бичих боломжгүй' });
+
+      // Давхар бүртгэл шалгах — энэ өрөөнд аль хэдийн үр дүн бүртгэгдсэн эсэх
+      const existing = await db.query(
+        'SELECT id FROM game_results WHERE room_id=$1', [room_id]
+      );
+      if (existing.rows[0]) {
+        return res.json({ message: 'Үр дүн аль хэдийн бүртгэгдсэн', result: existing.rows[0], duplicate: true });
+      }
     } catch (err) {
       console.error(err);
       return res.status(500).json({ error: 'Серверийн алдаа' });
@@ -205,15 +207,24 @@ router.post('/result', auth, async (req, res) => {
 
       let resolvedUserId = player.user_id || null;
 
+      // 1. user_id-гаар шинэчлэх
       if (resolvedUserId) {
         await db.query(
           `UPDATE users SET ${column} = ${column} + 1 WHERE id = $1`,
           [resolvedUserId]
         );
+      // 2. discord_id-гаар хайх
       } else if (player.discord_id && typeof player.discord_id === 'string') {
         const uRow = await db.query(
           `UPDATE users SET ${column} = ${column} + 1 WHERE discord_id = $1 RETURNING id`,
           [player.discord_id]
+        );
+        resolvedUserId = uRow.rows[0]?.id || null;
+      // 3. In-game нэрээр хайх (username тааруулга)
+      } else if (player.name && typeof player.name === 'string') {
+        const uRow = await db.query(
+          `UPDATE users SET ${column} = ${column} + 1 WHERE LOWER(username) = LOWER($1) RETURNING id`,
+          [player.name.trim()]
         );
         resolvedUserId = uRow.rows[0]?.id || null;
       }
