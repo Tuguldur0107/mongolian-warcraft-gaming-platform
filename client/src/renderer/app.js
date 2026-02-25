@@ -15,6 +15,22 @@ const dmConversations = {};
 let activeDmUserId = null;
 let chatUnreadCount = 0;
 
+// ── DM Popup төлөв ────────────────────────────────────────
+const MAX_DM_POPUPS = 3;
+const activePopups = new Map(); // userId -> { element, minimized, emojiOpen, typingTimer, isTyping }
+
+// ── Emoji Data ────────────────────────────────────────────
+const EMOJI_DATA = {
+  smileys: ['😀','😃','😄','😁','😆','😅','🤣','😂','🙂','🙃','😉','😊','😇','🥰','😍','🤩','😘','😗','😚','😙','🥲','😋','😛','😜','🤪','😝','🤑','🤗','🤭','🤫','🤔','🤐','🤨','😐','😑','😶','😏','😒','🙄','😬','🤥','😌','😔','😪','🤤','😴','😷','🤒','🤕','🤢','🤮','🥴','😵','🤯','🥳','🥸','😎','🤓','🧐','😕','😟','🙁','☹️','😮','😯','😲','😳','🥺','🥹','😦','😧','😨','😰','😥','😢','😭','😱','😖','😣','😞','😓','😩','😫','🥱','😤','😡','😠','🤬','😈','👿','💀','☠️','💩','🤡','👹','👺','👻','👽','👾','🤖'],
+  people:  ['👋','🤚','🖐️','✋','🖖','👌','🤌','🤏','✌️','🤞','🤟','🤘','🤙','👈','👉','👆','🖕','👇','☝️','👍','👎','✊','👊','🤛','🤜','👏','🙌','👐','🤲','🤝','🙏','💪','🦾','🦿','🦵','🦶','👂','👃','🧠','🦷','🦴','👀','👁️','👅','👄'],
+  animals: ['🐶','🐱','🐭','🐹','🐰','🦊','🐻','🐼','🐨','🐯','🦁','🐮','🐷','🐸','🐵','🙈','🙉','🙊','🐒','🐔','🐧','🐦','🐤','🐣','🦆','🦅','🦉','🦇','🐺','🐗','🐴','🦄','🐝','🐛','🦋','🐌','🐞','🐜','🐢','🐍','🦎','🦖','🦕','🐙','🦑','🦐','🦞','🦀','🐡','🐠','🐟','🐬','🐳','🐋','🦈','🐊','🐅','🐆','🦓','🦍','🦧','🐘','🦛','🦏'],
+  food:    ['🍕','🍔','🍟','🌭','🍿','🥓','🥚','🍳','🥞','🧇','🍞','🧀','🥗','🥙','🥪','🌮','🌯','🍝','🍜','🍲','🍛','🍣','🍱','🥟','🍤','🍙','🍚','🍘','🍥','🍡','🍧','🍨','🍦','🥧','🧁','🍰','🎂','🍮','🍭','🍬','🍫','🍩','🍪','🍯','🥛','☕','🍵','🧃','🥤','🧋','🍶','🍺','🍻','🥂','🍷'],
+  activities: ['⚽','🏀','🏈','⚾','🎾','🏐','🏉','🎱','🏓','🏸','🏒','🏑','🏏','⛳','🏹','🎣','🥊','🥋','🎽','🛹','🛷','⛸️','🥌','🎿','🏂','🏇','🏋️','🤸','⛹️','🤾','🏌️','🏄','🏊','🤽','🚣','🧗','🚴','🚵','🎮','🕹️','🎲','♟️','🎯','🎳','🎸','🎹','🥁','🎷','🎺','🎻'],
+  objects: ['💡','🔦','🕯️','📱','💻','⌨️','🖥️','🖨️','💾','💿','📷','📹','🎥','📞','📺','📻','🎙️','🧭','⏱️','⏰','⌛','⏳','📡','🔋','🔌','💰','💴','💵','💶','💷','💳','💎','⚖️','🔧','🔩','⚙️','🔗','📎','📏','📐','✂️','🗑️','🔒','🔑','🗝️'],
+  symbols: ['❤️','🧡','💛','💚','💙','💜','🖤','🤍','🤎','💔','❣️','💕','💞','💓','💗','💖','💘','💝','💟','☮️','✝️','☪️','🕉️','☸️','✡️','☯️','✅','✔️','☑️','❌','❎','➕','➖','➗','✖️','♾️','‼️','⁉️','❓','❗','💯','🔥','⭐','🌟','✨','💫','🎉','🎊'],
+  flags:   ['🏳️','🏴','🏁','🚩','🏳️‍🌈','🇲🇳','🇺🇸','🇬🇧','🇫🇷','🇩🇪','🇯🇵','🇰🇷','🇨🇳','🇷🇺','🇦🇺','🇨🇦','🇧🇷','🇮🇳','🇮🇹','🇪🇸','🇲🇽','🇹🇷','🇸🇪','🇳🇴']
+};
+
 // ── Нийгмийн төлөв (friends / block) ──────────────────────
 let myFriends        = [];   // { id, username, avatar_url }
 let pendingRequests  = [];   // { id, username, avatar_url }
@@ -181,27 +197,44 @@ async function connectSocket() {
 
   // Typing indicator (DM)
   socket.on('typing:start', ({ fromUserId, fromUsername }) => {
-    if (activeDmUserId !== String(fromUserId)) return;
-    const elId = isDMMode() ? 'dm-window-typing' : 'dm-typing-indicator';
-    let indicator = document.getElementById(elId);
-    if (!indicator) {
-      indicator = document.createElement('div');
-      indicator.id = elId;
-      indicator.className = 'sys-msg';
-      const parent = document.getElementById(isDMMode() ? 'dm-window-messages' : 'dm-messages');
-      parent?.after(indicator);
+    const uid = String(fromUserId);
+    if (isDMMode()) {
+      if (activeDmUserId !== uid) return;
+      const indicator = document.getElementById('dm-window-typing');
+      if (indicator) {
+        indicator.textContent = `${fromUsername} бичиж байна...`;
+        indicator.style.display = 'block';
+        clearTimeout(indicator._hideTimer);
+        indicator._hideTimer = setTimeout(() => { indicator.style.display = 'none'; }, 2000);
+      }
+      return;
     }
-    indicator.textContent = `${fromUsername} бичиж байна...`;
-    indicator.style.display = 'block';
-    clearTimeout(indicator._hideTimer);
-    indicator._hideTimer = setTimeout(() => { indicator.style.display = 'none'; }, 2000);
+    // Popup-д typing indicator харуулах
+    if (activePopups.has(uid)) {
+      const state = activePopups.get(uid);
+      const typingEl = state.element.querySelector('.dm-popup-typing');
+      if (typingEl) {
+        typingEl.textContent = `${fromUsername} бичиж байна...`;
+        typingEl.style.display = 'block';
+        clearTimeout(typingEl._hideTimer);
+        typingEl._hideTimer = setTimeout(() => { typingEl.style.display = 'none'; }, 2000);
+      }
+    }
   });
 
   socket.on('typing:stop', ({ fromUserId }) => {
-    if (activeDmUserId !== String(fromUserId)) return;
-    const elId = isDMMode() ? 'dm-window-typing' : 'dm-typing-indicator';
-    const indicator = document.getElementById(elId);
-    if (indicator) indicator.style.display = 'none';
+    const uid = String(fromUserId);
+    if (isDMMode()) {
+      if (activeDmUserId !== uid) return;
+      const indicator = document.getElementById('dm-window-typing');
+      if (indicator) indicator.style.display = 'none';
+      return;
+    }
+    if (activePopups.has(uid)) {
+      const state = activePopups.get(uid);
+      const typingEl = state.element.querySelector('.dm-popup-typing');
+      if (typingEl) typingEl.style.display = 'none';
+    }
   });
 
   // Хувийн мессеж
@@ -1413,28 +1446,86 @@ async function loadUnreadDMCounts() {
   } catch {}
 }
 
-// ── Private мессеж (DM) ───────────────────────────────────
-async function openDM(userId, username) {
-  // Тусдаа цонхонд нээх
-  window.api.openDMWindow({ userId: String(userId), username });
+// ── Private мессеж (DM) — Floating Popup систем ──────────
+function openDM(userId, username) {
+  const uid = String(userId);
+
+  // Popup аль хэдийн нээлттэй бол focus хийх
+  if (activePopups.has(uid)) {
+    const popup = activePopups.get(uid);
+    if (popup.minimized) togglePopupMinimize(uid);
+    popup.element.querySelector('.dm-popup-input').focus();
+    return;
+  }
+
+  // Хамгийн ихдээ MAX_DM_POPUPS popup нээх
+  if (activePopups.size >= MAX_DM_POPUPS) {
+    const oldestKey = activePopups.keys().next().value;
+    closeDMPopup(oldestKey);
+  }
+
+  createDMPopup(uid, username);
 }
 
-// DM modal-д нээх (fallback, зөвхөн DM цонхгүй үед)
-async function _openDMModal(userId, username) {
-  activeDmUserId = String(userId);
-  if (!dmConversations[activeDmUserId]) {
-    dmConversations[activeDmUserId] = { username, messages: [], unread: 0 };
-  }
-  dmConversations[activeDmUserId].unread = 0;
-  document.getElementById('dm-title').textContent = `🔒 ${escHtml(username)}`;
-  document.getElementById('dm-modal').style.display = 'flex';
-  setTimeout(() => document.getElementById('dm-input').focus(), 50);
+async function createDMPopup(userId, username) {
+  const uid = String(userId);
+  const container = document.getElementById('dm-popups-container');
+  if (!container) return;
 
+  if (!dmConversations[uid]) {
+    dmConversations[uid] = { username, messages: [], unread: 0 };
+  }
+  dmConversations[uid].unread = 0;
+  renderDMUsersBadges();
+
+  const isOnline = onlineUserIds.has(Number(uid)) || onlineUserIds.has(uid);
+
+  const popup = document.createElement('div');
+  popup.className = 'dm-popup';
+  popup.dataset.userId = uid;
+  popup.innerHTML = `
+    <div class="dm-popup-header">
+      <div class="dm-popup-header-info">
+        <span class="dm-popup-status ${isOnline ? 'online' : 'offline'}"></span>
+        <span class="dm-popup-username">${escHtml(username)}</span>
+        <span class="dm-popup-unread-badge">0</span>
+      </div>
+      <div class="dm-popup-header-actions">
+        <button type="button" class="dm-popup-minimize-btn" title="Жижигрүүлэх">—</button>
+        <button type="button" class="dm-popup-popout-btn" title="Тусдаа цонхоор нээх">↗</button>
+        <button type="button" class="dm-popup-close-btn" title="Хаах">✕</button>
+      </div>
+    </div>
+    <div class="dm-popup-body">
+      <div class="dm-popup-messages"></div>
+      <div class="dm-popup-typing"></div>
+      <div class="dm-popup-input-row">
+        <button type="button" class="dm-popup-emoji-btn" title="Emoji">😊</button>
+        <input type="text" class="dm-popup-input" placeholder="Мессеж бичих..." />
+        <button type="button" class="dm-popup-send-btn" title="Илгээх">
+          <svg class="btn-icon-svg"><use href="#ico-send"/></svg>
+        </button>
+      </div>
+    </div>
+  `;
+
+  container.appendChild(popup);
+
+  activePopups.set(uid, {
+    element: popup,
+    minimized: false,
+    emojiOpen: false,
+    typingTimer: null,
+    isTyping: false
+  });
+
+  setupPopupListeners(uid, popup, username);
+
+  // Мессежийн түүх татах
   try {
     const history = await window.api.getDMHistory(userId);
     if (history.length > 0) {
-      const conv = dmConversations[activeDmUserId];
-      conv.messages = history.map(m => ({
+      dmConversations[uid].messages = history.map(m => ({
         fromUsername: m.sender_username,
         fromUserId:   String(m.sender_id),
         text:         m.text,
@@ -1443,23 +1534,115 @@ async function _openDMModal(userId, username) {
       }));
     }
   } catch {}
-  renderDMMessages();
+
+  renderPopupMessages(uid);
   window.api.markDMRead(userId).catch(() => {});
+  setTimeout(() => popup.querySelector('.dm-popup-input').focus(), 100);
 }
 
-function renderDMMessages() {
-  const box  = document.getElementById('dm-messages');
-  const conv = dmConversations[activeDmUserId];
+function setupPopupListeners(uid, popup, username) {
+  const input = popup.querySelector('.dm-popup-input');
+  const sendBtn = popup.querySelector('.dm-popup-send-btn');
+  const closeBtn = popup.querySelector('.dm-popup-close-btn');
+  const minimizeBtn = popup.querySelector('.dm-popup-minimize-btn');
+  const popoutBtn = popup.querySelector('.dm-popup-popout-btn');
+  const header = popup.querySelector('.dm-popup-header');
+  const emojiBtn = popup.querySelector('.dm-popup-emoji-btn');
+  const state = activePopups.get(uid);
+
+  const doSend = () => {
+    const text = input.value.trim();
+    if (!text || !socket) return;
+    socket.emit('private:message', { toUserId: uid, text });
+    input.value = '';
+    if (state.emojiOpen) toggleEmojiPicker(uid);
+  };
+
+  sendBtn.onclick = doSend;
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') doSend(); });
+
+  // Typing indicator
+  input.addEventListener('input', () => {
+    if (!socket) return;
+    if (!state.isTyping) {
+      state.isTyping = true;
+      socket.emit('typing:start', { toUserId: uid });
+    }
+    clearTimeout(state.typingTimer);
+    state.typingTimer = setTimeout(() => {
+      state.isTyping = false;
+      socket.emit('typing:stop', { toUserId: uid });
+    }, 2000);
+  });
+
+  closeBtn.onclick = (e) => { e.stopPropagation(); closeDMPopup(uid); };
+
+  header.addEventListener('click', (e) => {
+    if (e.target.closest('.dm-popup-header-actions')) return;
+    togglePopupMinimize(uid);
+  });
+
+  minimizeBtn.onclick = (e) => { e.stopPropagation(); togglePopupMinimize(uid); };
+
+  popoutBtn.onclick = (e) => {
+    e.stopPropagation();
+    closeDMPopup(uid);
+    window.api.openDMWindow({ userId: uid, username });
+  };
+
+  emojiBtn.onclick = () => toggleEmojiPicker(uid);
+}
+
+function closeDMPopup(uid) {
+  const state = activePopups.get(uid);
+  if (!state) return;
+  if (state.isTyping && socket) {
+    socket.emit('typing:stop', { toUserId: uid });
+  }
+  state.element.style.animation = 'dm-popup-down 0.2s ease-in forwards';
+  setTimeout(() => {
+    state.element.remove();
+    activePopups.delete(uid);
+  }, 200);
+}
+
+function togglePopupMinimize(uid) {
+  const state = activePopups.get(uid);
+  if (!state) return;
+  state.minimized = !state.minimized;
+  state.element.classList.toggle('minimized', state.minimized);
+
+  if (!state.minimized) {
+    const badge = state.element.querySelector('.dm-popup-unread-badge');
+    if (badge) { badge.style.display = 'none'; badge.textContent = '0'; }
+    window.api.markDMRead(uid).catch(() => {});
+    if (dmConversations[uid]) dmConversations[uid].unread = 0;
+    renderDMUsersBadges();
+    const msgBox = state.element.querySelector('.dm-popup-messages');
+    setTimeout(() => {
+      msgBox.scrollTop = msgBox.scrollHeight;
+      state.element.querySelector('.dm-popup-input').focus();
+    }, 50);
+  }
+}
+
+function renderPopupMessages(uid) {
+  const state = activePopups.get(uid);
+  if (!state) return;
+  const box = state.element.querySelector('.dm-popup-messages');
+  const conv = dmConversations[uid];
   if (!conv || !box) return;
   box.innerHTML = '';
+
   if (conv.messages.length === 0) {
-    box.innerHTML = `<p class="sys-msg" style="margin-top:20px">${escHtml(conv.username)}-д анхны мессеж илгээгээрэй</p>`;
+    box.innerHTML = `<p class="sys-msg" style="margin-top:20px">${escHtml(conv.username)}-д анхны мессеж илгээгээрэй 💬</p>`;
     return;
   }
+
   conv.messages.forEach(msg => {
     const isMe = msg.fromUsername === currentUser?.username;
-    const t    = new Date(msg.time).toLocaleTimeString('mn-MN', { hour: '2-digit', minute: '2-digit' });
-    const div  = document.createElement('div');
+    const t = new Date(msg.time).toLocaleTimeString('mn-MN', { hour: '2-digit', minute: '2-digit' });
+    const div = document.createElement('div');
     div.className = `msg ${isMe ? 'me' : 'other'}`;
     div.innerHTML = `
       <div class="msg-name">${isMe ? 'Та' : escHtml(msg.fromUsername)}</div>
@@ -1471,12 +1654,101 @@ function renderDMMessages() {
   box.scrollTop = box.scrollHeight;
 }
 
-function sendDM() {
-  const input = document.getElementById('dm-input');
-  const text  = input.value.trim();
-  if (!text || !activeDmUserId || !socket) return;
-  socket.emit('private:message', { toUserId: activeDmUserId, text });
-  input.value = '';
+// ── Emoji Picker ──────────────────────────────────────────
+function toggleEmojiPicker(uid) {
+  const state = activePopups.get(uid);
+  if (!state) return;
+  const body = state.element.querySelector('.dm-popup-body');
+  let picker = body.querySelector('.emoji-picker');
+
+  if (state.emojiOpen && picker) {
+    picker.remove();
+    state.emojiOpen = false;
+    return;
+  }
+
+  picker = document.createElement('div');
+  picker.className = 'emoji-picker';
+
+  const catIcons = { smileys:'😀', people:'👋', animals:'🐶', food:'🍕',
+                     activities:'⚽', objects:'💡', symbols:'❤️', flags:'🏳️' };
+
+  picker.innerHTML = `
+    <div class="emoji-picker-header">
+      <div class="emoji-categories">
+        ${Object.keys(EMOJI_DATA).map((cat, i) =>
+          `<button type="button" class="emoji-cat-btn ${i===0?'active':''}" data-cat="${cat}">${catIcons[cat]}</button>`
+        ).join('')}
+      </div>
+      <input type="text" class="emoji-search" placeholder="Emoji хайх..." />
+    </div>
+    <div class="emoji-grid"></div>
+  `;
+
+  const inputRow = body.querySelector('.dm-popup-input-row');
+  body.insertBefore(picker, inputRow);
+  state.emojiOpen = true;
+
+  renderEmojiCategory(picker, 'smileys', uid);
+
+  picker.querySelectorAll('.emoji-cat-btn').forEach(btn => {
+    btn.onclick = () => {
+      picker.querySelectorAll('.emoji-cat-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      renderEmojiCategory(picker, btn.dataset.cat, uid);
+      picker.querySelector('.emoji-search').value = '';
+    };
+  });
+
+  picker.querySelector('.emoji-search').addEventListener('input', (e) => {
+    const q = e.target.value.toLowerCase().trim();
+    if (!q) {
+      const activeCat = picker.querySelector('.emoji-cat-btn.active')?.dataset.cat || 'smileys';
+      renderEmojiCategory(picker, activeCat, uid);
+      return;
+    }
+    const grid = picker.querySelector('.emoji-grid');
+    const allEmojis = Object.values(EMOJI_DATA).flat();
+    grid.innerHTML = allEmojis.map(em =>
+      `<button type="button" class="emoji-item">${em}</button>`
+    ).join('');
+    wireEmojiClicks(grid, uid);
+  });
+
+  const closeOnOutside = (e) => {
+    if (!picker.contains(e.target) && !e.target.classList.contains('dm-popup-emoji-btn')) {
+      picker.remove();
+      state.emojiOpen = false;
+      document.removeEventListener('mousedown', closeOnOutside);
+    }
+  };
+  setTimeout(() => document.addEventListener('mousedown', closeOnOutside), 10);
+}
+
+function renderEmojiCategory(picker, category, uid) {
+  const grid = picker.querySelector('.emoji-grid');
+  const emojis = EMOJI_DATA[category] || [];
+  grid.innerHTML = emojis.map(em =>
+    `<button type="button" class="emoji-item">${em}</button>`
+  ).join('');
+  wireEmojiClicks(grid, uid);
+}
+
+function wireEmojiClicks(grid, uid) {
+  grid.querySelectorAll('.emoji-item').forEach(btn => {
+    btn.onclick = () => {
+      const state = activePopups.get(uid);
+      if (!state) return;
+      const input = state.element.querySelector('.dm-popup-input');
+      const start = input.selectionStart;
+      const end = input.selectionEnd;
+      const emoji = btn.textContent;
+      input.value = input.value.substring(0, start) + emoji + input.value.substring(end);
+      input.focus();
+      const newPos = start + emoji.length;
+      input.setSelectionRange(newPos, newPos);
+    };
+  });
 }
 
 // ── DM тусдаа цонх горимын функцүүд ────────────────────
@@ -1558,23 +1830,38 @@ function handleIncomingDM({ fromUsername, fromUserId, text, time }) {
   dmConversations[uid].messages.push({ fromUsername, text, time });
 
   if (isDMMode()) {
-    // DM цонх горим — зөвхөн энэ conversation-г render
     if (activeDmUserId === uid) {
       renderDMWindowMessages();
       window.api.markDMRead(uid).catch(() => {});
     }
     return;
   }
-  // Үндсэн цонх — DM цонх нээлттэй бол notification skip
+
+  // Popup нээлттэй бол тийшээ route хийх
+  if (activePopups.has(uid)) {
+    const state = activePopups.get(uid);
+    if (state.minimized) {
+      dmConversations[uid].unread = (dmConversations[uid].unread || 0) + 1;
+      const badge = state.element.querySelector('.dm-popup-unread-badge');
+      if (badge) {
+        badge.textContent = dmConversations[uid].unread;
+        badge.style.display = 'inline-block';
+      }
+    } else {
+      window.api.markDMRead(uid).catch(() => {});
+    }
+    renderPopupMessages(uid);
+    return;
+  }
+
+  // Тусдаа DM цонх нээлттэй эсэхийг шалгах
   window.api.isDMWindowOpen(uid).then(isOpen => {
     if (isOpen) return;
-    if (activeDmUserId === uid && document.getElementById('dm-modal').style.display !== 'none') {
-      renderDMMessages();
-    } else {
-      dmConversations[uid].unread = (dmConversations[uid].unread || 0) + 1;
-      renderDMUsersBadges();
-      showDMNotification(`${fromUsername}-аас мессеж ирлээ`);
-    }
+    dmConversations[uid].unread = (dmConversations[uid].unread || 0) + 1;
+    renderDMUsersBadges();
+    chatUnreadCount++;
+    updateChatBadge();
+    showDMNotification(`${fromUsername}-аас мессеж ирлээ`);
   });
 }
 
@@ -1582,11 +1869,16 @@ function handleSentDM({ fromUsername, toUserId, text, time }) {
   const uid = String(toUserId);
   if (!dmConversations[uid]) return;
   dmConversations[uid].messages.push({ fromUsername, text, time });
+
   if (isDMMode()) {
     if (activeDmUserId === uid) renderDMWindowMessages();
     return;
   }
-  if (activeDmUserId === uid) renderDMMessages();
+
+  if (activePopups.has(uid)) {
+    renderPopupMessages(uid);
+    return;
+  }
 }
 
 function showDMNotification(text) {
@@ -1927,34 +2219,15 @@ function renderDMUsersBadges() {
   });
 }
 
-// DM modal listeners (зөвхөн үндсэн цонхонд)
+// DM popup cleanup (зөвхөн үндсэн цонхонд)
 if (!isDMMode()) {
-  document.getElementById('btn-dm-send').onclick = sendDM;
-  let _typingTimer = null;
-  let _isTyping = false;
-  document.getElementById('dm-input').addEventListener('input', () => {
-    if (!activeDmUserId || !socket) return;
-    if (!_isTyping) {
-      _isTyping = true;
-      socket.emit('typing:start', { toUserId: activeDmUserId });
-    }
-    clearTimeout(_typingTimer);
-    _typingTimer = setTimeout(() => {
-      _isTyping = false;
-      socket.emit('typing:stop', { toUserId: activeDmUserId });
-    }, 2000);
+  window.addEventListener('beforeunload', () => {
+    activePopups.forEach((state, uid) => {
+      if (state.isTyping && socket) {
+        socket.emit('typing:stop', { toUserId: uid });
+      }
+    });
   });
-  document.getElementById('dm-input').addEventListener('keydown', e => {
-    if (e.key === 'Enter') sendDM();
-  });
-  document.getElementById('btn-close-dm').onclick = () => {
-    document.getElementById('dm-modal').style.display = 'none';
-    activeDmUserId = null;
-    if (_isTyping && socket) {
-      socket.emit('typing:stop', { toUserId: activeDmUserId });
-      _isTyping = false;
-    }
-  };
   // DM цонх хаагдахад unread шинэчлэх
   window.api.onDMWindowClosed(() => loadUnreadDMCounts());
 }

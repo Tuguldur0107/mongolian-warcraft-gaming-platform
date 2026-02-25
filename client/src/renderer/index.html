@@ -542,25 +542,8 @@
     </div>
   </div>
 
-  <!-- Private мессеж (DM) modal -->
-  <div id="dm-modal" class="modal hidden">
-    <div class="modal-box dm-modal-box">
-      <div class="dm-header">
-        <h3 id="dm-title">🔒 Private чат</h3>
-        <button type="button" id="btn-close-dm" class="btn btn-icon-only btn-sm" title="Хаах">
-          <svg class="btn-icon-svg"><use href="#ico-close"/></svg>
-        </button>
-      </div>
-      <div id="dm-messages" class="dm-messages"></div>
-      <div id="dm-typing-indicator" class="typing-indicator"></div>
-      <div class="chat-input-row dm-input-row">
-        <input id="dm-input" type="text" placeholder="Хувийн мессеж..." class="input" />
-        <button type="button" id="btn-dm-send" class="btn btn-primary btn-icon-only" title="Илгээх">
-          <svg class="btn-icon-svg"><use href="#ico-send"/></svg>
-        </button>
-      </div>
-    </div>
-  </div>
+  <!-- DM floating popup container -->
+  <div id="dm-popups-container"></div>
 
   <!-- Найзуудын тусдаа цонх горим (full page) -->
   <div id="friends-fullpage" class="page friends-fullpage">
