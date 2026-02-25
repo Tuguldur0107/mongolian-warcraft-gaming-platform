@@ -271,38 +271,67 @@ function getStatus(networkId) {
   return { installed, running, connected: !!ip, networkId: nid || null, ip };
 }
 
-// ZeroTier adapter priority + Windows Firewall — НЭГ UAC промпт-оор
-function elevatedNetworkSetup() {
+// Firewall rule аль хэдийн байгаа эсэх шалгах (admin шаардлагагүй)
+function isFirewallReady() {
   try {
-    // PS1 скрипт файлд бичнэ — аргумент дамжуулахад алдаа гарахгүй
+    const out = execSync('netsh advfirewall firewall show rule name="WC3 LAN UDP In"',
+      { stdio: 'pipe', encoding: 'utf8', timeout: 5000 });
+    return out.includes('WC3 LAN UDP In');
+  } catch { return false; }
+}
+
+// ZeroTier adapter metric шалгах (admin шаардлагагүй)
+function isMetricReady() {
+  try {
+    const out = execSync(
+      'powershell -NoProfile -WindowStyle Hidden -Command "Get-NetAdapter | Where-Object { $_.InterfaceDescription -like \'*ZeroTier*\' } | Get-NetIPInterface -AddressFamily IPv4 | Select-Object -ExpandProperty InterfaceMetric"',
+      { stdio: 'pipe', encoding: 'utf8', timeout: 5000 });
+    const metric = parseInt(out.trim(), 10);
+    return metric <= 5; // metric 1-5 бол OK
+  } catch { return false; }
+}
+
+// ZeroTier adapter priority + Windows Firewall
+// Эхлээд admin-гүйгээр шалгаж, шаардлагатай үед л UAC промпт гаргана
+function elevatedNetworkSetup() {
+  const firewallOk = isFirewallReady();
+  const metricOk = isMetricReady();
+
+  if (firewallOk && metricOk) {
+    console.log('[ZeroTier] Network setup аль хэдийн хийгдсэн (UAC шаардлагагүй)');
+    return { metric: true, firewall: true };
+  }
+
+  console.log(`[ZeroTier] Setup шаардлагатай: metric=${metricOk ? 'OK' : 'NEED'}, firewall=${firewallOk ? 'OK' : 'NEED'}`);
+
+  try {
     const scriptDir = path.join(os.tmpdir(), 'wc3-zt-setup');
     if (!fs.existsSync(scriptDir)) fs.mkdirSync(scriptDir, { recursive: true });
     const scriptPath = path.join(scriptDir, 'network-setup.ps1');
 
-    fs.writeFileSync(scriptPath, [
-      '# WC3 LAN — ZeroTier adapter priority + Firewall rules',
-      '',
-      '# 1. ZeroTier adapter metric=1 (хамгийн өндөр priority)',
-      '$zt = Get-NetAdapter | Where-Object { $_.InterfaceDescription -like "*ZeroTier*" }',
-      'if ($zt) {',
-      '  Set-NetIPInterface -InterfaceIndex $zt.ifIndex -InterfaceMetric 1 -ErrorAction SilentlyContinue',
-      '  Write-Output "METRIC_OK"',
-      '} else {',
-      '  Write-Output "METRIC_NO_ADAPTER"',
-      '}',
-      '',
-      '# 2. Firewall rules — аль хэдийн байвал алгасна',
-      '$existing = netsh advfirewall firewall show rule name="WC3 LAN UDP In" 2>&1',
-      'if ($existing -match "WC3 LAN UDP In") {',
-      '  Write-Output "FIREWALL_ALREADY"',
-      '} else {',
-      '  netsh advfirewall firewall add rule name="WC3 LAN UDP In" dir=in action=allow protocol=UDP localport=6112 profile=any | Out-Null',
-      '  netsh advfirewall firewall add rule name="WC3 LAN UDP Out" dir=out action=allow protocol=UDP localport=6112 profile=any | Out-Null',
-      '  netsh advfirewall firewall add rule name="WC3 LAN TCP In" dir=in action=allow protocol=TCP localport=6112 profile=any | Out-Null',
-      '  netsh advfirewall firewall add rule name="WC3 LAN TCP Out" dir=out action=allow protocol=TCP localport=6112 profile=any | Out-Null',
-      '  Write-Output "FIREWALL_OK"',
-      '}',
-    ].join('\r\n'), 'utf8');
+    const lines = ['# WC3 LAN — ZeroTier network setup', ''];
+
+    if (!metricOk) {
+      lines.push(
+        '# ZeroTier adapter metric=1 (хамгийн өндөр priority)',
+        '$zt = Get-NetAdapter | Where-Object { $_.InterfaceDescription -like "*ZeroTier*" }',
+        'if ($zt) {',
+        '  Set-NetIPInterface -InterfaceIndex $zt.ifIndex -InterfaceMetric 1 -ErrorAction SilentlyContinue',
+        '}',
+      );
+    }
+
+    if (!firewallOk) {
+      lines.push(
+        '# Firewall rules',
+        'netsh advfirewall firewall add rule name="WC3 LAN UDP In" dir=in action=allow protocol=UDP localport=6112 profile=any | Out-Null',
+        'netsh advfirewall firewall add rule name="WC3 LAN UDP Out" dir=out action=allow protocol=UDP localport=6112 profile=any | Out-Null',
+        'netsh advfirewall firewall add rule name="WC3 LAN TCP In" dir=in action=allow protocol=TCP localport=6112 profile=any | Out-Null',
+        'netsh advfirewall firewall add rule name="WC3 LAN TCP Out" dir=out action=allow protocol=TCP localport=6112 profile=any | Out-Null',
+      );
+    }
+
+    fs.writeFileSync(scriptPath, lines.join('\r\n'), 'utf8');
 
     execSync(
       `powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process powershell -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-WindowStyle','Hidden','-File','${scriptPath}' -Verb RunAs -Wait -WindowStyle Hidden"`,
