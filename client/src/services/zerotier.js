@@ -362,8 +362,8 @@ function getMyIp(networkId) {
     }
     if (token) {
       const out = execSync(
-        `powershell -NoProfile -WindowStyle Hidden -Command "(Invoke-WebRequest -Uri 'http://localhost:9993/network' -Headers @{'X-ZT1-Auth'='${token}'} -UseBasicParsing).Content"`,
-        { stdio: 'pipe', encoding: 'utf8', timeout: 5000 }
+        `powershell -NoProfile -WindowStyle Hidden -Command "(Invoke-WebRequest -Uri 'http://localhost:9993/network' -Headers @{'X-ZT1-Auth'='${token}'} -UseBasicParsing -TimeoutSec 2).Content"`,
+        { stdio: 'pipe', encoding: 'utf8', timeout: 3000 }
       );
       const networks = JSON.parse(out);
       for (const net of networks) {
@@ -383,7 +383,7 @@ function getMyIp(networkId) {
   try {
     const out = execSync(
       `powershell -NoProfile -WindowStyle Hidden -Command "Get-NetAdapter | Where-Object { $_.InterfaceDescription -like '*ZeroTier*' } | Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue | Select-Object -ExpandProperty IPAddress"`,
-      { stdio: 'pipe', encoding: 'utf8', timeout: 8000 }
+      { stdio: 'pipe', encoding: 'utf8', timeout: 4000 }
     );
     const ip = out.trim().split('\n')[0]?.trim();
     if (ip && /^\d+\.\d+\.\d+\.\d+$/.test(ip)) {
@@ -423,7 +423,7 @@ function isMetricReady() {
       'powershell -NoProfile -WindowStyle Hidden -Command "Get-NetAdapter | Where-Object { $_.InterfaceDescription -like \'*ZeroTier*\' } | Get-NetIPInterface -AddressFamily IPv4 | Select-Object -ExpandProperty InterfaceMetric"',
       { stdio: 'pipe', encoding: 'utf8', timeout: 5000 });
     const metric = parseInt(out.trim(), 10);
-    return metric <= 5; // metric 1-5 бол OK
+    return metric === 1; // metric яг 1 байх ёстой (WC3 зөвхөн хамгийн priority адаптерыг ашиглана)
   } catch { return false; }
 }
 

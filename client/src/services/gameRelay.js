@@ -54,10 +54,8 @@ function makeSearchPacket(product, version) {
 function startHost(playerIps) {
   stopHost();
   const ips = (playerIps || []).filter(Boolean);
-  if (!ips.length) {
-    console.log('[GameRelay:Host] Тоглогчийн IP байхгүй');
-    return;
-  }
+  // IP байхгүй ч relay эхлүүлнэ — port 6112-г WC3-аас ӨМНӨ эзлэх
+  // Дараа addHostPlayerIp-ээр IP нэмнэ
 
   const state = { ips, running: true, listener: null, sender: null };
 
