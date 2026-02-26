@@ -1250,6 +1250,12 @@ function _enterRoomUI(id, name, gameType, isHost, hostId, status, ztNetId) {
     launchBtn.style.display = 'none';
   }
 
+  // Найз урих товч (бүх тоглогчид харуулна)
+  const inviteBtn = document.getElementById('btn-invite-friends');
+  if (inviteBtn) inviteBtn.style.display = 'block';
+  const inviteDD = document.getElementById('invite-friends-dropdown');
+  if (inviteDD) inviteDD.classList.add('hidden');
+
   showPage('page-room');
 
   if (socket && currentUser) {
@@ -1484,6 +1490,62 @@ function renderMembers(members) {
 }
 
 // (Ready system устгагдсан — launch товч үргэлж идэвхтэй)
+
+// ── Өрөөнөөс найз урих ──────────────────────────────────
+document.getElementById('btn-invite-friends').onclick = () => {
+  const dd = document.getElementById('invite-friends-dropdown');
+  const isHidden = dd.classList.contains('hidden');
+  if (isHidden) {
+    renderInviteFriendsList();
+    dd.classList.remove('hidden');
+  } else {
+    dd.classList.add('hidden');
+  }
+};
+
+function renderInviteFriendsList() {
+  const ul = document.getElementById('invite-friends-list');
+  const noEl = document.getElementById('invite-no-friends');
+  if (!ul) return;
+
+  const memberIds = new Set(
+    (currentRoom?.members || []).map(m => String(m.id !== undefined ? m.id : ''))
+  );
+  const onlineFriends = myFriends.filter(f => onlineUserIds.has(String(f.id)));
+
+  if (onlineFriends.length === 0) {
+    ul.innerHTML = '';
+    noEl.style.display = 'block';
+    return;
+  }
+  noEl.style.display = 'none';
+
+  ul.innerHTML = onlineFriends.map(f => {
+    const fid = String(f.id);
+    const inRoom = memberIds.has(fid);
+    return `<li data-id="${fid}">
+      <span class="invite-name">${escHtml(f.username)}</span>
+      ${inRoom
+        ? '<span class="invite-in-room">өрөөнд байна</span>'
+        : `<button class="btn btn-primary btn-invite-send" data-id="${fid}" data-name="${escHtml(f.username)}">Урих</button>`
+      }
+    </li>`;
+  }).join('');
+
+  ul.querySelectorAll('.btn-invite-send').forEach(btn => {
+    btn.onclick = () => {
+      if (!currentRoom || !socket) return;
+      socket.emit('room:invite', {
+        toUserId: btn.dataset.id,
+        roomId: currentRoom.id,
+        roomName: currentRoom.name,
+      });
+      btn.disabled = true;
+      btn.outerHTML = '<span class="invite-sent">Илгээгдлээ</span>';
+      showToast(`${btn.dataset.name}-д урилга илгээлээ`, 'success', 3000);
+    };
+  });
+}
 
 async function kickPlayer(targetId, targetName) {
   if (!currentRoom || !targetId) return;

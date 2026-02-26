@@ -990,6 +990,42 @@ body.light #icon-moon { display: block !important; }
 .status-in-game  { font-size: 0.7rem; color: #f04747; margin-left: 4px; }
 .status-online   { font-size: 0.7rem; color: #43b581; margin-left: 4px; }
 
+/* ── Room invite friends dropdown ─────────────────────── */
+.invite-dropdown {
+  margin-top: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+  max-height: 220px;
+  overflow-y: auto;
+}
+.invite-dropdown.hidden { display: none; }
+.invite-dropdown-header {
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 8px 10px 4px;
+  color: var(--muted);
+}
+.invite-friends-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.invite-friends-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  font-size: 0.82rem;
+  border-top: 1px solid var(--border);
+  cursor: default;
+}
+.invite-friends-list li:first-child { border-top: none; }
+.invite-friends-list .invite-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.invite-friends-list .invite-in-room { font-size: 0.72rem; color: var(--muted); font-style: italic; }
+.invite-friends-list .invite-sent { font-size: 0.72rem; color: var(--green); }
+.invite-friends-list .btn-invite-send { padding: 2px 8px; font-size: 0.72rem; }
+
 /* ── Room invite notification ───────────────────────── */
 .invite-toast {
   position: fixed;
