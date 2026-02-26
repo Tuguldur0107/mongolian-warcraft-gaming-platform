@@ -1279,20 +1279,8 @@ function _enterRoomUI(id, name, gameType, isHost, hostId, status, ztNetId) {
     autoSetupZerotier(id);
   }
 
-  // Ready товч init — default: бэлэн (тоглогч "бэлэн биш" дарж болно)
-  const readyBtn = document.getElementById('btn-ready');
-  if (readyBtn) {
-    readyBtn.style.display = isHost ? 'none' : '';
-    readyBtn.classList.add('btn-ready-active');
-    readyBtn.innerHTML = '✅ <span>Бэлэн</span>';
-  }
-  const readyStatus = document.getElementById('ready-status');
-  if (readyStatus) readyStatus.textContent = '';
-
   if (socket && currentUser) {
     socket.emit('room:join', { roomId: id });
-    // Бүх тоглогч автоматаар бэлэн (host + player)
-    setTimeout(() => socket.emit('room:ready', { roomId: id, ready: true }), 500);
     // Өрөөний ZT IP-уудыг авах
     roomZtIps = {};
     socket.emit('room:get_zt_ips', { roomId: id });
@@ -1614,9 +1602,6 @@ function renderMembers(members) {
     const name = m.name !== undefined ? m.name : m;
     const isMe       = id ? id === myId   : name === currentUser?.username;
     const isRoomHost = id ? id === hostId : false;
-    const readyIcon  = m.ready
-      ? '<span class="member-ready-icon">✅</span>'
-      : '<span class="member-ready-icon">⏳</span>';
     const kickBtn = (isHost && !isMe)
       ? `<button class="btn btn-sm btn-danger kick-btn" data-id="${id}" data-name="${name}">Kick</button>`
       : '';
@@ -1629,7 +1614,7 @@ function renderMembers(members) {
       : `<span class="member-zt-ip ip-missing">IP тохируулагдаагүй ${refreshBtn}</span>`;
     return `<li class="${isMe ? 'me' : ''}">
       <div class="member-info">
-        <div>${isRoomHost ? '👑 ' : ''}${nameSpan}${isMe ? ' (Та)' : ''} ${readyIcon}</div>
+        <div>${isRoomHost ? '👑 ' : ''}${nameSpan}${isMe ? ' (Та)' : ''}</div>
         ${ztIp}
       </div>
       ${kickBtn}
@@ -1666,75 +1651,9 @@ function renderMembers(members) {
     };
   });
 
-  // Ready status + launch button update
-  updateReadyUI(members);
 }
 
-// ── Ready system UI ──────────────────────────────────────
-let _prevAllReady = false;
-function updateReadyUI(members) {
-  const readyCount = members.filter(m => m.ready).length;
-  const total = members.length;
-  const allReady = total > 1 && readyCount === total;
-  const myId = String(currentUser?.id);
-  const myMember = members.find(m => String(m.id) === myId);
-  const isHost = currentRoom?.isHost;
-
-  // Бүгд бэлэн болсон үед дуу гаргах (нэг удаа)
-  if (allReady && !_prevAllReady) playSound('ready');
-  _prevAllReady = allReady;
-
-  // Ready status text
-  const statusEl = document.getElementById('ready-status');
-  if (statusEl) {
-    statusEl.textContent = `${readyCount}/${total} бэлэн`;
-    statusEl.style.color = allReady ? '#43b581' : '';
-  }
-
-  // Ready button (player only)
-  const readyBtn = document.getElementById('btn-ready');
-  if (readyBtn) {
-    readyBtn.style.display = isHost ? 'none' : '';
-    if (myMember?.ready) {
-      readyBtn.innerHTML = '✅ <span>Бэлэн</span>';
-      readyBtn.classList.add('btn-ready-active');
-    } else {
-      readyBtn.innerHTML = '⏳ <span>Бэлэн биш</span>';
-      readyBtn.classList.remove('btn-ready-active');
-    }
-  }
-
-  // Launch button (host): disable if not all ready
-  const launchBtn = document.getElementById('btn-launch-wc3');
-  if (launchBtn && isHost) {
-    const isRejoin = launchBtn.querySelector('span')?.textContent?.includes('Дахин') ||
-                     launchBtn.querySelector('span')?.textContent?.includes('↩');
-    if (!isRejoin) {
-      if (total <= 1) {
-        // Зөвхөн host байвал хязгаарлахгүй
-        launchBtn.disabled = false;
-        launchBtn.title = '';
-        launchBtn.classList.remove('btn-launch-ready');
-      } else if (allReady) {
-        launchBtn.disabled = false;
-        launchBtn.title = '';
-        launchBtn.classList.add('btn-launch-ready');
-      } else {
-        launchBtn.disabled = true;
-        launchBtn.title = `Бүх тоглогчид бэлэн болтол хүлээнэ үү (${readyCount}/${total})`;
-        launchBtn.classList.remove('btn-launch-ready');
-      }
-    }
-  }
-}
-
-// Ready товч handler
-document.getElementById('btn-ready')?.addEventListener('click', () => {
-  if (!currentRoom || !socket) return;
-  const readyBtn = document.getElementById('btn-ready');
-  const isCurrentlyReady = readyBtn?.classList.contains('btn-ready-active');
-  socket.emit('room:ready', { roomId: currentRoom.id, ready: !isCurrentlyReady });
-});
+// (Ready system устгагдсан — launch товч үргэлж идэвхтэй)
 
 async function kickPlayer(targetId, targetName) {
   if (!currentRoom || !targetId) return;
