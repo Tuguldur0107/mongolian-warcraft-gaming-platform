@@ -42,6 +42,11 @@ contextBridge.exposeInMainWorld('api', {
   onRoomClosed: (cb) => ipcRenderer.on('room:closed', (_, d) => cb(d)),
   onRoomKicked: (cb) => ipcRenderer.on('room:kicked', (_, d) => cb(d)),
 
+  // Cache
+  getCacheSize:          () => ipcRenderer.invoke('cache:getSize'),
+  clearCache:            () => ipcRenderer.invoke('cache:clear'),
+  relaunchApp:           () => ipcRenderer.invoke('app:relaunch'),
+
   // Тохируулга
   getSettings:           () => ipcRenderer.invoke('settings:get'),
   selectGameExe:         () => ipcRenderer.invoke('settings:selectGameExe'),

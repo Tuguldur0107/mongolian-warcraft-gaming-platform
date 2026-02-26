@@ -532,6 +532,43 @@ ipcMain.handle('replay:setMembers', (_, members) => {
   return true;
 });
 
+// ── Cache цэвэрлэх ────────────────
+ipcMain.handle('cache:getSize', async () => {
+  const userDataPath = app.getPath('userData');
+  const cacheDirs = ['Cache', 'Code Cache', 'GPUCache', 'DawnCache', 'blob_storage',
+    'Session Storage', 'Service Worker', 'WebStorage', 'Shared Dictionary', 'Network'];
+  let totalSize = 0;
+  for (const dir of cacheDirs) {
+    const dirPath = path.join(userDataPath, dir);
+    try {
+      const files = fs.readdirSync(dirPath, { recursive: true, withFileTypes: true });
+      for (const f of files) {
+        if (f.isFile()) {
+          try { totalSize += fs.statSync(path.join(f.parentPath || f.path, f.name)).size; } catch {}
+        }
+      }
+    } catch {}
+  }
+  return totalSize;
+});
+
+ipcMain.handle('app:relaunch', () => {
+  app.relaunch();
+  app.quit();
+});
+
+ipcMain.handle('cache:clear', async () => {
+  const userDataPath = app.getPath('userData');
+  const cacheDirs = ['Cache', 'Code Cache', 'GPUCache', 'DawnCache', 'blob_storage',
+    'Session Storage', 'Service Worker', 'WebStorage', 'Shared Dictionary', 'Network', 'SharedStorage'];
+  let cleared = 0;
+  for (const dir of cacheDirs) {
+    const dirPath = path.join(userDataPath, dir);
+    try { fs.rmSync(dirPath, { recursive: true, force: true }); cleared++; } catch {}
+  }
+  return cleared;
+});
+
 // ── Тохируулга (settings.json in userData) ────────────────
 function getSettingsPath() {
   return path.join(app.getPath('userData'), 'settings.json');

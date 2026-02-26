@@ -2944,6 +2944,16 @@ async function loadSettings() {
     }
   } catch {}
 
+  // Cache хэмжээ харуулах
+  try {
+    const size = await window.api.getCacheSize();
+    const el = document.getElementById('cache-size-info');
+    if (el) {
+      const mb = (size / 1024 / 1024).toFixed(1);
+      el.textContent = `Cache хэмжээ: ${mb} MB`;
+    }
+  } catch {}
+
   // Мэдэгдлийн тохиргоо ачаалах
   const soundChk = document.getElementById('setting-sound');
   const notifChk = document.getElementById('setting-desktop-notif');
@@ -2963,6 +2973,23 @@ document.getElementById('setting-desktop-notif')?.addEventListener('change', (e)
 });
 document.getElementById('btn-test-sound')?.addEventListener('click', () => {
   playSound('dm');
+});
+
+// Cache цэвэрлэх товч
+document.getElementById('btn-clear-cache')?.addEventListener('click', async () => {
+  if (!await showConfirm('Cache цэвэрлэх', 'Cache цэвэрлэх үү? Апп дахин ачаалагдана.')) return;
+  const btn = document.getElementById('btn-clear-cache');
+  btn.disabled = true;
+  btn.textContent = 'Цэвэрлэж байна...';
+  try {
+    await window.api.clearCache();
+    showToast('Cache цэвэрлэгдлээ. Дахин ачаалж байна...', 'success');
+    setTimeout(() => { window.api.relaunchApp?.() || location.reload(); }, 1500);
+  } catch (err) {
+    showToast('Алдаа: ' + (err?.message || String(err)), 'error');
+    btn.disabled = false;
+    btn.innerHTML = '<svg class="btn-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> Cache цэвэрлэх';
+  }
 });
 
 // ZeroTier IP шинэчлэх товч (Тохируулга)
