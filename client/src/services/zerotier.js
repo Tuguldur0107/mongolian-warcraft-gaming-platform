@@ -14,12 +14,7 @@ let _ztCmd = null;
 let currentNetworkId = null;
 
 function getZtCmd() {
-  // Cache байгаа бол exe бодитоор байгаа эсэхийг шалгах
-  if (_ztCmd) {
-    const cached = _ztCmd.match(/"([^"]+)"/);
-    if (cached && fs.existsSync(cached[1])) return _ztCmd;
-    _ztCmd = null; // Exe устгагдсан — cache цэвэрлэх
-  }
+  if (_ztCmd) return _ztCmd;
   for (const p of ZT_PATHS) {
     if (fs.existsSync(p)) {
       // ZeroTier 1.16+ нь authtoken.secret-д admin шаарддаг
@@ -38,11 +33,7 @@ function getZtCmd() {
 }
 
 function isInstalled() {
-  if (ZT_PATHS.some(p => fs.existsSync(p))) return true;
-  // zerotier-cli.bat байвал суулгасан гэж үзнэ
-  if (fs.existsSync('C:\\Program Files (x86)\\ZeroTier\\One\\zerotier-cli.bat')) return true;
-  if (fs.existsSync('C:\\Program Files\\ZeroTier\\One\\zerotier-cli.bat')) return true;
-  return false;
+  return ZT_PATHS.some(p => fs.existsSync(p));
 }
 
 // ZeroTier node ID авах (authorize-д хэрэгтэй)
@@ -58,32 +49,14 @@ function getNodeId() {
 }
 
 function isRunning() {
-  // Арга 1: zerotier-one -q info
   const cmd = getZtCmd();
-  if (cmd) {
-    try {
-      execSync(`${cmd} info`, { stdio: 'pipe', timeout: 5000 });
-      return true;
-    } catch {}
-  }
-  // Арга 2: zerotier-cli.bat info
-  const cliBats = [
-    'C:\\Program Files (x86)\\ZeroTier\\One\\zerotier-cli.bat',
-    'C:\\Program Files\\ZeroTier\\One\\zerotier-cli.bat',
-  ];
-  for (const bat of cliBats) {
-    if (!fs.existsSync(bat)) continue;
-    try {
-      execSync(`"${bat}" info`, { stdio: 'pipe', timeout: 5000 });
-      return true;
-    } catch {}
-  }
-  // Арга 3: Windows service шалгах
+  if (!cmd) return false;
   try {
-    const out = execSync('sc query ZeroTierOneService', { stdio: 'pipe', encoding: 'utf8', timeout: 5000 });
-    return out.includes('RUNNING');
-  } catch {}
-  return false;
+    execSync(`${cmd} info`, { stdio: 'pipe' });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -244,157 +217,48 @@ async function autoSetup(networkId) {
 async function joinNetwork(networkId) {
   if (!networkId) return false;
 
-  currentNetworkId = networkId;
-
-  // Арга 1: zerotier-one -q join
   const cmd = getZtCmd();
-  if (cmd) {
-    try {
-      await new Promise((resolve, reject) => {
-        exec(`${cmd} join ${networkId}`, { timeout: 10000 }, (err) => {
-          if (err) return reject(err);
-          console.log(`[ZeroTier] ${networkId}-д нэгдлээ (CLI)`);
-          resolve(true);
-        });
-      });
-      return true;
-    } catch (e) {
-      console.warn('[ZeroTier] CLI join алдаа:', e.message);
-    }
+  if (!cmd) {
+    console.warn('[ZeroTier] Суулгаагүй байна');
+    return false;
+  }
+  if (!isRunning()) {
+    console.warn('[ZeroTier] Сервис ажиллаагүй байна');
+    return false;
   }
 
-  // Арга 2: zerotier-cli.bat join
-  const cliBatPaths = [
-    'C:\\Program Files (x86)\\ZeroTier\\One\\zerotier-cli.bat',
-    'C:\\Program Files\\ZeroTier\\One\\zerotier-cli.bat',
-  ];
-  for (const batPath of cliBatPaths) {
-    if (!fs.existsSync(batPath)) continue;
-    try {
-      execSync(`"${batPath}" join ${networkId}`, { stdio: 'pipe', timeout: 10000 });
-      console.log(`[ZeroTier] ${networkId}-д нэгдлээ (CLI bat)`);
-      return true;
-    } catch (e) {
-      console.warn('[ZeroTier] CLI bat join алдаа:', e.message);
-    }
-  }
-
-  // Арга 3: Local API
-  try {
-    let token = null;
-    const tokenPaths = [
-      path.join(os.homedir(), 'AppData', 'Local', 'ZeroTier', 'authtoken.secret'),
-      'C:\\ProgramData\\ZeroTier\\One\\authtoken.secret',
-    ];
-    for (const tp of tokenPaths) {
-      if (fs.existsSync(tp)) { token = fs.readFileSync(tp, 'utf8').trim(); break; }
-    }
-    if (token) {
-      execSync(
-        `powershell -NoProfile -WindowStyle Hidden -Command "Invoke-WebRequest -Uri 'http://localhost:9993/network/${networkId}' -Method Post -Headers @{'X-ZT1-Auth'='${token}'} -UseBasicParsing | Out-Null"`,
-        { stdio: 'pipe', timeout: 10000 }
-      );
-      console.log(`[ZeroTier] ${networkId}-д нэгдлээ (API)`);
-      return true;
-    }
-  } catch (e) {
-    console.warn('[ZeroTier] API join алдаа:', e.message);
-  }
-
-  console.warn('[ZeroTier] Бүх аргаар join хийж чадсангүй');
-  return false;
+  return new Promise((resolve, reject) => {
+    exec(`${cmd} join ${networkId}`, (err) => {
+      if (err) {
+        console.error('[ZeroTier] join алдаа:', err.message);
+        return reject(err);
+      }
+      currentNetworkId = networkId;
+      console.log(`[ZeroTier] ${networkId}-д нэгдлээ`);
+      resolve(true);
+    });
+  });
 }
 
-// ZeroTier IP хаяг олох — олон аргаар оролдоно
-// 1. zerotier-one CLI (listnetworks)
-// 2. zerotier-cli.bat (Windows-ийн official CLI wrapper)
-// 3. ZeroTier local API (http://localhost:9993)
-// 4. Windows network adapter-аас шууд уншиx (хамгийн найдвартай)
+// ZeroTier IP хаяг олох (listnetworks output-аас парсдах)
+// Output формат: <nwid> <name> <mac> <status> <type> <dev> <ips>
 function getMyIp(networkId) {
   const nid = networkId || currentNetworkId;
-
-  // Арга 1: zerotier-one -q listnetworks
+  if (!nid) return null;
   const cmd = getZtCmd();
-  if (cmd && nid) {
-    try {
-      const out = execSync(`${cmd} listnetworks`, { stdio: 'pipe', encoding: 'utf8', timeout: 5000 });
-      const lines = out.trim().split('\n');
-      for (const line of lines) {
-        if (!line.includes(nid)) continue;
-        const ipMatch = line.match(/(\d+\.\d+\.\d+\.\d+)\/\d+/);
-        if (ipMatch) { console.log('[ZT-IP] CLI-аас олдлоо:', ipMatch[1]); return ipMatch[1]; }
-      }
-    } catch (e) {
-      console.warn('[ZT-IP] CLI listnetworks алдаа:', e.message);
-    }
-  }
-
-  // Арга 2: zerotier-cli.bat (шинэ хувилбарт байдаг)
-  const cliBatPaths = [
-    'C:\\Program Files (x86)\\ZeroTier\\One\\zerotier-cli.bat',
-    'C:\\Program Files\\ZeroTier\\One\\zerotier-cli.bat',
-  ];
-  for (const batPath of cliBatPaths) {
-    if (!fs.existsSync(batPath)) continue;
-    try {
-      const out = execSync(`"${batPath}" listnetworks`, { stdio: 'pipe', encoding: 'utf8', timeout: 5000 });
-      const lines = out.trim().split('\n');
-      for (const line of lines) {
-        if (nid && !line.includes(nid)) continue;
-        const ipMatch = line.match(/(\d+\.\d+\.\d+\.\d+)\/\d+/);
-        if (ipMatch) { console.log('[ZT-IP] CLI bat-аас олдлоо:', ipMatch[1]); return ipMatch[1]; }
-      }
-    } catch (e) {
-      console.warn('[ZT-IP] CLI bat алдаа:', e.message);
-    }
-  }
-
-  // Арга 3: ZeroTier local API (http://localhost:9993)
+  if (!cmd) return null;
   try {
-    // Auth token олох
-    let token = null;
-    const tokenPaths = [
-      path.join(os.homedir(), 'AppData', 'Local', 'ZeroTier', 'authtoken.secret'),
-      'C:\\ProgramData\\ZeroTier\\One\\authtoken.secret',
-    ];
-    for (const tp of tokenPaths) {
-      if (fs.existsSync(tp)) { token = fs.readFileSync(tp, 'utf8').trim(); break; }
-    }
-    if (token) {
-      const out = execSync(
-        `powershell -NoProfile -WindowStyle Hidden -Command "(Invoke-WebRequest -Uri 'http://localhost:9993/network' -Headers @{'X-ZT1-Auth'='${token}'} -UseBasicParsing -TimeoutSec 2).Content"`,
-        { stdio: 'pipe', encoding: 'utf8', timeout: 3000 }
-      );
-      const networks = JSON.parse(out);
-      for (const net of networks) {
-        if (nid && net.id !== nid && net.nwid !== nid) continue;
-        const addrs = net.assignedAddresses || [];
-        for (const addr of addrs) {
-          const m = addr.match(/(\d+\.\d+\.\d+\.\d+)/);
-          if (m) { console.log('[ZT-IP] API-аас олдлоо:', m[1]); return m[1]; }
-        }
-      }
+    const out = execSync(`${cmd} listnetworks`, { stdio: 'pipe', encoding: 'utf8' });
+    const lines = out.trim().split('\n');
+    for (const line of lines) {
+      if (!line.includes(nid)) continue;
+      // IP хаяг нь мөрний сүүлд байна: "10.147.20.x/24" гэсэн формат
+      const ipMatch = line.match(/(\d+\.\d+\.\d+\.\d+)\/\d+/);
+      if (ipMatch) return ipMatch[1];
     }
   } catch (e) {
-    console.warn('[ZT-IP] Local API алдаа:', e.message);
+    console.error('[ZeroTier] listnetworks алдаа:', e.message);
   }
-
-  // Арга 4: Windows network adapter-аас шууд (хамгийн найдвартай — ZeroTier CLI хэрэггүй)
-  try {
-    const out = execSync(
-      `powershell -NoProfile -WindowStyle Hidden -Command "Get-NetAdapter | Where-Object { $_.InterfaceDescription -like '*ZeroTier*' } | Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue | Select-Object -ExpandProperty IPAddress"`,
-      { stdio: 'pipe', encoding: 'utf8', timeout: 4000 }
-    );
-    const ip = out.trim().split('\n')[0]?.trim();
-    if (ip && /^\d+\.\d+\.\d+\.\d+$/.test(ip)) {
-      console.log('[ZT-IP] Windows adapter-аас олдлоо:', ip);
-      return ip;
-    }
-  } catch (e) {
-    console.warn('[ZT-IP] Windows adapter алдаа:', e.message);
-  }
-
-  console.warn('[ZT-IP] Бүх аргаар IP олдсонгүй');
   return null;
 }
 
@@ -423,7 +287,7 @@ function isMetricReady() {
       'powershell -NoProfile -WindowStyle Hidden -Command "Get-NetAdapter | Where-Object { $_.InterfaceDescription -like \'*ZeroTier*\' } | Get-NetIPInterface -AddressFamily IPv4 | Select-Object -ExpandProperty InterfaceMetric"',
       { stdio: 'pipe', encoding: 'utf8', timeout: 5000 });
     const metric = parseInt(out.trim(), 10);
-    return metric === 1; // metric яг 1 байх ёстой (WC3 зөвхөн хамгийн priority адаптерыг ашиглана)
+    return metric <= 5; // metric 1-5 бол OK
   } catch { return false; }
 }
 

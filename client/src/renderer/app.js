@@ -1492,19 +1492,17 @@ document.getElementById('btn-launch-wc3').onclick = async () => {
   const isRejoin = document.getElementById('btn-launch-wc3').querySelector('span')?.textContent?.includes('Дахин');
   appendSysMsg(isRejoin ? '↩ WC3 дахин нээж байна...' : `"${gameType}" тоглоом эхлүүлж байна...`);
 
-  // HOST: Relay-г WC3 нээхээс ӨМНӨ эхлүүлэх (port 6112 эзлэх)
+  // HOST: Relay-г WC3 нээхээс ӨМНӨ эхлүүлэх (broadcast алдахгүй)
   if (!isRejoin && currentRoom?.isHost && !_hostRelayStarted) {
     try {
       const myId = String(currentUser?.id);
       const earlyIps = Object.entries(roomZtIps || {})
         .filter(([uid]) => uid !== myId)
         .map(([, ip]) => ip);
-      await window.api.startHostRelay(earlyIps);
-      _hostRelayStarted = true;
       if (earlyIps.length > 0) {
+        await window.api.startHostRelay(earlyIps);
+        _hostRelayStarted = true;
         appendSysMsg(`📡 Relay эхэллээ: ${earlyIps.length} тоглогч`);
-      } else {
-        appendSysMsg('📡 Relay эхэллээ. Тоглогчдын IP хүлээж байна...');
       }
     } catch {}
   }
