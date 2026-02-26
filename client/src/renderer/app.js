@@ -1264,39 +1264,35 @@ function _enterRoomUI(id, name, gameType, isHost, hostId, status, ztNetId) {
 
   showPage('page-room');
 
-  // ZeroTier Network ID — өрөөний мэдээллээс харуулах
+  // ZeroTier Network ID — өрөөний мэдээллээс харуулах + автомат тохируулга
   const ztDiv = document.getElementById('zt-info');
   if (ztDiv) {
     if (ztNetId) {
       document.getElementById('zt-network-id').textContent = ztNetId;
-      ztDiv.style.display = 'block';
-      // Reset UI
-      document.getElementById('zt-my-ip').style.display = 'none';
-      document.getElementById('zt-host-ip').style.display = 'none';
-      document.getElementById('btn-zt-retry').style.display = 'none';
-      // Автомат IP тохируулга эхлүүлэх
-      autoSetupZerotier(id);
-    } else {
-      ztDiv.style.display = 'none';
     }
+    ztDiv.style.display = 'block';
+    // Reset UI
+    document.getElementById('zt-my-ip').style.display = 'none';
+    document.getElementById('zt-host-ip').style.display = 'none';
+    document.getElementById('btn-zt-retry').style.display = 'none';
+    // Автомат IP тохируулга эхлүүлэх (ztNetId хоосон ч settings-аас авна)
+    autoSetupZerotier(id);
   }
 
-  // Ready товч init
+  // Ready товч init — default: бэлэн (тоглогч "бэлэн биш" дарж болно)
   const readyBtn = document.getElementById('btn-ready');
   if (readyBtn) {
     readyBtn.style.display = isHost ? 'none' : '';
-    readyBtn.classList.remove('btn-ready-active');
-    readyBtn.innerHTML = '⏳ <span>Бэлэн биш</span>';
+    readyBtn.classList.add('btn-ready-active');
+    readyBtn.innerHTML = '✅ <span>Бэлэн</span>';
   }
   const readyStatus = document.getElementById('ready-status');
   if (readyStatus) readyStatus.textContent = '';
 
   if (socket && currentUser) {
     socket.emit('room:join', { roomId: id });
-    // Host автоматаар бэлэн
-    if (isHost) {
-      setTimeout(() => socket.emit('room:ready', { roomId: id, ready: true }), 500);
-    }
+    // Бүх тоглогч автоматаар бэлэн (host + player)
+    setTimeout(() => socket.emit('room:ready', { roomId: id, ready: true }), 500);
     // Өрөөний ZT IP-уудыг авах
     roomZtIps = {};
     socket.emit('room:get_zt_ips', { roomId: id });
@@ -1377,6 +1373,11 @@ async function autoSetupZerotier(roomId) {
 
   try {
     const result = await window.api.refreshZerotier();
+    // Network ID-г UI-д харуулах
+    if (result.networkId) {
+      const nidEl = document.getElementById('zt-network-id');
+      if (nidEl && !nidEl.textContent) nidEl.textContent = result.networkId;
+    }
     if (result.ip) {
       // Амжилттай — IP олдлоо
       if (myIpVal) myIpVal.textContent = result.ip;

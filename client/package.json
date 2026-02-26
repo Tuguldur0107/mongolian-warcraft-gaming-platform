@@ -1,6 +1,6 @@
 {
   "name": "mongolian-warcraft-gaming-platform-client",
-  "version": "1.4.2",
+  "version": "1.4.3",
   "description": "Mongolian Warcraft Gaming Platform Desktop App",
   "main": "main.js",
   "scripts": {
