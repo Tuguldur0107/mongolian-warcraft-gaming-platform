@@ -1264,26 +1264,26 @@ function _enterRoomUI(id, name, gameType, isHost, hostId, status, ztNetId) {
 
   showPage('page-room');
 
-  // ZeroTier Network ID — өрөөний мэдээллээс харуулах + автомат тохируулга
-  const ztDiv = document.getElementById('zt-info');
-  if (ztDiv) {
-    if (ztNetId) {
-      document.getElementById('zt-network-id').textContent = ztNetId;
-    }
-    ztDiv.style.display = 'block';
-    // Reset UI
-    document.getElementById('zt-my-ip').style.display = 'none';
-    document.getElementById('zt-host-ip').style.display = 'none';
-    document.getElementById('btn-zt-retry').style.display = 'none';
-    // Автомат IP тохируулга эхлүүлэх (ztNetId хоосон ч settings-аас авна)
-    autoSetupZerotier(id);
-  }
-
   if (socket && currentUser) {
     socket.emit('room:join', { roomId: id });
     // Өрөөний ZT IP-уудыг авах
     roomZtIps = {};
     socket.emit('room:get_zt_ips', { roomId: id });
+    // ZeroTier IP-г серверт мэдэгдэх (relay-д хэрэгтэй) — retry логиктой
+    (async () => {
+      for (let attempt = 0; attempt < 5; attempt++) {
+        await new Promise(r => setTimeout(r, 2000));
+        try {
+          const myIp = await window.api.getZerotierIp();
+          if (myIp && socket) {
+            socket.emit('room:zt_ip', { roomId: id, ip: myIp });
+            console.log('[ZT] IP бүртгэгдлээ:', myIp);
+            return;
+          }
+        } catch {}
+      }
+      console.warn('[ZT] IP бүртгэж чадсангүй (5 оролдлого)');
+    })();
   }
   appendSysMsg(`"${name}" өрөөнд нэгдлээ.`);
 }
@@ -1337,142 +1337,10 @@ function resetLaunchBtn(isHost) {
   btn.classList.add('btn-primary');
 }
 
-// ── ZeroTier автомат тохируулга (өрөөнд орход) ──────────
+// ── ZeroTier setup flag (апп эхлэхэд initZeroTier ажиллаж байгааг мэдэх) ──
 let _ztSetupInProgress = false;
-async function autoSetupZerotier(roomId) {
-  if (_ztSetupInProgress) return;
-  _ztSetupInProgress = true;
 
-  const statusEl  = document.getElementById('zt-setup-status');
-  const textEl    = document.getElementById('zt-setup-text');
-  const myIpDiv   = document.getElementById('zt-my-ip');
-  const myIpVal   = document.getElementById('zt-my-ip-val');
-  const retryBtn  = document.getElementById('btn-zt-retry');
-  const warnEl    = document.getElementById('zt-status-warn');
-
-  // Тохируулж байгааг харуулах
-  if (statusEl && textEl) {
-    textEl.textContent = '⏳ IP автомат тохируулж байна...';
-    textEl.style.color = 'var(--accent)';
-    statusEl.style.display = 'block';
-  }
-  if (retryBtn) retryBtn.style.display = 'none';
-  if (warnEl) warnEl.style.display = 'none';
-
-  try {
-    const result = await window.api.refreshZerotier();
-    // Network ID-г UI-д харуулах
-    if (result.networkId) {
-      const nidEl = document.getElementById('zt-network-id');
-      if (nidEl && !nidEl.textContent) nidEl.textContent = result.networkId;
-    }
-    if (result.ip) {
-      // Амжилттай — IP олдлоо
-      if (myIpVal) myIpVal.textContent = result.ip;
-      if (myIpDiv) myIpDiv.style.display = 'block';
-      if (textEl)  { textEl.textContent = '✓ IP тохируулагдлаа'; textEl.style.color = 'var(--green)'; }
-      // 2 секундийн дараа статус мессеж арилгах
-      setTimeout(() => { if (statusEl) statusEl.style.display = 'none'; }, 2000);
-      // Серверт IP мэдэгдэх
-      if (socket && currentRoom) {
-        socket.emit('room:zt_ip', { roomId, ip: result.ip });
-      }
-      // Authorize хийлгэх
-      if (result.nodeId && result.networkId && socket) {
-        socket.emit('zt:authorize', { nodeId: result.nodeId, networkId: result.networkId });
-      }
-      console.log('[ZT] Автомат тохируулга амжилттай:', result.ip);
-    } else {
-      // IP олдсонгүй — authorize оролдож, retry товч харуулах
-      if (result.nodeId && result.networkId && socket) {
-        socket.emit('zt:authorize', { nodeId: result.nodeId, networkId: result.networkId });
-      }
-      if (textEl)  { textEl.textContent = '⚠ IP олдсонгүй. Дахин оролдоно уу.'; textEl.style.color = '#e67e22'; }
-      if (retryBtn) retryBtn.style.display = 'block';
-    }
-  } catch (err) {
-    console.error('[ZT] Автомат тохируулга алдаа:', err);
-    if (textEl) { textEl.textContent = '⚠ Тохируулга амжилтгүй. Дахин оролдоно уу.'; textEl.style.color = 'var(--red)'; }
-    if (retryBtn) retryBtn.style.display = 'block';
-  }
-  _ztSetupInProgress = false;
-}
-
-// "IP дахин тохируулах" retry товч
-document.getElementById('btn-zt-retry')?.addEventListener('click', () => {
-  if (!currentRoom) return;
-  autoSetupZerotier(currentRoom.id);
-});
-
-// ── ZeroTier статус шалгах ───────────────────────────────
-async function checkZerotierStatus(networkId) {
-  try {
-    const st = await window.api.getZerotierStatus(networkId);
-    const warnEl = document.getElementById('zt-status-warn');
-    const myIpEl = document.getElementById('zt-my-ip');
-    if (!st.installed) {
-      if (warnEl) { warnEl.textContent = '⚠ ZeroTier суулгаагүй байна! Суулгана уу.'; warnEl.style.display = 'block'; }
-    } else if (!st.running) {
-      if (warnEl) { warnEl.textContent = '⚠ ZeroTier ажиллахгүй байна! ZeroTier One-г нээнэ үү.'; warnEl.style.display = 'block'; }
-    } else if (!st.connected) {
-      if (warnEl) { warnEl.textContent = '⚠ ZeroTier сүлжээнд холбогдоогүй. Хүлээнэ үү...'; warnEl.style.display = 'block'; }
-      // 5 секундийн дараа дахин шалгах
-      setTimeout(() => checkZerotierStatus(networkId), 5000);
-    } else {
-      if (warnEl) warnEl.style.display = 'none';
-      if (myIpEl && st.ip) {
-        document.getElementById('zt-my-ip-val').textContent = st.ip;
-        myIpEl.style.display = 'block';
-      }
-    }
-  } catch {}
-}
-
-// Host IP clipboard-д хуулах
-document.getElementById('btn-copy-host-ip')?.addEventListener('click', () => {
-  const ip = document.getElementById('zt-host-ip-val')?.textContent;
-  if (ip) {
-    navigator.clipboard.writeText(ip).then(() => {
-      showToast('IP хуулагдлаа!', 'success', 2000);
-    }).catch(() => {});
-  }
-});
-
-// Өрөө доторх IP шинэчлэх товч
-document.getElementById('btn-refresh-zt-ip')?.addEventListener('click', async () => {
-  const btn = document.getElementById('btn-refresh-zt-ip');
-  btn.disabled = true;
-  btn.textContent = '...';
-  try {
-    // Бүрэн re-setup хийх (join, authorize, metric, firewall)
-    const result = await window.api.refreshZerotier();
-    if (result.ip) {
-      document.getElementById('zt-my-ip-val').textContent = result.ip;
-      document.getElementById('zt-my-ip').style.display = 'block';
-      // Серверт шинэ IP мэдэгдэх
-      if (socket && currentRoom) {
-        socket.emit('room:zt_ip', { roomId: currentRoom.id, ip: result.ip });
-      }
-      // Серверээр authorize дахин хийлгэх
-      if (result.nodeId && result.networkId && socket) {
-        socket.emit('zt:authorize', { nodeId: result.nodeId, networkId: result.networkId });
-      }
-      showToast(`IP: ${result.ip}`, 'success', 3000);
-    } else {
-      // IP байхгүй бол authorize оролдох
-      if (result.nodeId && result.networkId && socket) {
-        socket.emit('zt:authorize', { nodeId: result.nodeId, networkId: result.networkId });
-        showToast('Authorize хүсэлт илгээгдлээ. 10 секундын дараа дахин оролдоно уу.', 'warning', 6000);
-      } else {
-        showToast('IP олдсонгүй. ZeroTier суулгасан эсэхийг шалгана уу.', 'warning', 5000);
-      }
-    }
-  } catch {}
-  btn.disabled = false;
-  btn.textContent = '🔄';
-});
-
-// Host IP-г UI-д харуулах helper
+// Host IP-г UI-д харуулах helper (no-op when elements removed)
 function showHostIp(ip) {
   const el = document.getElementById('zt-host-ip');
   const val = document.getElementById('zt-host-ip-val');
