@@ -520,3 +520,4 @@ router.patch('/:id/team', strictAuth, async (req, res) => {
 
 module.exports = router;
 module.exports.setIO = setIO;
+module.exports.memRooms = memRooms;

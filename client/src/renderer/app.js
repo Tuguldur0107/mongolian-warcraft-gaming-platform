@@ -410,6 +410,19 @@ async function connectSocket() {
     }
   });
 
+  // Host-оос ZT IP refresh хүсэлт ирэхэд
+  socket.on('room:do_refresh_zt', async ({ targetUserId }) => {
+    if (String(currentUser?.id) === String(targetUserId) && currentRoom) {
+      try {
+        const ip = await window.api.getZerotierIp();
+        if (ip) {
+          socket.emit('room:zt_ip', { roomId: currentRoom.id, ip });
+          showToast(`IP автоматаар шинэчлэгдлээ: ${ip}`, 'success');
+        }
+      } catch {}
+    }
+  });
+
   // WC3 хаагдсан
   let _hostKilledGame = false; // host хаасан учир game:exited давхар харуулахгүй
   window.api.onGameExited(() => {
@@ -1557,7 +1570,12 @@ function renderMembers(members) {
       ? `<button class="btn btn-sm btn-danger kick-btn" data-id="${id}" data-name="${name}">Kick</button>`
       : '';
     const nameSpan = (!isMe && id) ? `<span class="clickable-name" data-user-id="${id}">${name}</span>` : name;
-    const ztIp = id && roomZtIps[id] ? `<span class="member-zt-ip">${roomZtIps[id]}</span>` : '';
+    const hasIp = id && roomZtIps[id];
+    const canRefresh = isMe || isHost;
+    const refreshBtn = (!hasIp && canRefresh) ? `<button class="btn btn-sm zt-refresh-btn" data-id="${id}" title="IP дахин тохируулах">🔄</button>` : '';
+    const ztIp = hasIp
+      ? `<span class="member-zt-ip">${roomZtIps[id]}</span>`
+      : `<span class="member-zt-ip ip-missing">IP тохируулагдаагүй ${refreshBtn}</span>`;
     return `<li class="${isMe ? 'me' : ''}">
       <div class="member-info">
         <div>${isRoomHost ? '👑 ' : ''}${nameSpan}${isMe ? ' (Та)' : ''} ${readyIcon}</div>
@@ -1572,6 +1590,29 @@ function renderMembers(members) {
   });
   ul.querySelectorAll('.clickable-name').forEach(el => {
     el.addEventListener('click', () => openUserProfile(el.dataset.userId));
+  });
+  ul.querySelectorAll('.zt-refresh-btn').forEach(btn => {
+    btn.onclick = async (e) => {
+      e.stopPropagation();
+      const targetId = btn.dataset.id;
+      const myId = String(currentUser?.id);
+      btn.disabled = true; btn.textContent = '⏳';
+      if (targetId === myId) {
+        try {
+          const ip = await window.api.getZerotierIp();
+          if (ip && currentRoom) {
+            socket.emit('room:zt_ip', { roomId: currentRoom.id, ip });
+            showToast(`IP тохируулагдлаа: ${ip}`, 'success');
+          } else {
+            showToast('ZeroTier IP олдсонгүй. ZeroTier суулгасан эсэхээ шалгана уу.', 'warning');
+          }
+        } catch { showToast('IP авахад алдаа гарлаа', 'error'); }
+      } else if (currentRoom?.isHost) {
+        socket.emit('room:refresh_zt', { roomId: currentRoom.id, targetUserId: targetId });
+        showToast('Тоглогчид IP шинэчлэх хүсэлт илгээлээ', 'info');
+      }
+      setTimeout(() => { btn.disabled = false; btn.textContent = '🔄'; }, 3000);
+    };
   });
 
   // Ready status + launch button update

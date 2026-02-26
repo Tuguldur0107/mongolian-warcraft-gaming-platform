@@ -539,6 +539,13 @@ io.on('connection', (socket) => {
     socket.emit('room:zt_ips', { ips });
   });
 
+  // Host тоглогчид ZT IP refresh хүсэлт илгээх
+  socket.on('room:refresh_zt', ({ roomId, targetUserId }) => {
+    if (!roomId || !targetUserId) return;
+    if (String(socket.data.roomId) !== String(roomId)) return;
+    io.to(String(roomId)).emit('room:do_refresh_zt', { targetUserId: String(targetUserId) });
+  });
+
   // Тоглолт эхлэхэд статус 'in_game' болгох
   socket.on('room:game_started', () => {
     const username = socket.user.username;
@@ -566,6 +573,9 @@ io.on('connection', (socket) => {
         );
       } catch (e) { console.error('[HostGameEnded] DB:', e.message); }
     }
+    // In-memory fallback мөн шинэчлэх
+    const memRoom = roomRoutes.memRooms.get(String(roomId));
+    if (memRoom) memRoom.status = 'waiting';
     // Бүх тоглогчдод broadcast
     socket.to(String(roomId)).emit('room:host_game_ended');
     io.emit('rooms:updated');
