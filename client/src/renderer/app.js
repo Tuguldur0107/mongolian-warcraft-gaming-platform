@@ -382,30 +382,18 @@ async function connectSocket() {
   // Тоглогчдын ZeroTier IP жагсаалт
   socket.on('room:zt_ips', async ({ ips }) => {
     if (!ips) return;
-    // IP-уудыг хадгалах (members list-д харуулахад ашиглана)
+    // IP-уудыг хадгалах
     roomZtIps = ips;
-    // Members жагсаалтыг дахин render хийж IP харуулах
     if (currentRoom?.members) renderMembers(currentRoom.members);
 
-    const myId = String(currentUser?.id);
-    if (currentRoom?.isHost) {
-      // HOST: тоглогчдын IP-р relay эхлүүлэх/шинэчлэх
+    // Relay аль хэдийн ажиллаж байвал шинэ IP нэмнэ (WC3 нээгдсэний дараа л)
+    if (_hostRelayStarted && currentRoom?.isHost) {
+      const myId = String(currentUser?.id);
       const playerIps = Object.entries(ips)
         .filter(([uid]) => uid !== myId)
         .map(([, ip]) => ip);
-      if (playerIps.length > 0) {
-        if (_hostRelayStarted) {
-          // Relay аль хэдийн ажиллаж байвал зөвхөн шинэ IP нэмнэ
-          for (const ip of playerIps) {
-            try { await window.api.addRelayPlayer(ip); } catch {}
-          }
-        } else {
-          try {
-            await window.api.startHostRelay(playerIps);
-            _hostRelayStarted = true;
-            appendSysMsg(`📡 Game relay: ${playerIps.length} тоглогчид дамжуулж байна`);
-          } catch {}
-        }
+      for (const ip of playerIps) {
+        try { await window.api.addRelayPlayer(ip); } catch {}
       }
     }
   });
@@ -1360,22 +1348,8 @@ document.getElementById('btn-launch-wc3').onclick = async () => {
   const isRejoin = document.getElementById('btn-launch-wc3').querySelector('span')?.textContent?.includes('Дахин');
   appendSysMsg(isRejoin ? '↩ WC3 дахин нээж байна...' : `"${gameType}" тоглоом эхлүүлж байна...`);
 
-  // HOST: Relay-г WC3 нээхээс ӨМНӨ эхлүүлэх (broadcast алдахгүй)
-  if (!isRejoin && currentRoom?.isHost && !_hostRelayStarted) {
-    try {
-      const myId = String(currentUser?.id);
-      const earlyIps = Object.entries(roomZtIps || {})
-        .filter(([uid]) => uid !== myId)
-        .map(([, ip]) => ip);
-      if (earlyIps.length > 0) {
-        await window.api.startHostRelay(earlyIps);
-        _hostRelayStarted = true;
-        appendSysMsg(`📡 Relay эхэллээ: ${earlyIps.length} тоглогч`);
-      }
-    } catch {}
-  }
-
   try {
+    // WC3-г ЭХЛЭЭД нээнэ — port 6112-г WC3 эзэлнэ
     await window.api.launchGame(gameType);
     appendSysMsg('✓ Тоглоом нээгдлээ. LAN горим сонгоно уу.');
     if (!isRejoin && currentRoom?.isHost) {
@@ -1391,10 +1365,27 @@ document.getElementById('btn-launch-wc3').onclick = async () => {
             socket.emit('room:host_ip', { roomId: currentRoom.id, ip });
             showHostIp(ip);
             appendSysMsg(`🎯 Таны IP: ${ip}`);
-            // Тоглогчдын ZT IP жагсаалт авч relay шинэчлэх
-            socket.emit('room:get_zt_ips', { roomId: currentRoom.id });
           }
         } catch {}
+        // WC3 port 6112-г bind хийх хугацаа өгөөд ДАРАА нь relay эхлүүлнэ
+        // (reuseAddr-тай учир WC3-тай хамт ажиллана)
+        setTimeout(async () => {
+          if (!_hostRelayStarted && currentRoom?.isHost) {
+            const myId = String(currentUser?.id);
+            const playerIps = Object.entries(roomZtIps || {})
+              .filter(([uid]) => uid !== myId)
+              .map(([, ip]) => ip);
+            if (playerIps.length > 0) {
+              try {
+                await window.api.startHostRelay(playerIps);
+                _hostRelayStarted = true;
+                appendSysMsg(`📡 Relay: ${playerIps.length} тоглогчид дамжуулж байна`);
+              } catch {}
+            }
+            // Шинэ IP-уудыг авах (relay эхэлсний дараа)
+            socket.emit('room:get_zt_ips', { roomId: currentRoom.id });
+          }
+        }, 3000);
       } catch {}
     }
   } catch (err) {
@@ -1474,12 +1465,7 @@ function renderMembers(members) {
       ? `<button class="btn btn-sm btn-danger kick-btn" data-id="${id}" data-name="${name}">Kick</button>`
       : '';
     const nameSpan = (!isMe && id) ? `<span class="clickable-name" data-user-id="${id}">${name}</span>` : name;
-    const hasIp = id && roomZtIps[id];
-    const canRefresh = isMe || isHost;
-    const refreshBtn = (!hasIp && canRefresh) ? `<button class="btn btn-sm zt-refresh-btn" data-id="${id}" title="IP дахин тохируулах">🔄</button>` : '';
-    const ztIp = hasIp
-      ? `<span class="member-zt-ip">${roomZtIps[id]}</span>`
-      : `<span class="member-zt-ip ip-missing">IP тохируулагдаагүй ${refreshBtn}</span>`;
+    const ztIp = id && roomZtIps[id] ? `<span class="member-zt-ip">${roomZtIps[id]}</span>` : '';
     return `<li class="${isMe ? 'me' : ''}">
       <div class="member-info">
         <div>${isRoomHost ? '👑 ' : ''}${nameSpan}${isMe ? ' (Та)' : ''}</div>
@@ -1495,30 +1481,6 @@ function renderMembers(members) {
   ul.querySelectorAll('.clickable-name').forEach(el => {
     el.addEventListener('click', () => openUserProfile(el.dataset.userId));
   });
-  ul.querySelectorAll('.zt-refresh-btn').forEach(btn => {
-    btn.onclick = async (e) => {
-      e.stopPropagation();
-      const targetId = btn.dataset.id;
-      const myId = String(currentUser?.id);
-      btn.disabled = true; btn.textContent = '⏳';
-      if (targetId === myId) {
-        try {
-          const ip = await window.api.getZerotierIp();
-          if (ip && currentRoom) {
-            socket.emit('room:zt_ip', { roomId: currentRoom.id, ip });
-            showToast(`IP тохируулагдлаа: ${ip}`, 'success');
-          } else {
-            showToast('ZeroTier IP олдсонгүй. ZeroTier суулгасан эсэхээ шалгана уу.', 'warning');
-          }
-        } catch { showToast('IP авахад алдаа гарлаа', 'error'); }
-      } else if (currentRoom?.isHost) {
-        socket.emit('room:refresh_zt', { roomId: currentRoom.id, targetUserId: targetId });
-        showToast('Тоглогчид IP шинэчлэх хүсэлт илгээлээ', 'info');
-      }
-      setTimeout(() => { btn.disabled = false; btn.textContent = '🔄'; }, 3000);
-    };
-  });
-
 }
 
 // (Ready system устгагдсан — launch товч үргэлж идэвхтэй)

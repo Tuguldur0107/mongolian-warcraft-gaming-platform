@@ -494,8 +494,6 @@ body.light .profile-avatar-wrap img {
 .members-list li::before { content: '●'; color: var(--green); font-size: 0.6rem; }
 .member-info { display: flex; flex-direction: column; flex: 1; min-width: 0; }
 .member-zt-ip { font-size: 0.7rem; color: var(--accent); opacity: 0.8; font-family: monospace; }
-.member-zt-ip.ip-missing { color: var(--red); opacity: 1; font-family: inherit; font-style: italic; font-size: 0.68rem; }
-.zt-refresh-btn { padding: 1px 6px; font-size: 0.65rem; margin-left: 4px; vertical-align: middle; cursor: pointer; }
 .zt-settings-row { display: flex; align-items: center; gap: 16px; }
 .max-players-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 .max-players-row label { margin-bottom: 0; }
@@ -1205,13 +1203,6 @@ body.light #icon-moon { display: block !important; }
 .update-header-row  { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
 .hint-no-margin     { margin: 0; }
 .icon-sm            { width: 13px; height: 13px; }
-#zt-info            { display: none; margin-bottom: 8px; font-size: 0.78rem; }
-#zt-info code       { font-size: 0.78rem; -webkit-user-select: all; user-select: all; }
-#zt-my-ip           { display: none; }
-#zt-host-ip         { display: none; margin-top: 4px; padding: 6px 8px; background: rgba(76,175,80,0.15); border-radius: 6px; border: 1px solid rgba(76,175,80,0.3); }
-#zt-host-ip-val     { font-size: 1.05em; font-weight: bold; color: #4caf50; }
-#btn-copy-host-ip   { margin-left: 8px; padding: 2px 8px; font-size: 0.8em; }
-#zt-status-warn     { display: none; color: #ff9800; margin-top: 4px; }
 #btn-close-room     { display: none; }
 #dm-typing-indicator { display: none; }
 #dm-window-typing    { display: none; }
