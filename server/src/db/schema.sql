@@ -26,6 +26,8 @@ CREATE TABLE IF NOT EXISTS rooms (
   game_type           VARCHAR(50) DEFAULT 'DotA',
   has_password        BOOLEAN DEFAULT FALSE,
   password_hash       TEXT,
+  description         TEXT DEFAULT '',
+  game_mode           VARCHAR(100) DEFAULT '',
   created_at          TIMESTAMP DEFAULT NOW()
 );
 

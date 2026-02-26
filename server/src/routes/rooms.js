@@ -75,6 +75,8 @@ function roomToPublic(r) {
     host_name:    r.host_name,
     max_players:  r.max_players,
     game_type:    r.game_type,
+    description:  r.description || '',
+    game_mode:    r.game_mode || '',
     status:       r.status,
     has_password: r.has_password,
     player_count: r.players.size,
@@ -97,7 +99,8 @@ router.get('/', optAuth, async (req, res) => {
     try {
       const r = await db.query(`
         SELECT r.id, r.name, r.host_id, u.username AS host_name,
-          r.max_players, r.game_type, r.status, r.has_password,
+          r.max_players, r.game_type, r.description, r.game_mode,
+          r.status, r.has_password,
           r.zerotier_network_id,
           COUNT(rp.user_id) AS player_count,
           JSON_AGG(JSON_BUILD_OBJECT('id', u2.id::text, 'name', u2.username)
@@ -122,7 +125,8 @@ router.get('/mine', optAuth, async (req, res) => {
     try {
       const r = await db.query(`
         SELECT r.id, r.name, r.host_id, u.username AS host_name,
-          r.max_players, r.game_type, r.status, r.has_password,
+          r.max_players, r.game_type, r.description, r.game_mode,
+          r.status, r.has_password,
           r.zerotier_network_id,
           COUNT(rp2.user_id) AS player_count,
           JSON_AGG(JSON_BUILD_OBJECT('id', u2.id::text, 'name', u2.username)
@@ -145,12 +149,13 @@ router.get('/mine', optAuth, async (req, res) => {
 
 // ── POST /rooms — шинэ өрөө үүсгэх ──────────────────────
 router.post('/', strictAuth, async (req, res) => {
-  const { name, max_players = 10, game_type = '', password } = req.body;
+  const { name, max_players = 10, game_type = '', password, description = '', game_mode = '' } = req.body;
   if (!name) return res.status(400).json({ error: 'Өрөөний нэр шаардлагатай' });
   if (!game_type) return res.status(400).json({ error: 'Тоглоомын төрөл шаардлагатай' });
 
   const has_password  = !!(password?.length);
   const password_hash = has_password ? await bcrypt.hash(password, 8) : null;
+  const descTrimmed   = (description || '').trim().slice(0, 200);
   const hostName      = req.user.username || 'Тоглогч';
   const userId        = req.user.id;
 
@@ -167,9 +172,9 @@ router.post('/', strictAuth, async (req, res) => {
         return res.status(409).json({ error: 'Та аль хэдийн өрөөнд байна. Эхлээд гарна уу.' });
 
       const r = await db.query(
-        `INSERT INTO rooms (name, host_id, max_players, game_type, has_password, password_hash)
-         VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-        [name, userId, max_players, game_type, has_password, password_hash]
+        `INSERT INTO rooms (name, host_id, max_players, game_type, has_password, password_hash, description, game_mode)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+        [name, userId, max_players, game_type, has_password, password_hash, descTrimmed, game_mode || '']
       );
       const room = r.rows[0];
       await db.query('INSERT INTO room_players (room_id, user_id) VALUES ($1,$2)', [room.id, userId]);
@@ -195,6 +200,7 @@ router.post('/', strictAuth, async (req, res) => {
     host_id: userId, host_name: hostName,
     max_players, game_type, status: 'waiting',
     has_password, password_hash,
+    description: descTrimmed, game_mode: game_mode || '',
     players: new Map([[userId, hostName]]),
   };
   memRooms.set(room.id, room);
@@ -380,7 +386,7 @@ router.post('/:id/start', strictAuth, async (req, res) => {
 router.patch('/:id', strictAuth, async (req, res) => {
   const { id } = req.params;
   const userId = req.user.id;
-  const { name, max_players, password } = req.body;
+  const { name, max_players, password, description, game_mode } = req.body;
 
   if (await dbOk()) {
     try {
@@ -406,6 +412,12 @@ router.patch('/:id', strictAuth, async (req, res) => {
           updates.push(`has_password=$${params.length - 1}`, `password_hash=$${params.length}`);
         }
       }
+      if (description !== undefined) {
+        params.push((description || '').trim().slice(0, 200)); updates.push(`description=$${params.length}`);
+      }
+      if (game_mode !== undefined) {
+        params.push((game_mode || '').trim()); updates.push(`game_mode=$${params.length}`);
+      }
       if (updates.length > 0) {
         params.push(id);
         await db.query(`UPDATE rooms SET ${updates.join(',')} WHERE id=$${params.length}`, params);
@@ -421,6 +433,8 @@ router.patch('/:id', strictAuth, async (req, res) => {
   if (String(room.host_id) !== String(userId)) return res.status(403).json({ error: 'Зөвхөн эзэн өөрчилж болно' });
   if (name) room.name = name.trim();
   if (max_players) room.max_players = Number(max_players);
+  if (description !== undefined) room.description = (description || '').trim().slice(0, 200);
+  if (game_mode !== undefined) room.game_mode = (game_mode || '').trim();
   if (_io) _io.to(id).emit('room:updated', roomToPublic(room));
   res.json({ ok: true, room: roomToPublic(room) });
 });

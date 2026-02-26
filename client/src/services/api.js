@@ -33,8 +33,8 @@ async function getMyRoom() {
   return data;
 }
 
-async function createRoom({ name, max_players, game_type, password }) {
-  const { data } = await getClient().post('/rooms', { name, max_players, game_type, password });
+async function createRoom({ name, max_players, game_type, password, description, game_mode }) {
+  const { data } = await getClient().post('/rooms', { name, max_players, game_type, password, description, game_mode });
   return data;
 }
 

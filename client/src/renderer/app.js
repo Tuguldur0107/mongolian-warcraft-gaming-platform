@@ -10,6 +10,57 @@ let roomsCache = {}; // id → room object
 // ── ZeroTier IP хадгалалт ────────────────────────────────
 let roomZtIps = {}; // userId → ip
 
+// ── Sound + Notification систем ─────────────────────────
+let _audioCtx = null;
+function _getAudioCtx() {
+  if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return _audioCtx;
+}
+
+function playSound(type) {
+  if (localStorage.getItem('sound_enabled') === 'false') return;
+  try {
+    const ctx = _getAudioCtx();
+    const now = ctx.currentTime;
+    const gain = ctx.createGain();
+    gain.connect(ctx.destination);
+    gain.gain.setValueAtTime(0.15, now);
+
+    const tones = {
+      dm:        [{ f: 880, t: 0, d: 0.1 }, { f: 1174, t: 0.12, d: 0.15 }],
+      notify:    [{ f: 1047, t: 0, d: 0.18 }],
+      gameStart: [{ f: 523, t: 0, d: 0.12 }, { f: 659, t: 0.14, d: 0.12 }, { f: 784, t: 0.28, d: 0.25 }],
+      ready:     [{ f: 660, t: 0, d: 0.1 }, { f: 880, t: 0.1, d: 0.15 }],
+      join:      [{ f: 700, t: 0, d: 0.06 }],
+    };
+
+    const notes = tones[type] || tones.notify;
+    for (const n of notes) {
+      const osc = ctx.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(n.f, now + n.t);
+      osc.connect(gain);
+      osc.start(now + n.t);
+      osc.stop(now + n.t + n.d);
+    }
+    gain.gain.setValueAtTime(0.15, now + notes[notes.length - 1].t + notes[notes.length - 1].d - 0.02);
+    gain.gain.linearRampToValueAtTime(0, now + notes[notes.length - 1].t + notes[notes.length - 1].d);
+  } catch {}
+}
+
+function showDesktopNotif(title, body) {
+  if (localStorage.getItem('desktop_notif_enabled') === 'false') return;
+  if (!document.hidden) return; // window focus байвал харуулахгүй
+  try {
+    if (Notification.permission === 'granted') {
+      const n = new Notification(title, { body, silent: true });
+      n.onclick = () => { window.focus(); n.close(); };
+    } else if (Notification.permission !== 'denied') {
+      Notification.requestPermission();
+    }
+  } catch {}
+}
+
 // ── Чат төлөв ─────────────────────────────────────────────
 const dmConversations = {};
 let activeDmUserId = null;
@@ -96,6 +147,8 @@ async function connectSocket() {
       pendingRequests.push({ id: fromUserId, username: fromUsername, avatar_url: null });
       updatePendingBadge();
       renderFriendsTab();
+      playSound('notify');
+      showDesktopNotif('👋 Найзын хүсэлт', `${fromUsername} найз болохыг хүсэж байна`);
       showDMNotification(`${fromUsername} найз болохыг хүсэж байна`);
     }
   });
@@ -106,12 +159,15 @@ async function connectSocket() {
     if (!exists) {
       myFriends.push({ id: byUserId, username: byUsername, avatar_url: null });
       renderFriendsTab();
+      playSound('notify');
       showDMNotification(`${byUsername} найз болохыг зөвшөөрлөө`);
     }
   });
 
   // Өрөөнд урих
   socket.on('room:invited', ({ fromUsername, fromUserId, roomId, roomName }) => {
+    playSound('notify');
+    showDesktopNotif('🎮 Өрөөний урилга', `${fromUsername} "${roomName}" өрөөнд урив`);
     showRoomInvite(fromUsername, roomId, roomName);
   });
 
@@ -128,6 +184,18 @@ async function connectSocket() {
 
   // Өрөөний чат
   socket.on('chat:message',         (msg)        => appendMessage(msg));
+  socket.on('chat:deleted', ({ time }) => {
+    const box = document.getElementById('chat-messages');
+    if (!box) return;
+    const el = box.querySelector(`.msg[data-time="${time}"]`);
+    if (el) { el.classList.add('msg-deleted'); el.querySelector('.msg-bubble').textContent = '[Устгагдсан мессеж]'; el.querySelector('.msg-delete')?.remove(); }
+  });
+  socket.on('lobby:deleted', ({ time }) => {
+    const box = document.getElementById('lobby-chat-messages');
+    if (!box) return;
+    const el = box.querySelector(`.msg[data-time="${time}"]`);
+    if (el) { el.classList.add('msg-deleted'); el.querySelector('.msg-bubble').textContent = '[Устгагдсан мессеж]'; el.querySelector('.msg-delete')?.remove(); }
+  });
   socket.on('room:members',         (members)    => {
     if (currentRoom) {
       currentRoom.members = members;
@@ -139,7 +207,7 @@ async function connectSocket() {
     }
     renderMembers(members);
   });
-  socket.on('room:user_joined',     ({ username }) => appendSysMsg(`${username} нэгдлээ`));
+  socket.on('room:user_joined',     ({ username }) => { playSound('join'); appendSysMsg(`${username} нэгдлээ`); });
   socket.on('room:user_left',       ({ username }) => appendSysMsg(`${username} гарлаа`));
   socket.on('room:user_reconnecting', ({ username }) => appendSysMsg(`⚠ ${username} холболт тасарлаа, дахин холбогдохыг хүлээж байна...`));
   socket.on('room:user_rejoined',   ({ username }) => appendSysMsg(`✓ ${username} дахин нэгдлээ`));
@@ -255,6 +323,7 @@ async function connectSocket() {
     if (!currentRoom) return;
     appendSysMsg(`⚠️ ${reason || 'Өрөө хаагдлаа'}`);
     _hostRelayStarted = false;
+    roomZtIps = {};
     try { window.api.stopRelay(); } catch {}
     setTimeout(() => {
       currentRoom = null;
@@ -268,6 +337,7 @@ async function connectSocket() {
     if (!currentUser || String(userId) !== String(currentUser.id)) return;
     appendSysMsg('⚠️ Та өрөөнөөс гаргагдлаа!');
     _hostRelayStarted = false;
+    roomZtIps = {};
     try { window.api.stopRelay(); } catch {}
     setTimeout(() => {
       currentRoom = null;
@@ -280,6 +350,8 @@ async function connectSocket() {
   socket.on('room:started', async () => {
     // Host аль хэдийн WC3 нээсэн (btn-launch-wc3 handler-ээс) — давхар нээхгүй
     if (currentRoom?.isHost) return;
+    playSound('gameStart');
+    showDesktopNotif('▶ Тоглолт эхэллээ!', `${currentRoom?.name || 'Өрөө'} — WC3 нээж байна...`);
     appendSysMsg('▶ Тоглолт эхэллээ! WC3 нээж байна...');
     socket.emit('room:game_started');
     // "Дахин нэвтрэх" товчийг харуулах
@@ -511,6 +583,7 @@ async function init() {
     loadRooms();
     connectSocket();
     loadUnreadDMCounts();
+    if (!localStorage.getItem('onboarding_done')) setTimeout(() => startOnboarding(), 600);
   });
 
   window.api.onGameResult((data) => showGameResult(data));
@@ -629,6 +702,7 @@ document.getElementById('btn-email-login').onclick = async (e) => {
     loadRooms();
     connectSocket();
     loadUnreadDMCounts();
+    if (!localStorage.getItem('onboarding_done')) setTimeout(() => startOnboarding(), 600);
   } catch (err) {
     errEl.textContent = err.message || 'Нэвтрэхэд алдаа гарлаа';
     btn.disabled = false; btn.textContent = 'Нэвтрэх';
@@ -735,6 +809,7 @@ document.getElementById('btn-register').onclick = async (e) => {
     loadRooms();
     connectSocket();
     loadUnreadDMCounts();
+    if (!localStorage.getItem('onboarding_done')) setTimeout(() => startOnboarding(), 600);
   } catch (err) {
     errEl.textContent = err.message || 'Бүртгэхэд алдаа гарлаа';
     btn.disabled = false; btn.textContent = 'Бүртгүүлэх';
@@ -803,21 +878,102 @@ async function loadRooms() {
     const rooms = await window.api.getRooms();
     roomsCache = {};
     rooms.forEach(r => { roomsCache[String(r.id)] = r; });
-    const waitRooms = rooms.filter(r => r.status === 'waiting');
-    const playRooms = rooms.filter(r => r.status === 'playing');
-    waiting.innerHTML = waitRooms.length
-      ? waitRooms.map(r => roomCard(r, false)).join('')
-      : '<p class="empty-text">Одоогоор нээлттэй өрөө байхгүй</p>';
-    playing.innerHTML = playRooms.length
-      ? playRooms.map(r => roomCard(r, true)).join('')
-      : '<p class="empty-text">Одоогоор тоглолт явагдахгүй байна</p>';
+    populateGameTypeFilter(rooms);
+    renderFilteredRooms();
   } catch {
     waiting.innerHTML = '<p class="empty-text">Серверт холбогдож чадсангүй</p>';
   }
 }
 
-function roomCard(r, inProgress) {
-  const lock     = r.has_password ? '🔒 ' : '';
+// Тоглоомын төрлийн filter dropdown-г populate хийх
+function populateGameTypeFilter(rooms) {
+  const sel = document.getElementById('room-filter-type');
+  if (!sel) return;
+  const prev = sel.value;
+  const types = new Set();
+  rooms.forEach(r => { if (r.game_type) types.add(r.game_type); });
+  configuredGames.forEach(g => { if (g.name) types.add(g.name); });
+  const sorted = [...types].sort();
+  sel.innerHTML = '<option value="">Бүх төрөл</option>'
+    + sorted.map(t => `<option value="${escHtml(t)}">${escHtml(t)}</option>`).join('');
+  if (prev && [...sel.options].some(o => o.value === prev)) sel.value = prev;
+}
+
+// Шүүлтүүр + эрэмбэлэлт хийж render хийх
+function renderFilteredRooms() {
+  const waiting = document.getElementById('rooms-waiting');
+  const playing = document.getElementById('rooms-playing');
+  if (!waiting || !playing) return;
+
+  const allRooms = Object.values(roomsCache);
+  const filtered = getFilteredRooms(allRooms);
+  const waitRooms = filtered.filter(r => r.status === 'waiting');
+  const playRooms = filtered.filter(r => r.status === 'playing');
+
+  const search = (document.getElementById('room-search')?.value || '').trim();
+  const filterType = document.getElementById('room-filter-type')?.value || '';
+  const hasFilter = search || filterType;
+  const noResultMsg = hasFilter
+    ? '<p class="empty-text">Хайлтад тохирох өрөө олдсонгүй</p>'
+    : '';
+
+  waiting.innerHTML = waitRooms.length
+    ? waitRooms.map((r, i) => roomCard(r, false, i)).join('')
+    : (noResultMsg || '<p class="empty-text">Одоогоор нээлттэй өрөө байхгүй</p>');
+  playing.innerHTML = playRooms.length
+    ? playRooms.map((r, i) => roomCard(r, true, i)).join('')
+    : (noResultMsg || '<p class="empty-text">Одоогоор тоглолт явагдахгүй байна</p>');
+}
+
+// Rooms жагсаалтыг шүүж, эрэмбэлэх
+function getFilteredRooms(rooms) {
+  const search = (document.getElementById('room-search')?.value || '').trim().toLowerCase();
+  const filterType = document.getElementById('room-filter-type')?.value || '';
+  const sortBy = document.getElementById('room-sort')?.value || 'newest';
+
+  let result = rooms;
+
+  // Нэр / эзнээр хайлт
+  if (search) {
+    result = result.filter(r =>
+      (r.name || '').toLowerCase().includes(search) ||
+      (r.host_name || '').toLowerCase().includes(search)
+    );
+  }
+
+  // Тоглоомын төрлөөр шүүх
+  if (filterType) {
+    result = result.filter(r => r.game_type === filterType);
+  }
+
+  // Эрэмбэлэх
+  result = [...result];
+  switch (sortBy) {
+    case 'players-desc':
+      result.sort((a, b) => (b.player_count || 0) - (a.player_count || 0));
+      break;
+    case 'players-asc':
+      result.sort((a, b) => (a.player_count || 0) - (b.player_count || 0));
+      break;
+    case 'name':
+      result.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+      break;
+    // 'newest' — серверийн анхны дарааллыг хэвээр ашиглана
+  }
+
+  return result;
+}
+
+// Filter event listeners (debounce-тай хайлт)
+let _roomSearchTimer = null;
+document.getElementById('room-search')?.addEventListener('input', () => {
+  clearTimeout(_roomSearchTimer);
+  _roomSearchTimer = setTimeout(() => renderFilteredRooms(), 200);
+});
+document.getElementById('room-filter-type')?.addEventListener('change', () => renderFilteredRooms());
+document.getElementById('room-sort')?.addEventListener('change', () => renderFilteredRooms());
+
+function roomCard(r, inProgress, idx = 0) {
   const myId     = String(currentUser?.id);
   const isMyRoom = String(r.host_id) === myId ||
                    (r.members || []).some(m => String(m.id) === myId);
@@ -826,6 +982,11 @@ function roomCard(r, inProgress) {
     const mname = m.name || m;
     return `<span class="clickable-name" data-user-id="${mid}">${escHtml(mname)}</span>`;
   }).join(', ');
+
+  const lockIcon = r.has_password ? '<span class="room-lock">🔒</span>' : '';
+  const modeBadge = r.game_mode ? `<span class="badge mode-badge">${escHtml(r.game_mode)}</span>` : '';
+  const desc = (r.description || '').trim();
+  const descHtml = desc ? `<div class="room-desc">${escHtml(desc)}</div>` : '';
 
   let joinBtn;
   if (isMyRoom) {
@@ -837,15 +998,26 @@ function roomCard(r, inProgress) {
   }
 
   return `
-    <div class="room-card ${inProgress ? 'room-playing' : ''} ${isMyRoom ? 'room-mine' : ''}">
+    <div class="room-card ${inProgress ? 'room-playing' : ''} ${isMyRoom ? 'room-mine' : ''}" style="animation-delay:${idx * 0.05}s">
       <div class="room-card-header">
         <span class="badge game-badge" style="background:${gameTypeColor(r.game_type)}">${escHtml(r.game_type)}</span>
-        <span class="room-name">${lock}${r.name}</span>
+        ${modeBadge}
+        ${lockIcon}
+      </div>
+      <div class="room-card-title">
+        <span class="room-name">${escHtml(r.name)}</span>
         ${isMyRoom ? '<span class="my-room-tag">Миний өрөө</span>' : ''}
       </div>
-      <div class="meta">👥 ${r.player_count}/${r.max_players} &nbsp;|&nbsp; Эзэн: ${r.host_name}</div>
+      ${descHtml}
+      <div class="room-card-info">
+        <span>👤 ${escHtml(r.host_name)}</span>
+        <span>👥 ${r.player_count}/${r.max_players}</span>
+      </div>
       ${memberSpans ? `<div class="room-members">${memberSpans}</div>` : ''}
-      ${joinBtn}
+      <div class="room-card-footer">
+        <div></div>
+        ${joinBtn}
+      </div>
     </div>
   `;
 }
@@ -929,16 +1101,20 @@ document.getElementById('room-has-password').onchange = function () {
 document.getElementById('btn-submit-room').onclick = async () => {
   const name        = document.getElementById('room-name').value.trim();
   const game_type   = document.getElementById('room-type').value;
+  const game_mode   = document.getElementById('room-mode')?.value || '';
   const max_players = parseInt(document.getElementById('room-max').value);
+  const description = document.getElementById('room-desc')?.value?.trim() || '';
   const hasPass     = document.getElementById('room-has-password').checked;
   const password    = hasPass ? document.getElementById('room-password').value : null;
   if (!name)             { showToast('Өрөөний нэр оруулна уу', 'warning'); return; }
   if (!game_type)        { showToast('Тоглоом сонгоно уу (Тохируулга таб-д тоглоом нэмнэ үү)', 'warning'); return; }
   if (hasPass && !password) { showToast('Нууц үг оруулна уу', 'warning'); return; }
   async function _doCreateRoom() {
-    const room = await window.api.createRoom({ name, max_players, game_type, password });
+    const room = await window.api.createRoom({ name, max_players, game_type, password, description, game_mode });
     document.getElementById('create-room-form').style.display = 'none';
     document.getElementById('room-name').value = '';
+    document.getElementById('room-desc').value = '';
+    document.getElementById('room-mode').value = '';
     document.getElementById('room-has-password').checked = false;
     document.getElementById('room-password').value = '';
     document.getElementById('room-password').style.display = 'none';
@@ -1088,8 +1264,22 @@ function _enterRoomUI(id, name, gameType, isHost, hostId, status, ztNetId) {
     }
   }
 
+  // Ready товч init
+  const readyBtn = document.getElementById('btn-ready');
+  if (readyBtn) {
+    readyBtn.style.display = isHost ? 'none' : '';
+    readyBtn.classList.remove('btn-ready-active');
+    readyBtn.innerHTML = '⏳ <span>Бэлэн биш</span>';
+  }
+  const readyStatus = document.getElementById('ready-status');
+  if (readyStatus) readyStatus.textContent = '';
+
   if (socket && currentUser) {
     socket.emit('room:join', { roomId: id });
+    // Host автоматаар бэлэн
+    if (isHost) {
+      setTimeout(() => socket.emit('room:ready', { roomId: id, ready: true }), 500);
+    }
     // Өрөөний ZT IP-уудыг авах
     roomZtIps = {};
     socket.emit('room:get_zt_ips', { roomId: id });
@@ -1131,6 +1321,7 @@ document.getElementById('btn-close-room').onclick = async () => {
   if (!currentRoom) return;
   if (!await showConfirm('Өрөө хаах', `"${currentRoom.name}" өрөөг хаах уу? Бүх тоглогчид гарна.`)) return;
   _hostRelayStarted = false;
+  roomZtIps = {};
   try { await window.api.stopRelay(); } catch {}
   try {
     await window.api.closeRoom(currentRoom.id);
@@ -1300,14 +1491,22 @@ function appendMessage({ userId, username, text, time }) {
   const t    = new Date(time).toLocaleTimeString('mn-MN', { hour: '2-digit', minute: '2-digit' });
   const div  = document.createElement('div');
   div.className = `msg ${isMe ? 'me' : 'other'}`;
+  div.dataset.time = time;
+  div.dataset.userId = userId || '';
   const nameEl = isMe ? 'Та' : `<span class="clickable-name" data-user-id="${userId}">${escHtml(username)}</span>`;
+  const deleteBtn = isMe ? `<button class="msg-delete" title="Устгах">🗑️</button>` : '';
   div.innerHTML = `
-    <div class="msg-name">${nameEl}</div>
-    <div class="msg-bubble">${escHtml(text)}</div>
+    <div class="msg-header">${nameEl}${deleteBtn}</div>
+    <div class="msg-bubble">${parseMentions(escHtml(text), !isMe)}</div>
     <div class="msg-time">${t}</div>
   `;
   if (!isMe && userId) {
     div.querySelector('.clickable-name')?.addEventListener('click', () => openUserProfile(userId));
+  }
+  if (isMe) {
+    div.querySelector('.msg-delete')?.addEventListener('click', () => {
+      if (socket && currentRoom) socket.emit('chat:delete', { roomId: currentRoom.id, time });
+    });
   }
   box.appendChild(div);
   box.scrollTop = box.scrollHeight;
@@ -1351,6 +1550,9 @@ function renderMembers(members) {
     const name = m.name !== undefined ? m.name : m;
     const isMe       = id ? id === myId   : name === currentUser?.username;
     const isRoomHost = id ? id === hostId : false;
+    const readyIcon  = m.ready
+      ? '<span class="member-ready-icon">✅</span>'
+      : '<span class="member-ready-icon">⏳</span>';
     const kickBtn = (isHost && !isMe)
       ? `<button class="btn btn-sm btn-danger kick-btn" data-id="${id}" data-name="${name}">Kick</button>`
       : '';
@@ -1358,7 +1560,7 @@ function renderMembers(members) {
     const ztIp = id && roomZtIps[id] ? `<span class="member-zt-ip">${roomZtIps[id]}</span>` : '';
     return `<li class="${isMe ? 'me' : ''}">
       <div class="member-info">
-        <div>${isRoomHost ? '👑 ' : ''}${nameSpan}${isMe ? ' (Та)' : ''}</div>
+        <div>${isRoomHost ? '👑 ' : ''}${nameSpan}${isMe ? ' (Та)' : ''} ${readyIcon}</div>
         ${ztIp}
       </div>
       ${kickBtn}
@@ -1371,7 +1573,76 @@ function renderMembers(members) {
   ul.querySelectorAll('.clickable-name').forEach(el => {
     el.addEventListener('click', () => openUserProfile(el.dataset.userId));
   });
+
+  // Ready status + launch button update
+  updateReadyUI(members);
 }
+
+// ── Ready system UI ──────────────────────────────────────
+let _prevAllReady = false;
+function updateReadyUI(members) {
+  const readyCount = members.filter(m => m.ready).length;
+  const total = members.length;
+  const allReady = total > 1 && readyCount === total;
+  const myId = String(currentUser?.id);
+  const myMember = members.find(m => String(m.id) === myId);
+  const isHost = currentRoom?.isHost;
+
+  // Бүгд бэлэн болсон үед дуу гаргах (нэг удаа)
+  if (allReady && !_prevAllReady) playSound('ready');
+  _prevAllReady = allReady;
+
+  // Ready status text
+  const statusEl = document.getElementById('ready-status');
+  if (statusEl) {
+    statusEl.textContent = `${readyCount}/${total} бэлэн`;
+    statusEl.style.color = allReady ? '#43b581' : '';
+  }
+
+  // Ready button (player only)
+  const readyBtn = document.getElementById('btn-ready');
+  if (readyBtn) {
+    readyBtn.style.display = isHost ? 'none' : '';
+    if (myMember?.ready) {
+      readyBtn.innerHTML = '✅ <span>Бэлэн</span>';
+      readyBtn.classList.add('btn-ready-active');
+    } else {
+      readyBtn.innerHTML = '⏳ <span>Бэлэн биш</span>';
+      readyBtn.classList.remove('btn-ready-active');
+    }
+  }
+
+  // Launch button (host): disable if not all ready
+  const launchBtn = document.getElementById('btn-launch-wc3');
+  if (launchBtn && isHost) {
+    const isRejoin = launchBtn.querySelector('span')?.textContent?.includes('Дахин') ||
+                     launchBtn.querySelector('span')?.textContent?.includes('↩');
+    if (!isRejoin) {
+      if (total <= 1) {
+        // Зөвхөн host байвал хязгаарлахгүй
+        launchBtn.disabled = false;
+        launchBtn.title = '';
+        launchBtn.classList.remove('btn-launch-ready');
+      } else if (allReady) {
+        launchBtn.disabled = false;
+        launchBtn.title = '';
+        launchBtn.classList.add('btn-launch-ready');
+      } else {
+        launchBtn.disabled = true;
+        launchBtn.title = `Бүх тоглогчид бэлэн болтол хүлээнэ үү (${readyCount}/${total})`;
+        launchBtn.classList.remove('btn-launch-ready');
+      }
+    }
+  }
+}
+
+// Ready товч handler
+document.getElementById('btn-ready')?.addEventListener('click', () => {
+  if (!currentRoom || !socket) return;
+  const readyBtn = document.getElementById('btn-ready');
+  const isCurrentlyReady = readyBtn?.classList.contains('btn-ready-active');
+  socket.emit('room:ready', { roomId: currentRoom.id, ready: !isCurrentlyReady });
+});
 
 async function kickPlayer(targetId, targetName) {
   if (!currentRoom || !targetId) return;
@@ -1411,14 +1682,22 @@ function _appendLobbyMsgDOM(box, { userId, username, text, time }) {
   const t    = new Date(time).toLocaleTimeString('mn-MN', { hour: '2-digit', minute: '2-digit' });
   const div  = document.createElement('div');
   div.className = `msg ${isMe ? 'me' : 'other'}`;
+  div.dataset.time = time;
+  div.dataset.userId = userId || '';
   const nameEl = isMe ? 'Та' : `<span class="clickable-name" data-user-id="${userId}">${escHtml(username)}</span>`;
+  const deleteBtn = isMe ? `<button class="msg-delete" title="Устгах">🗑️</button>` : '';
   div.innerHTML = `
-    <div class="msg-name">${nameEl}</div>
-    <div class="msg-bubble">${escHtml(text)}</div>
+    <div class="msg-header">${nameEl}${deleteBtn}</div>
+    <div class="msg-bubble">${parseMentions(escHtml(text), !isMe)}</div>
     <div class="msg-time">${t}</div>
   `;
   if (!isMe && userId) {
     div.querySelector('.clickable-name')?.addEventListener('click', () => openUserProfile(userId));
+  }
+  if (isMe) {
+    div.querySelector('.msg-delete')?.addEventListener('click', () => {
+      if (socket) socket.emit('lobby:delete', { time });
+    });
   }
   box.appendChild(div);
   box.scrollTop = box.scrollHeight;
@@ -1674,7 +1953,7 @@ function renderPopupMessages(uid) {
     div.className = `msg ${isMe ? 'me' : 'other'}`;
     div.innerHTML = `
       <div class="msg-name">${isMe ? 'Та' : escHtml(msg.fromUsername)}</div>
-      <div class="msg-bubble">${escHtml(msg.text)}</div>
+      <div class="msg-bubble">${parseMentions(escHtml(msg.text), false)}</div>
       <div class="msg-time">${t}</div>
     `;
     box.appendChild(div);
@@ -1856,6 +2135,10 @@ function handleIncomingDM({ fromUsername, fromUserId, text, time }) {
     dmConversations[uid] = { username: fromUsername, messages: [], unread: 0 };
   }
   dmConversations[uid].messages.push({ fromUsername, text, time });
+
+  // Sound + desktop notification
+  playSound('dm');
+  showDesktopNotif(`💬 ${fromUsername}`, text?.slice(0, 100) || '');
 
   if (isDMMode()) {
     if (activeDmUserId === uid) {
@@ -2375,7 +2658,7 @@ async function loadRanking(page = rankingPage, sort = rankingSort) {
   const pagDiv   = document.getElementById('ranking-pagination');
   const sortSel  = document.getElementById('ranking-sort');
   if (sortSel) sortSel.value = sort;
-  tbody.innerHTML = '<tr><td colspan="5" class="empty-text">Ачааллаж байна...</td></tr>';
+  tbody.innerHTML = Array(5).fill('<tr><td colspan="5"><div class="skeleton" style="height:32px;border-radius:6px;margin:4px 0"></div></td></tr>').join('');
   try {
     const currentUser = await window.api.getUser();
     const data = await window.api.getRanking({ sort, page });
@@ -2750,7 +3033,27 @@ async function loadSettings() {
       msgEl.style.color = '';
     }
   } catch {}
+
+  // Мэдэгдлийн тохиргоо ачаалах
+  const soundChk = document.getElementById('setting-sound');
+  const notifChk = document.getElementById('setting-desktop-notif');
+  if (soundChk) soundChk.checked = localStorage.getItem('sound_enabled') !== 'false';
+  if (notifChk) notifChk.checked = localStorage.getItem('desktop_notif_enabled') !== 'false';
 }
+
+// Мэдэгдлийн тохиргоо toggle
+document.getElementById('setting-sound')?.addEventListener('change', (e) => {
+  localStorage.setItem('sound_enabled', e.target.checked ? 'true' : 'false');
+});
+document.getElementById('setting-desktop-notif')?.addEventListener('change', (e) => {
+  localStorage.setItem('desktop_notif_enabled', e.target.checked ? 'true' : 'false');
+  if (e.target.checked && Notification.permission !== 'granted') {
+    Notification.requestPermission();
+  }
+});
+document.getElementById('btn-test-sound')?.addEventListener('click', () => {
+  playSound('dm');
+});
 
 // ZeroTier IP шинэчлэх товч (Тохируулга)
 document.getElementById('btn-zt-refresh')?.addEventListener('click', async () => {
@@ -3043,6 +3346,106 @@ function escHtml(t) {
   return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
+// @mention parse: escHtml() дараа дуудна — аюулгүй HTML оруулна
+function parseMentions(escapedText, triggerSound) {
+  const myName = currentUser?.username;
+  let mentionedMe = false;
+  const result = escapedText.replace(/@(\w{2,20})/g, (match, name) => {
+    const isMe = myName && name.toLowerCase() === myName.toLowerCase();
+    if (isMe) mentionedMe = true;
+    return `<span class="mention${isMe ? ' mention-me' : ''}">${match}</span>`;
+  });
+  if (mentionedMe && triggerSound) playSound('notify');
+  return result;
+}
+
+// ── @mention autocomplete ────────────────────────────────
+function setupMentionAutocomplete(inputId) {
+  const input = document.getElementById(inputId);
+  if (!input) return;
+  let dropdown = null;
+  let activeIdx = -1;
+  let names = [];
+
+  function getNames() {
+    const set = new Set();
+    // Өрөөний гишүүд
+    if (currentRoom?.members) currentRoom.members.forEach(m => { if (m.name) set.add(m.name); });
+    // Онлайн хэрэглэгчид
+    const onlineEl = document.querySelectorAll('.online-user-item .online-user-name');
+    onlineEl.forEach(el => { if (el.textContent) set.add(el.textContent.trim()); });
+    // Өөрийгөө хасах
+    if (currentUser?.username) set.delete(currentUser.username);
+    return [...set];
+  }
+
+  function close() {
+    if (dropdown) { dropdown.remove(); dropdown = null; }
+    activeIdx = -1; names = [];
+  }
+
+  function render(filtered) {
+    if (!dropdown) {
+      dropdown = document.createElement('div');
+      dropdown.className = 'mention-dropdown';
+      input.parentElement.appendChild(dropdown);
+    }
+    dropdown.innerHTML = filtered.map((n, i) =>
+      `<div class="mention-dropdown-item${i === activeIdx ? ' active' : ''}" data-name="${escHtml(n)}">@${escHtml(n)}</div>`
+    ).join('');
+    dropdown.querySelectorAll('.mention-dropdown-item').forEach(el => {
+      el.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        pick(el.dataset.name);
+      });
+    });
+  }
+
+  function pick(name) {
+    const v = input.value;
+    const cursor = input.selectionStart;
+    const before = v.slice(0, cursor);
+    const atIdx = before.lastIndexOf('@');
+    if (atIdx === -1) { close(); return; }
+    input.value = before.slice(0, atIdx) + '@' + name + ' ' + v.slice(cursor);
+    input.focus();
+    const newPos = atIdx + name.length + 2;
+    input.setSelectionRange(newPos, newPos);
+    close();
+  }
+
+  input.addEventListener('input', () => {
+    const v = input.value;
+    const cursor = input.selectionStart;
+    const before = v.slice(0, cursor);
+    const atIdx = before.lastIndexOf('@');
+    if (atIdx === -1 || (atIdx > 0 && before[atIdx - 1] !== ' ')) { close(); return; }
+    const query = before.slice(atIdx + 1).toLowerCase();
+    if (!query || query.length > 20 || /\s/.test(query)) { close(); return; }
+    const all = getNames();
+    const filtered = all.filter(n => n.toLowerCase().startsWith(query)).slice(0, 6);
+    if (filtered.length === 0) { close(); return; }
+    names = filtered; activeIdx = 0;
+    render(filtered);
+  });
+
+  input.addEventListener('keydown', (e) => {
+    if (!dropdown || names.length === 0) return;
+    if (e.key === 'ArrowDown') { e.preventDefault(); activeIdx = (activeIdx + 1) % names.length; render(names); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); activeIdx = (activeIdx - 1 + names.length) % names.length; render(names); }
+    else if (e.key === 'Tab' || e.key === 'Enter') {
+      if (activeIdx >= 0 && activeIdx < names.length) { e.preventDefault(); pick(names[activeIdx]); }
+    }
+    else if (e.key === 'Escape') { close(); }
+  });
+
+  input.addEventListener('blur', () => setTimeout(close, 150));
+}
+
+// Chat input-уудад autocomplete идэвхжүүлэх
+setupMentionAutocomplete('chat-input');
+setupMentionAutocomplete('lobby-chat-input');
+
 // Тоглоомын нэрнээс тогтмол өнгө үүсгэх
 const _gameColors = ['#e74c3c','#2980b9','#27ae60','#8e44ad','#e67e22','#16a085','#c0392b','#1a5276'];
 function gameTypeColor(name) {
@@ -3101,10 +3504,26 @@ if (rankingSortEl) {
 }
 
 // ── Keyboard shortcuts ────────────────────────────────────
+function toggleShortcutsModal() {
+  const m = document.getElementById('shortcuts-modal');
+  if (!m) return;
+  const visible = !m.classList.contains('hidden');
+  if (visible) { m.classList.add('hidden'); m.style.display = 'none'; }
+  else { m.classList.remove('hidden'); m.style.display = 'flex'; }
+}
+document.getElementById('btn-close-shortcuts')?.addEventListener('click', () => {
+  const m = document.getElementById('shortcuts-modal');
+  if (m) { m.classList.add('hidden'); m.style.display = 'none'; }
+});
+
 document.addEventListener('keydown', (e) => {
-  // Escape: Open modal хаах
+  const tag = (e.target.tagName || '').toUpperCase();
+  const isInput = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+
+  // Escape: modal + create-room-form хаах (input дотор ч ажиллана)
   if (e.key === 'Escape') {
     const modals = [
+      'shortcuts-modal',
       'user-profile-modal',
       'confirm-modal',
       'dm-modal',
@@ -3115,9 +3534,18 @@ document.addEventListener('keydown', (e) => {
       if (el && !el.classList.contains('hidden') && el.style.display !== 'none') {
         el.classList.add('hidden');
         el.style.display = 'none';
-        break;
+        return;
       }
     }
+    // create-room-form (display: block/none ашигладаг)
+    const crForm = document.getElementById('create-room-form');
+    if (crForm && crForm.style.display === 'block') {
+      crForm.style.display = 'none';
+      return;
+    }
+    // Input-д байвал blur хийх
+    if (isInput) { e.target.blur(); return; }
+    return;
   }
 
   // Ctrl+Enter: чат input дотроос мессеж илгээх
@@ -3128,7 +3556,176 @@ document.addEventListener('keydown', (e) => {
     } else if (activeEl?.id === 'dm-input') {
       document.getElementById('btn-dm-send')?.click();
     }
+    return;
   }
+
+  // Ctrl+K: room search focus (input дотор ч ажиллана)
+  if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+    e.preventDefault();
+    const search = document.getElementById('room-search');
+    if (search) { search.focus(); search.select(); }
+    return;
+  }
+
+  // Input дотор бол бусад shortcut skip
+  if (isInput) return;
+
+  const mainActive = document.getElementById('page-main')?.classList.contains('active');
+
+  // ? → shortcut help
+  if (e.key === '?') { toggleShortcutsModal(); return; }
+
+  // Alt+1/2/3 → tab шилжих
+  if (e.altKey && e.key === '1' && mainActive) { e.preventDefault(); showTab('lobby'); return; }
+  if (e.altKey && e.key === '2' && mainActive) { e.preventDefault(); showTab('ranking'); return; }
+  if (e.altKey && e.key === '3' && mainActive) { e.preventDefault(); showTab('settings'); return; }
+
+  // Alt+N → create room toggle
+  if (e.altKey && (e.key === 'n' || e.key === 'N') && mainActive) {
+    e.preventDefault();
+    document.getElementById('btn-create-room')?.click();
+    return;
+  }
+
+  // Alt+Q → quickmatch
+  if (e.altKey && (e.key === 'q' || e.key === 'Q') && mainActive) {
+    e.preventDefault();
+    document.getElementById('btn-quickmatch')?.click();
+    return;
+  }
+
+  // Alt+R → refresh rooms
+  if (e.altKey && (e.key === 'r' || e.key === 'R') && mainActive) {
+    e.preventDefault();
+    loadRooms();
+    return;
+  }
+});
+
+// ── Scroll-to-top ────────────────────────────────────────
+const _scrollTopBtn = document.getElementById('scroll-top-btn');
+if (_scrollTopBtn) {
+  _scrollTopBtn.addEventListener('click', () => {
+    const activeTab = document.querySelector('.tab.active');
+    if (activeTab) activeTab.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+  // Tab scroll event → show/hide button
+  document.addEventListener('scroll', (e) => {
+    const tab = e.target.closest?.('.tab');
+    if (tab && tab.classList.contains('active')) {
+      _scrollTopBtn.classList.toggle('visible', tab.scrollTop > 200);
+    }
+  }, true);
+}
+
+// ── Onboarding Tour ──────────────────────────────────────
+const ONBOARDING_STEPS = [
+  { target: '[data-tab="lobby"]',    title: 'Lobby',          text: 'Энд бүх өрөөнүүдийг харж, нэгдэж болно.' },
+  { target: '#btn-create-room',      title: 'Өрөө үүсгэх',   text: 'Шинэ тоглоомын өрөө үүсгэхийн тулд энд дарна.' },
+  { target: '#btn-quickmatch',       title: 'Хурдан тоглолт', text: 'Нэг товчоор боломжтой өрөөнд автоматаар нэгдэнэ.' },
+  { target: '#room-search',          title: 'Хайлт',          text: 'Өрөөг нэрээр хайх боломжтой. Ctrl+K товчоор хурдан нээнэ.' },
+  { target: '#lobby-chat-input',     title: 'Чат',            text: 'Бүх хэрэглэгчидтэй чатлах боломжтой. @нэр бичвэл mention хийнэ.' },
+  { target: '[data-tab="ranking"]',  title: 'Ranking',        text: 'Тоглогчдын чансааг энд харна.' },
+  { target: '[data-tab="settings"]', title: 'Тохиргоо',       text: 'Профайл засах, нууц үг солих, тоглоом нэмэх зэрэг тохиргоо.' },
+  { target: '#btn-theme',            title: 'Загвар',         text: 'Гэрэл/харанхуй горим сольж болно.' },
+];
+
+let _onboardStep = 0;
+let _onboardOverlay = null;
+let _onboardSpotlight = null;
+let _onboardTooltip = null;
+
+function startOnboarding() {
+  if (localStorage.getItem('onboarding_done')) return;
+  _onboardStep = 0;
+
+  // Overlay
+  _onboardOverlay = document.createElement('div');
+  _onboardOverlay.className = 'onboarding-overlay';
+  _onboardOverlay.addEventListener('click', (e) => {
+    if (e.target === _onboardOverlay) _onboardNext();
+  });
+  document.body.appendChild(_onboardOverlay);
+
+  // Spotlight
+  _onboardSpotlight = document.createElement('div');
+  _onboardSpotlight.className = 'onboarding-spotlight';
+  document.body.appendChild(_onboardSpotlight);
+
+  // Tooltip
+  _onboardTooltip = document.createElement('div');
+  _onboardTooltip.className = 'onboarding-tooltip';
+  document.body.appendChild(_onboardTooltip);
+
+  _onboardShow();
+}
+
+function _onboardShow() {
+  const step = ONBOARDING_STEPS[_onboardStep];
+  if (!step) { _onboardFinish(); return; }
+
+  const el = document.querySelector(step.target);
+  if (!el) { _onboardStep++; _onboardShow(); return; }
+
+  // Spotlight position
+  const rect = el.getBoundingClientRect();
+  const pad = 6;
+  _onboardSpotlight.style.left   = (rect.left - pad) + 'px';
+  _onboardSpotlight.style.top    = (rect.top - pad) + 'px';
+  _onboardSpotlight.style.width  = (rect.width + pad * 2) + 'px';
+  _onboardSpotlight.style.height = (rect.height + pad * 2) + 'px';
+
+  // Tooltip content
+  const isLast = _onboardStep === ONBOARDING_STEPS.length - 1;
+  _onboardTooltip.innerHTML = `
+    <h4>${step.title}</h4>
+    <p>${step.text}</p>
+    <div class="onboarding-actions">
+      <span class="onboarding-steps">${_onboardStep + 1} / ${ONBOARDING_STEPS.length}</span>
+      <div style="display:flex;gap:6px">
+        <button class="btn" id="ob-skip">Алгасах</button>
+        <button class="btn btn-primary" id="ob-next">${isLast ? 'Дуусгах' : 'Дараах'}</button>
+      </div>
+    </div>
+  `;
+
+  // Tooltip position — prefer below, fallback above
+  const ttW = 280;
+  let ttLeft = rect.left + rect.width / 2 - ttW / 2;
+  let ttTop = rect.bottom + 12;
+  if (ttTop + 150 > window.innerHeight) {
+    ttTop = rect.top - 12;
+    _onboardTooltip.style.transform = 'translateY(-100%)';
+  } else {
+    _onboardTooltip.style.transform = 'none';
+  }
+  ttLeft = Math.max(8, Math.min(ttLeft, window.innerWidth - ttW - 8));
+  _onboardTooltip.style.left = ttLeft + 'px';
+  _onboardTooltip.style.top = ttTop + 'px';
+  _onboardTooltip.style.width = ttW + 'px';
+
+  document.getElementById('ob-next').onclick = _onboardNext;
+  document.getElementById('ob-skip').onclick = _onboardFinish;
+}
+
+function _onboardNext() {
+  _onboardStep++;
+  if (_onboardStep >= ONBOARDING_STEPS.length) { _onboardFinish(); return; }
+  _onboardShow();
+}
+
+function _onboardFinish() {
+  localStorage.setItem('onboarding_done', '1');
+  if (_onboardOverlay) _onboardOverlay.remove();
+  if (_onboardSpotlight) _onboardSpotlight.remove();
+  if (_onboardTooltip) _onboardTooltip.remove();
+  _onboardOverlay = _onboardSpotlight = _onboardTooltip = null;
+  showToast('Тавтай морил! Тоглоомоо эхлүүлээрэй', 'success');
+}
+
+// Resize → reposition
+window.addEventListener('resize', () => {
+  if (_onboardTooltip) _onboardShow();
 });
 
 // ── Discord Servers ───────────────────────────────────────

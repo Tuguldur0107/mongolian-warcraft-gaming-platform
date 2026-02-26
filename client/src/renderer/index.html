@@ -4,8 +4,11 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="Content-Security-Policy"
-    content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https://cdn.discordapp.com data:; connect-src 'self' http://localhost:3000 ws://localhost:3000 https://mongolian-warcraft-gaming-platform-production.up.railway.app wss://mongolian-warcraft-gaming-platform-production.up.railway.app;" />
+    content="default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' https://cdn.discordapp.com data:; connect-src 'self' http://localhost:3000 ws://localhost:3000 https://mongolian-warcraft-gaming-platform-production.up.railway.app wss://mongolian-warcraft-gaming-platform-production.up.railway.app;" />
   <title>Mongolian Warcraft Gaming Platform</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -207,13 +210,36 @@
         </div>
       </div>
 
+      <div class="lobby-filters">
+        <input id="room-search" type="text" placeholder="🔍 Өрөө хайх..." class="input input-sm" />
+        <select id="room-filter-type" class="input input-sm">
+          <option value="">Бүх төрөл</option>
+        </select>
+        <select id="room-sort" class="input input-sm">
+          <option value="newest">Шинэ → Хуучин</option>
+          <option value="players-desc">Тоглогч ↓</option>
+          <option value="players-asc">Тоглогч ↑</option>
+          <option value="name">Нэрээр А→Я</option>
+        </select>
+      </div>
+
       <div id="create-room-form" class="card hidden">
         <h3>Шинэ өрөө</h3>
         <input id="room-name" type="text" placeholder="Өрөөний нэр (жиш: Battle #5)" class="input" />
         <select id="room-type" class="input" title="Тоглоомын төрөл сонгох">
           <option value="">— Тоглоом сонгоно уу —</option>
         </select>
+        <select id="room-mode" class="input" title="Тоглоомын горим">
+          <option value="">— Горим (заавал биш) —</option>
+          <option value="AP">All Pick</option>
+          <option value="CM">Captain's Mode</option>
+          <option value="AR">All Random</option>
+          <option value="SD">Single Draft</option>
+          <option value="RD">Random Draft</option>
+          <option value="Custom">Custom</option>
+        </select>
         <input id="room-max" type="number" value="10" min="2" max="12" class="input" title="Тоглогчдын дээд тоо" placeholder="Тоглогчдын дээд тоо" />
+        <textarea id="room-desc" class="input" placeholder="Тайлбар (заавал биш) — дүрэм, нөхцөл гэх мэт..." maxlength="200" rows="2"></textarea>
         <div class="password-row">
           <label class="checkbox-label">
             <input id="room-has-password" type="checkbox" />
@@ -432,6 +458,19 @@
         </div>
         <p id="update-check-msg" class="hint mt-8"></p>
       </div>
+
+      <div class="card settings-card mt-8">
+        <h3>🔔 Мэдэгдэл</h3>
+        <label class="checkbox-label">
+          <input id="setting-sound" type="checkbox" checked />
+          <span>Дуут мэдэгдэл</span>
+        </label>
+        <label class="checkbox-label mt-4">
+          <input id="setting-desktop-notif" type="checkbox" checked />
+          <span>Desktop мэдэгдэл (апп minimize үед)</span>
+        </label>
+        <button type="button" id="btn-test-sound" class="btn btn-sm mt-8">🔊 Дуу шалгах</button>
+      </div>
     </div>
     <!-- Discord Servers tab -->
     <div id="tab-discord" class="tab">
@@ -507,6 +546,10 @@
             </div>
             <div id="zt-status-warn"></div>
           </div>
+          <div id="ready-status" class="ready-status"></div>
+          <button type="button" id="btn-ready" class="btn btn-block btn-with-icon mt-8">
+            ⏳ <span>Бэлэн биш</span>
+          </button>
           <button type="button" id="btn-launch-wc3" class="btn btn-primary btn-block btn-with-icon">
             <svg class="btn-icon-svg"><use href="#ico-play"/></svg>
             <span>Тоглоом эхлүүлэх</span>
@@ -542,6 +585,29 @@
       <button type="button" id="btn-close-result" class="btn btn-primary">Хаах</button>
     </div>
   </div>
+
+  <!-- Keyboard shortcuts modal -->
+  <div id="shortcuts-modal" class="modal hidden">
+    <div class="modal-box shortcuts-content">
+      <h3>Товчлол</h3>
+      <div class="shortcuts-list">
+        <span class="shortcut-key">Alt + 1</span><span class="shortcut-desc">Lobby таб</span>
+        <span class="shortcut-key">Alt + 2</span><span class="shortcut-desc">Ranking таб</span>
+        <span class="shortcut-key">Alt + 3</span><span class="shortcut-desc">Settings таб</span>
+        <span class="shortcut-key">Ctrl + K</span><span class="shortcut-desc">Өрөө хайх</span>
+        <span class="shortcut-key">Alt + N</span><span class="shortcut-desc">Шинэ өрөө</span>
+        <span class="shortcut-key">Alt + Q</span><span class="shortcut-desc">Хурдан тоглолт</span>
+        <span class="shortcut-key">Alt + R</span><span class="shortcut-desc">Өрөөнүүд шинэчлэх</span>
+        <span class="shortcut-key">Esc</span><span class="shortcut-desc">Modal / form хаах</span>
+        <span class="shortcut-key">Enter</span><span class="shortcut-desc">Мессеж илгээх</span>
+        <span class="shortcut-key">?</span><span class="shortcut-desc">Энэ цонхыг харуулах</span>
+      </div>
+      <button type="button" class="btn" id="btn-close-shortcuts">Хаах</button>
+    </div>
+  </div>
+
+  <!-- Scroll to top -->
+  <button id="scroll-top-btn" class="scroll-top-btn" title="Дээш">↑</button>
 
   <!-- DM floating popup container -->
   <div id="dm-popups-container"></div>
