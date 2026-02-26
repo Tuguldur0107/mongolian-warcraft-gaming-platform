@@ -1270,8 +1270,12 @@ function _enterRoomUI(id, name, gameType, isHost, hostId, status, ztNetId) {
     if (ztNetId) {
       document.getElementById('zt-network-id').textContent = ztNetId;
       ztDiv.style.display = 'block';
-      // ZeroTier статус шалгах
-      checkZerotierStatus(ztNetId);
+      // Reset UI
+      document.getElementById('zt-my-ip').style.display = 'none';
+      document.getElementById('zt-host-ip').style.display = 'none';
+      document.getElementById('btn-zt-retry').style.display = 'none';
+      // Автомат IP тохируулга эхлүүлэх
+      autoSetupZerotier(id);
     } else {
       ztDiv.style.display = 'none';
     }
@@ -1296,21 +1300,6 @@ function _enterRoomUI(id, name, gameType, isHost, hostId, status, ztNetId) {
     // Өрөөний ZT IP-уудыг авах
     roomZtIps = {};
     socket.emit('room:get_zt_ips', { roomId: id });
-    // ZeroTier IP-г серверт мэдэгдэх (relay-д хэрэгтэй) — retry логиктой
-    (async () => {
-      for (let attempt = 0; attempt < 5; attempt++) {
-        await new Promise(r => setTimeout(r, 2000));
-        try {
-          const myIp = await window.api.getZerotierIp();
-          if (myIp && socket) {
-            socket.emit('room:zt_ip', { roomId: id, ip: myIp });
-            console.log('[ZT] IP бүртгэгдлээ:', myIp);
-            return;
-          }
-        } catch {}
-      }
-      console.warn('[ZT] IP бүртгэж чадсангүй (5 оролдлого)');
-    })();
   }
   appendSysMsg(`"${name}" өрөөнд нэгдлээ.`);
 }
@@ -1363,6 +1352,68 @@ function resetLaunchBtn(isHost) {
   btn.classList.remove('btn-success');
   btn.classList.add('btn-primary');
 }
+
+// ── ZeroTier автомат тохируулга (өрөөнд орход) ──────────
+let _ztSetupInProgress = false;
+async function autoSetupZerotier(roomId) {
+  if (_ztSetupInProgress) return;
+  _ztSetupInProgress = true;
+
+  const statusEl  = document.getElementById('zt-setup-status');
+  const textEl    = document.getElementById('zt-setup-text');
+  const myIpDiv   = document.getElementById('zt-my-ip');
+  const myIpVal   = document.getElementById('zt-my-ip-val');
+  const retryBtn  = document.getElementById('btn-zt-retry');
+  const warnEl    = document.getElementById('zt-status-warn');
+
+  // Тохируулж байгааг харуулах
+  if (statusEl && textEl) {
+    textEl.textContent = '⏳ IP автомат тохируулж байна...';
+    textEl.style.color = 'var(--accent)';
+    statusEl.style.display = 'block';
+  }
+  if (retryBtn) retryBtn.style.display = 'none';
+  if (warnEl) warnEl.style.display = 'none';
+
+  try {
+    const result = await window.api.refreshZerotier();
+    if (result.ip) {
+      // Амжилттай — IP олдлоо
+      if (myIpVal) myIpVal.textContent = result.ip;
+      if (myIpDiv) myIpDiv.style.display = 'block';
+      if (textEl)  { textEl.textContent = '✓ IP тохируулагдлаа'; textEl.style.color = 'var(--green)'; }
+      // 2 секундийн дараа статус мессеж арилгах
+      setTimeout(() => { if (statusEl) statusEl.style.display = 'none'; }, 2000);
+      // Серверт IP мэдэгдэх
+      if (socket && currentRoom) {
+        socket.emit('room:zt_ip', { roomId, ip: result.ip });
+      }
+      // Authorize хийлгэх
+      if (result.nodeId && result.networkId && socket) {
+        socket.emit('zt:authorize', { nodeId: result.nodeId, networkId: result.networkId });
+      }
+      console.log('[ZT] Автомат тохируулга амжилттай:', result.ip);
+    } else {
+      // IP олдсонгүй — authorize оролдож, retry товч харуулах
+      if (result.nodeId && result.networkId && socket) {
+        socket.emit('zt:authorize', { nodeId: result.nodeId, networkId: result.networkId });
+      }
+      if (textEl)  { textEl.textContent = '⚠ IP олдсонгүй. Дахин оролдоно уу.'; textEl.style.color = '#e67e22'; }
+      if (retryBtn) retryBtn.style.display = 'block';
+    }
+  } catch (err) {
+    console.error('[ZT] Автомат тохируулга алдаа:', err);
+    if (textEl) { textEl.textContent = '⚠ Тохируулга амжилтгүй. Дахин оролдоно уу.'; textEl.style.color = 'var(--red)'; }
+    if (retryBtn) retryBtn.style.display = 'block';
+  }
+  _ztSetupInProgress = false;
+}
+
+// "IP дахин тохируулах" retry товч
+document.getElementById('btn-zt-retry')?.addEventListener('click', () => {
+  if (!currentRoom) return;
+  autoSetupZerotier(currentRoom.id);
+});
 
 // ── ZeroTier статус шалгах ───────────────────────────────
 async function checkZerotierStatus(networkId) {
@@ -1445,7 +1496,6 @@ function showHostIp(ip) {
 // Тоглоом эхлүүлэх / дахин нэвтрэх
 let _hostRelayStarted = false;
 let _launchInProgress = false;
-let _ztSetupInProgress = false;
 document.getElementById('btn-launch-wc3').onclick = async () => {
   if (_launchInProgress) return; // Double-click хамгаалалт
   _launchInProgress = true;
@@ -3678,6 +3728,8 @@ let _onboardTooltip = null;
 
 function startOnboarding() {
   if (localStorage.getItem('onboarding_done')) return;
+  // Аль хэдийн ажиллаж байвал давхар нээхгүй
+  if (_onboardOverlay) return;
   _onboardStep = 0;
 
   // Overlay
@@ -3767,6 +3819,14 @@ function _onboardFinish() {
 // Resize → reposition
 window.addEventListener('resize', () => {
   if (_onboardTooltip) _onboardShow();
+});
+
+// Сургалт дахин эхлүүлэх товч
+document.getElementById('btn-restart-tour')?.addEventListener('click', () => {
+  localStorage.removeItem('onboarding_done');
+  // Тохиргоо табаас lobby таб руу шилжих
+  document.querySelector('[data-tab="lobby"]')?.click();
+  setTimeout(() => startOnboarding(), 400);
 });
 
 // ── Discord Servers ───────────────────────────────────────

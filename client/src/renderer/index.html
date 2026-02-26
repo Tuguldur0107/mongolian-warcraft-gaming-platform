@@ -471,6 +471,15 @@
         </label>
         <button type="button" id="btn-test-sound" class="btn btn-sm mt-8">🔊 Дуу шалгах</button>
       </div>
+
+      <div class="card settings-card mt-8">
+        <h3>📖 Сургалт</h3>
+        <p class="hint">Платформыг хэрхэн ашиглахыг алхам алхмаар зааварлана.</p>
+        <button type="button" id="btn-restart-tour" class="btn btn-primary btn-with-icon mt-8">
+          <svg class="btn-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+          Сургалт дахин харах
+        </button>
+      </div>
     </div>
     <!-- Discord Servers tab -->
     <div id="tab-discord" class="tab">
@@ -537,6 +546,9 @@
           <p class="hint" id="room-info-text"></p>
           <div id="zt-info" class="hint">
             <div>🌐 ZeroTier: <code id="zt-network-id"></code></div>
+            <div id="zt-setup-status" style="display:none; padding:6px 0;">
+              <span id="zt-setup-text"></span>
+            </div>
             <div id="zt-my-ip">📍 Миний IP: <code id="zt-my-ip-val"></code>
               <button type="button" id="btn-refresh-zt-ip" class="btn btn-sm" title="IP шинэчлэх">🔄</button>
             </div>
@@ -545,6 +557,9 @@
               <button type="button" id="btn-copy-host-ip" class="btn btn-sm" title="IP хуулах">📋</button>
             </div>
             <div id="zt-status-warn"></div>
+            <button type="button" id="btn-zt-retry" class="btn btn-warning btn-block btn-with-icon mt-8" style="display:none;">
+              🔄 <span>IP дахин тохируулах</span>
+            </button>
           </div>
           <div id="ready-status" class="ready-status"></div>
           <button type="button" id="btn-ready" class="btn btn-block btn-with-icon mt-8">

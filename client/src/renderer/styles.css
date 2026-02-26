@@ -252,6 +252,8 @@ nav { display: flex; gap: 2px; }
 .btn-sm { padding: 5px 10px; font-size: 0.8rem; }
 .btn-danger { background: var(--red); border-color: var(--red); color: white; }
 .btn-danger:hover { opacity: 0.88; }
+.btn-warning { background: #e67e22; border-color: #e67e22; color: white; }
+.btn-warning:hover { opacity: 0.88; }
 .btn-block { width: 100%; padding: 10px; justify-content: center; }
 
 /* Members kick */
