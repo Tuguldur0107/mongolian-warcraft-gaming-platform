@@ -48,6 +48,11 @@ async function startRoom(id) {
   return data;
 }
 
+async function endRoom(id) {
+  const { data } = await getClient().post(`/rooms/${id}/end`);
+  return data;
+}
+
 async function closeRoom(id) {
   const { data } = await getClient().delete(`/rooms/${id}`);
   return data;
@@ -226,6 +231,7 @@ module.exports = {
   joinRoom,
   leaveRoom,
   startRoom,
+  endRoom,
   closeRoom,
   kickPlayer,
   updateRoomNetwork,

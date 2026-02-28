@@ -382,6 +382,38 @@ router.post('/:id/start', strictAuth, async (req, res) => {
   res.json({ message: 'Тоглолт эхэллээ' });
 });
 
+// ── POST /rooms/:id/end — Тоглолт дуусгах (host WC3 хаасан) ──
+router.post('/:id/end', strictAuth, async (req, res) => {
+  const { id } = req.params;
+  const userId = req.user.id;
+
+  if (await dbOk()) {
+    try {
+      const rr = await db.query('SELECT host_id, status FROM rooms WHERE id=$1', [id]);
+      if (!rr.rows[0]) return res.status(404).json({ error: 'Өрөө олдсонгүй' });
+      if (String(rr.rows[0].host_id) !== String(userId))
+        return res.status(403).json({ error: 'Зөвхөн эзэн' });
+      if (rr.rows[0].status !== 'playing')
+        return res.json({ message: 'Аль хэдийн waiting' });
+      await db.query("UPDATE rooms SET status='waiting' WHERE id=$1", [id]);
+      if (_io) {
+        _io.to(String(id)).emit('room:host_game_ended');
+        emitRoomsUpdated();
+      }
+      return res.json({ message: 'Тоглолт дууслаа' });
+    } catch (e) { console.error(e); }
+  }
+  const room = memRooms.get(id);
+  if (room && String(room.host_id) === String(userId)) {
+    room.status = 'waiting';
+    if (_io) {
+      _io.to(String(id)).emit('room:host_game_ended');
+      emitRoomsUpdated();
+    }
+  }
+  res.json({ message: 'Тоглолт дууслаа' });
+});
+
 // ── PATCH /rooms/:id — Өрөөний тохиргоо засах (эзэн) ────
 router.patch('/:id', strictAuth, async (req, res) => {
   const { id } = req.params;

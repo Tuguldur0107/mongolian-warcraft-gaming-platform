@@ -350,6 +350,7 @@ async function connectSocket() {
   socket.on('room:started', async () => {
     // Host аль хэдийн WC3 нээсэн (btn-launch-wc3 handler-ээс) — давхар нээхгүй
     if (currentRoom?.isHost) return;
+    _hostEndedHandled = false; // дахин тоглоом эхэлж байгаа тул reset
     playSound('gameStart');
     showDesktopNotif('▶ Тоглолт эхэллээ!', `${currentRoom?.name || 'Өрөө'} — WC3 нээж байна...`);
     appendSysMsg('▶ Тоглолт эхэллээ! WC3 нээж байна...');
@@ -423,11 +424,13 @@ async function connectSocket() {
 
   // WC3 хаагдсан
   let _hostKilledGame = false; // host хаасан учир game:exited давхар харуулахгүй
-  window.api.onGameExited(() => {
+  window.api.onGameExited(async () => {
     if (!currentRoom) return;
     if (currentRoom.isHost) {
       // HOST: тоглогчдод мэдэгдэж, дахин эхлүүлэх товч харуулах
       if (socket) socket.emit('room:host_game_ended', { roomId: currentRoom.id });
+      // REST API fallback — socket алдагдсан ч room status waiting болно
+      try { await window.api.endRoom(currentRoom.id); } catch {}
       _hostRelayStarted = false;
       try { window.api.stopRelay(); } catch {}
       appendSysMsg('⚠ WC3 хаагдлаа. "▶ Тоглолт эхлүүлэх" дарж дахин эхлүүлнэ үү.');
@@ -444,14 +447,19 @@ async function connectSocket() {
   });
 
   // Host WC3 хаагдсан — тоглогчийн WC3-г автомат хаах
+  let _hostEndedHandled = false;
   socket.on('room:host_game_ended', async () => {
     if (!currentRoom || currentRoom.isHost) return;
+    if (_hostEndedHandled) return; // давхар event-ээс хамгаалах
+    _hostEndedHandled = true;
     _hostKilledGame = true; // game:exited давхар handler-г зогсоох
     appendSysMsg('⚠ Host тоглоомыг хаалаа. Таны WC3 хаагдаж байна...');
     showToast('Host тоглоомыг хаалаа', 'warning', 5000);
     // WC3 kill + relay зогсоох
     try { await window.api.killGame(); } catch {}
     try { window.api.stopRelay(); } catch {}
+    // Тоглогчийн online статусыг in_room руу шинэчлэх
+    socket.emit('room:game_ended_player');
     // Товчийг нуух — host дахин эхлүүлэхэд автомат нээгдэнэ
     const launchBtn = document.getElementById('btn-launch-wc3');
     if (launchBtn) launchBtn.style.display = 'none';
@@ -532,6 +540,23 @@ async function init() {
     return;
   }
 
+  // Анхны удаа firewall тохируулах (нэвтэрсний дараа)
+  async function promptFirewallSetup() {
+    if (localStorage.getItem('firewall_configured')) return;
+    const ok = await showConfirm(
+      'Сүлжээ тохируулах',
+      'Windows Firewall-г тохируулж LAN тоглоом асуудалгүй ажиллахын тулд сүлжээний зөвшөөрөл нэмэх үү?\n\nWindows-ийн зөвшөөрлийн цонх гарна.'
+    );
+    if (!ok) return;
+    try {
+      const result = await window.api.setupFirewall();
+      if (result.firewall) {
+        localStorage.setItem('firewall_configured', '1');
+        showToast('Сүлжээ амжилттай тохируулагдлаа!', 'success', 4000);
+      }
+    } catch {}
+  }
+
   // Өрөөний цонх горим: URL-аас params унших
   if (isRoomMode()) {
     // Нэвтрэх хуудас харагдахаас урьдчилан сэргийлэх
@@ -577,6 +602,7 @@ async function init() {
     loadRooms();
     connectSocket();
     loadUnreadDMCounts();
+    setTimeout(() => promptFirewallSetup(), 2000);
     // Серверээс бүрэн мэдээлэл (avatar_url г.м.) шинэчлэх
     window.api.refreshUser?.().then(async () => {
       const fresh = await window.api.getUser();
@@ -595,6 +621,7 @@ async function init() {
     connectSocket();
     loadUnreadDMCounts();
     if (!localStorage.getItem('onboarding_done')) setTimeout(() => startOnboarding(), 600);
+    setTimeout(() => promptFirewallSetup(), 2000);
   });
 
   window.api.onGameResult((data) => showGameResult(data));
@@ -2944,6 +2971,14 @@ async function loadSettings() {
     }
   } catch {}
 
+  // Firewall тохиргоо хийгдсэн эсэх шалгах
+  const firewallDone = localStorage.getItem('firewall_configured');
+  const fwStatusEl = document.getElementById('firewall-status');
+  if (!firewallDone && fwStatusEl) {
+    fwStatusEl.textContent = 'Тохируулга хийгдээгүй — LAN тоглоом харагдахгүй байж магадгүй';
+    fwStatusEl.style.color = 'var(--yellow, orange)';
+  }
+
   // Cache хэмжээ харуулах
   try {
     const size = await window.api.getCacheSize();
@@ -2973,6 +3008,33 @@ document.getElementById('setting-desktop-notif')?.addEventListener('change', (e)
 });
 document.getElementById('btn-test-sound')?.addEventListener('click', () => {
   playSound('dm');
+});
+
+// Сүлжээ / Firewall тохируулах товч
+document.getElementById('btn-setup-firewall')?.addEventListener('click', async () => {
+  const btn = document.getElementById('btn-setup-firewall');
+  const statusEl = document.getElementById('firewall-status');
+  btn.disabled = true;
+  btn.textContent = 'Тохируулж байна...';
+  if (statusEl) statusEl.textContent = 'Windows UAC зөвшөөрөл асууж байна...';
+  try {
+    const result = await window.api.setupFirewall();
+    if (result.firewall && result.metric) {
+      showToast('Firewall + сүлжээ амжилттай тохируулагдлаа!', 'success', 5000);
+      localStorage.setItem('firewall_configured', '1');
+      if (statusEl) statusEl.textContent = 'Амжилттай тохируулагдлаа';
+      if (statusEl) statusEl.style.color = 'var(--green)';
+    } else {
+      showToast('Тохируулж чадсангүй — UAC зөвшөөрөгдөөгүй байж магадгүй', 'error', 5000);
+      if (statusEl) statusEl.textContent = 'Алдаа: UAC зөвшөөрөл шаардлагатай';
+      if (statusEl) statusEl.style.color = 'var(--red)';
+    }
+  } catch (err) {
+    showToast(`Алдаа: ${err.message}`, 'error');
+    if (statusEl) statusEl.textContent = `Алдаа: ${err.message}`;
+  }
+  btn.disabled = false;
+  btn.innerHTML = '<svg class="btn-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> Сүлжээ тохируулах';
 });
 
 // Cache цэвэрлэх товч
@@ -3710,8 +3772,11 @@ async function loadDiscordServers() {
       const iconHtml = iconUrl
         ? `<img class="discord-guild-icon" src="${iconUrl}" alt="" />`
         : `<span class="discord-guild-icon-placeholder">🎮</span>`;
+      const voiceHtml = m && m.voice_count > 0
+        ? `<span class="discord-voice">🔊 ${m.voice_count} voice</span>`
+        : '';
       const memberHtml = m && m.member_count
-        ? `<span class="discord-meta-counts"><span class="discord-members">👥 ${m.member_count.toLocaleString()} гишүүн</span><span class="discord-online">🟢 ${m.presence_count.toLocaleString()} онлайн</span></span>`
+        ? `<span class="discord-meta-counts"><span class="discord-members">👥 ${m.member_count.toLocaleString()} гишүүн</span><span class="discord-online">🟢 ${m.presence_count.toLocaleString()} онлайн</span>${voiceHtml}</span>`
         : '';
       const expiredHtml = expired
         ? `<p class="discord-expired-warning">⚠️ Урилга холбоос хүчингүй болсон${isOwn ? ' — Засах товч дарж шинэ холбоос оруулна уу' : ''}</p>`

@@ -167,7 +167,7 @@ async function ensureRunning() {
   return ok;
 }
 
-async function autoSetup(networkId) {
+async function autoSetup(networkId, gamePaths) {
   if (!networkId) return { ok: false, error: 'no-network-id' };
 
   // 1. Суулгалт шалгах / суулгах
@@ -201,7 +201,7 @@ async function autoSetup(networkId) {
   }
 
   // 5. ZeroTier adapter priority + Firewall rules (НЭГ UAC промпт)
-  const netSetup = elevatedNetworkSetup();
+  const netSetup = elevatedNetworkSetup(gamePaths);
 
   if (myIp) {
     console.log(`[ZeroTier] Бэлэн! IP: ${myIp}`);
@@ -291,25 +291,26 @@ function isMetricReady() {
   } catch { return false; }
 }
 
-// ZeroTier adapter priority + Windows Firewall
-// Эхлээд admin-гүйгээр шалгаж, шаардлагатай үед л UAC промпт гаргана
-function elevatedNetworkSetup() {
-  const firewallOk = isFirewallReady();
-  const metricOk = isMetricReady();
+// ZeroTier adapter priority + Windows Firewall + Game/ZT exe rules
+// gamePaths: тоглоомын exe файлуудын path-ын массив (optional)
+// force: true бол шалгалтгүйгээр шууд тохируулна
+function elevatedNetworkSetup(gamePaths, force) {
+  const firewallOk = !force && isFirewallReady();
+  const metricOk = !force && isMetricReady();
 
-  if (firewallOk && metricOk) {
+  if (firewallOk && metricOk && (!gamePaths || gamePaths.length === 0)) {
     console.log('[ZeroTier] Network setup аль хэдийн хийгдсэн (UAC шаардлагагүй)');
     return { metric: true, firewall: true };
   }
 
-  console.log(`[ZeroTier] Setup шаардлагатай: metric=${metricOk ? 'OK' : 'NEED'}, firewall=${firewallOk ? 'OK' : 'NEED'}`);
+  console.log(`[ZeroTier] Setup шаардлагатай: metric=${metricOk ? 'OK' : 'NEED'}, firewall=${firewallOk ? 'OK' : 'NEED'}, games=${(gamePaths || []).length}`);
 
   try {
     const scriptDir = path.join(os.tmpdir(), 'wc3-zt-setup');
     if (!fs.existsSync(scriptDir)) fs.mkdirSync(scriptDir, { recursive: true });
     const scriptPath = path.join(scriptDir, 'network-setup.ps1');
 
-    const lines = ['# WC3 LAN — ZeroTier network setup', ''];
+    const lines = ['# MongolWC3 — ZeroTier + Firewall бүрэн тохиргоо', ''];
 
     if (!metricOk) {
       lines.push(
@@ -318,17 +319,64 @@ function elevatedNetworkSetup() {
         'if ($zt) {',
         '  Set-NetIPInterface -InterfaceIndex $zt.ifIndex -InterfaceMetric 1 -ErrorAction SilentlyContinue',
         '}',
+        '',
       );
     }
 
-    if (!firewallOk) {
+    // ZeroTier network profile → Private (Public бол firewall хатуу)
+    lines.push(
+      '# ZeroTier network profile → Private',
+      '$ztProfile = Get-NetConnectionProfile | Where-Object { $_.InterfaceAlias -like "*ZeroTier*" }',
+      'if ($ztProfile -and $ztProfile.NetworkCategory -ne "Private") {',
+      '  Set-NetConnectionProfile -InterfaceIndex $ztProfile.InterfaceIndex -NetworkCategory Private -ErrorAction SilentlyContinue',
+      '}',
+      '',
+    );
+
+    if (!firewallOk || force) {
+      // Port 6112 rules
       lines.push(
-        '# Firewall rules',
+        '# Firewall: Port 6112 (WC3 LAN)',
+        'netsh advfirewall firewall delete rule name="WC3 LAN UDP In" >$null 2>&1',
+        'netsh advfirewall firewall delete rule name="WC3 LAN UDP Out" >$null 2>&1',
+        'netsh advfirewall firewall delete rule name="WC3 LAN TCP In" >$null 2>&1',
+        'netsh advfirewall firewall delete rule name="WC3 LAN TCP Out" >$null 2>&1',
         'netsh advfirewall firewall add rule name="WC3 LAN UDP In" dir=in action=allow protocol=UDP localport=6112 profile=any | Out-Null',
         'netsh advfirewall firewall add rule name="WC3 LAN UDP Out" dir=out action=allow protocol=UDP localport=6112 profile=any | Out-Null',
         'netsh advfirewall firewall add rule name="WC3 LAN TCP In" dir=in action=allow protocol=TCP localport=6112 profile=any | Out-Null',
         'netsh advfirewall firewall add rule name="WC3 LAN TCP Out" dir=out action=allow protocol=TCP localport=6112 profile=any | Out-Null',
+        '',
       );
+
+      // ZeroTier exe firewall rules
+      lines.push('# Firewall: ZeroTier exe');
+      for (const ztPath of ZT_PATHS) {
+        if (fs.existsSync(ztPath)) {
+          const safePath = ztPath.replace(/'/g, "''");
+          lines.push(
+            `netsh advfirewall firewall delete rule name="ZeroTier One" program="${safePath}" >$null 2>&1`,
+            `netsh advfirewall firewall add rule name="ZeroTier One" dir=in action=allow program="${safePath}" profile=any | Out-Null`,
+            `netsh advfirewall firewall add rule name="ZeroTier One" dir=out action=allow program="${safePath}" profile=any | Out-Null`,
+          );
+        }
+      }
+      lines.push('');
+    }
+
+    // Game exe firewall rules
+    if (gamePaths && gamePaths.length > 0) {
+      lines.push('# Firewall: Тоглоомын exe файлууд');
+      for (const gamePath of gamePaths) {
+        if (fs.existsSync(gamePath)) {
+          const safePath = gamePath.replace(/'/g, "''");
+          const gameName = path.basename(gamePath, path.extname(gamePath));
+          lines.push(
+            `netsh advfirewall firewall delete rule name="MongolWC3 Game - ${gameName}" >$null 2>&1`,
+            `netsh advfirewall firewall add rule name="MongolWC3 Game - ${gameName}" dir=in action=allow program="${safePath}" profile=any | Out-Null`,
+            `netsh advfirewall firewall add rule name="MongolWC3 Game - ${gameName}" dir=out action=allow program="${safePath}" profile=any | Out-Null`,
+          );
+        }
+      }
     }
 
     fs.writeFileSync(scriptPath, lines.join('\r\n'), 'utf8');
@@ -338,7 +386,7 @@ function elevatedNetworkSetup() {
       { stdio: 'pipe', timeout: 20000 }
     );
 
-    console.log('[ZeroTier] Network setup хийгдлээ (metric + firewall)');
+    console.log('[ZeroTier] Network setup хийгдлээ (metric + firewall + games)');
     try { fs.rmSync(scriptDir, { recursive: true, force: true }); } catch {}
     return { metric: true, firewall: true };
   } catch (e) {

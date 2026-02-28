@@ -588,6 +588,16 @@ io.on('connection', (socket) => {
     console.log(`[HostGameEnded] ${username} → room ${roomId} waiting`);
   });
 
+  // Тоглогч (host биш) тоглоом хаагдсан → online статус in_room болгох
+  socket.on('room:game_ended_player', () => {
+    const username = socket.user.username;
+    const userId   = String(socket.user.id);
+    if (onlineUsers.has(socket.id)) {
+      onlineUsers.set(socket.id, { username, userId, status: 'in_room' });
+      io.emit('lobby:online_users', [...onlineUsers.values()]);
+    }
+  });
+
   // Typing indicator (DM)
   socket.on('typing:start', ({ toUserId }) => {
     const toSocketId = userSockets.get(String(toUserId));

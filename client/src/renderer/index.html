@@ -448,6 +448,16 @@
       </div>
 
       <div class="card settings-card mt-8">
+        <h3>🛡️ Сүлжээ / Firewall тохиргоо</h3>
+        <p class="hint">Тоглоом LAN-д харагдахгүй бол энэ товчийг дарж Windows Firewall-г тохируулна уу. ZeroTier адаптер, тоглоомын exe, UDP/TCP 6112 порт зөвшөөрөгдөнө.</p>
+        <div id="firewall-status" class="hint mt-4" style="font-family:monospace;font-size:0.78rem"></div>
+        <button type="button" id="btn-setup-firewall" class="btn btn-primary btn-with-icon mt-8">
+          <svg class="btn-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          Сүлжээ тохируулах
+        </button>
+      </div>
+
+      <div class="card settings-card mt-8">
         <h3>🔄 Програмын шинэчлэл</h3>
         <div class="update-header-row">
           <span class="hint hint-no-margin">Одоогийн хувилбар: <strong id="app-version">...</strong></span>

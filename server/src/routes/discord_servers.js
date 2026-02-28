@@ -50,8 +50,8 @@ async function fetchInviteMeta(inviteCode) {
   }
 }
 
-// Widget API fallback — guild_id-аар instant_invite авах оролдлого
-async function fetchWidgetInvite(guildId) {
+// Widget API — guild_id-аар instant_invite + voice channel тоо авах
+async function fetchWidgetData(guildId) {
   if (!guildId) return null;
   const cached = inviteCache.get(`widget:${guildId}`);
   if (cached && Date.now() - cached.ts < CACHE_TTL) return cached.data;
@@ -59,11 +59,15 @@ async function fetchWidgetInvite(guildId) {
     const res = await fetch(`https://discord.com/api/guilds/${encodeURIComponent(guildId)}/widget.json`);
     if (!res.ok) return null;
     const json = await res.json();
+    // Voice channel дотор байгаа гишүүдийг тоолох (channel_id байгаа = voice-д байгаа)
+    const members = json.members || [];
+    const voiceCount = members.filter(m => m.channel_id).length;
     const data = {
       guild_id: json.id,
       guild_name: json.name,
       instant_invite: json.instant_invite || null,
       presence_count: json.presence_count || 0,
+      voice_count: voiceCount,
     };
     inviteCache.set(`widget:${guildId}`, { data, ts: Date.now() });
     return data;
@@ -116,41 +120,50 @@ router.get('/', async (req, res) => {
     servers = [...memServers].reverse();
   }
 
-  // Enrich with Discord invite metadata (parallel)
+  // Enrich with Discord invite metadata + voice count (parallel)
   const useDb = await dbOk();
   const enriched = await Promise.all(servers.map(async (s) => {
     const code = extractInviteCode(s.invite_url);
     let meta = await fetchInviteMeta(code);
     let invite_expired = false;
+    let voice_count = 0;
+
+    // Widget API-аас voice channel тоо авах (guild_id-тай бол)
+    const guildId = meta?.guild_id || s.guild_id;
+    if (guildId) {
+      const widget = await fetchWidgetData(guildId);
+      if (widget) {
+        voice_count = widget.voice_count || 0;
+
+        // Invite хүчингүй болсон бол widget-аар сэргээх
+        if (!meta) {
+          invite_expired = true;
+          if (widget.instant_invite) {
+            if (useDb) {
+              db.query('UPDATE discord_servers SET invite_url=$1 WHERE id=$2', [widget.instant_invite, s.id]).catch(() => {});
+            } else {
+              const mem = memServers.find(m => m.id === s.id);
+              if (mem) mem.invite_url = widget.instant_invite;
+            }
+            s.invite_url = widget.instant_invite;
+            invite_expired = false;
+            const newCode = extractInviteCode(widget.instant_invite);
+            meta = await fetchInviteMeta(newCode);
+          }
+        }
+      }
+    }
 
     if (!meta && s.guild_id) {
-      // Invite хүчингүй болсон — widget API-аар шинэ invite олох оролдлого
-      invite_expired = true;
-      const widget = await fetchWidgetInvite(s.guild_id);
-      if (widget?.instant_invite) {
-        // Шинэ invite олдлоо — DB-д шинэчлэх
-        if (useDb) {
-          db.query('UPDATE discord_servers SET invite_url=$1 WHERE id=$2', [widget.instant_invite, s.id]).catch(() => {});
-        } else {
-          const mem = memServers.find(m => m.id === s.id);
-          if (mem) mem.invite_url = widget.instant_invite;
-        }
-        s.invite_url = widget.instant_invite;
-        invite_expired = false;
-        // Шинэ invite code-оор metadata дахин татах
-        const newCode = extractInviteCode(widget.instant_invite);
-        meta = await fetchInviteMeta(newCode);
-      }
       // Widget-аас icon, нэр авах боломжгүй ч DB-д хадгалсан мэдээлэл ашиглана
-      if (!meta && s.guild_id) {
-        meta = {
-          guild_id: s.guild_id,
-          guild_name: null,
-          guild_icon: s.guild_icon || null,
-          member_count: 0,
-          presence_count: 0,
-        };
-      }
+      invite_expired = true;
+      meta = {
+        guild_id: s.guild_id,
+        guild_name: null,
+        guild_icon: s.guild_icon || null,
+        member_count: 0,
+        presence_count: 0,
+      };
     }
 
     // DB-д guild_id хадгалаагүй бөгөөд metadata-аас олдвол шинэчлэх
@@ -159,7 +172,7 @@ router.get('/', async (req, res) => {
         [meta.guild_id, meta.guild_icon, s.id]).catch(() => {});
     }
 
-    return { ...s, discord_meta: meta || null, invite_expired };
+    return { ...s, discord_meta: meta ? { ...meta, voice_count } : null, invite_expired };
   }));
   res.json(enriched);
 });

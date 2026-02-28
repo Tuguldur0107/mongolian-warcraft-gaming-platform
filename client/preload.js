@@ -24,6 +24,7 @@ contextBridge.exposeInMainWorld('api', {
   closeRoom:  (id)             => ipcRenderer.invoke('rooms:close', id),
   updateRoom: (id, updates)    => ipcRenderer.invoke('rooms:update', id, updates),
   startRoom:  (id)             => ipcRenderer.invoke('rooms:start', id),
+  endRoom:    (id)             => ipcRenderer.invoke('rooms:end', id),
   kickPlayer: (roomId, userId) => ipcRenderer.invoke('rooms:kick', roomId, userId),
 
   // Stats
@@ -53,6 +54,9 @@ contextBridge.exposeInMainWorld('api', {
   addGame:               (data) => ipcRenderer.invoke('settings:addGame', data),
   removeGame:            (id)   => ipcRenderer.invoke('settings:removeGame', id),
   setZerotierNetwork:    (id)   => ipcRenderer.invoke('settings:setZerotierNetwork', id),
+
+  // Firewall + сүлжээ тохиргоо
+  setupFirewall:     ()          => ipcRenderer.invoke('firewall:setup'),
 
   // ZeroTier статус
   getZerotierStatus: (networkId) => ipcRenderer.invoke('zt:status', networkId),

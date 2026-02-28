@@ -462,6 +462,10 @@ ipcMain.handle('rooms:start', async (event, roomId) => {
   try { return await apiService.startRoom(roomId); } catch (err) { throw apiError(err); }
 });
 
+ipcMain.handle('rooms:end', async (event, roomId) => {
+  try { return await apiService.endRoom(roomId); } catch (err) { throw apiError(err); }
+});
+
 ipcMain.handle('rooms:update', async (event, roomId, updates) => {
   try { return await apiService.updateRoom(roomId, updates); } catch (err) { throw apiError(err); }
 });
@@ -847,10 +851,20 @@ ipcMain.handle('zt:refresh', async () => {
     } catch {}
   }
   if (!networkId) return { ok: false, error: 'no-network-id', installed: false, running: false, ip: null, nodeId: null };
+  // Game paths-г settings-аас авч firewall rule нэмэх
+  const gamePaths = (s.games || []).map(g => g.path).filter(p => p);
   // Бүрэн autoSetup — суулгах, сервис, join, IP хүлээх, metric+firewall
-  const result = await zerotierService.autoSetup(networkId);
+  const result = await zerotierService.autoSetup(networkId, gamePaths);
   const nodeId = zerotierService.getNodeId();
   return { ...result, nodeId, networkId };
+});
+
+// Firewall + сүлжээ тохиргоо (тусдаа товчноос)
+ipcMain.handle('firewall:setup', async () => {
+  const s = migrateSettings(readSettings());
+  const gamePaths = (s.games || []).map(g => g.path).filter(p => p);
+  const result = zerotierService.elevatedNetworkSetup(gamePaths, true);
+  return result;
 });
 
 // Game Relay — Host: capture+forward, Player: search+rebroadcast

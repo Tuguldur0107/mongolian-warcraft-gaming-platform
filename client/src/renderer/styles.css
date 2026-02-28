@@ -1263,7 +1263,8 @@ body.light #icon-moon { display: block !important; }
 .discord-header-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .discord-header-text strong { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .discord-meta-counts { display: flex; gap: 10px; font-size: 0.75rem; color: var(--muted); }
-.discord-members, .discord-online { white-space: nowrap; }
+.discord-members, .discord-online, .discord-voice { white-space: nowrap; }
+.discord-voice { color: #5865f2; font-weight: 600; }
 .discord-card-footer { display: flex; gap: 8px; margin-top: 10px; align-items: center; }
 .discord-expired { opacity: 0.75; border-left-color: #ed4245 !important; }
 .discord-expired-warning { color: #ed4245; font-size: 0.78rem; margin: 4px 0 2px; }
