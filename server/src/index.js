@@ -11,6 +11,7 @@ const roomRoutes          = require('./routes/rooms');
 const statsRoutes         = require('./routes/stats');
 const socialRoutes        = require('./routes/social');
 const discordServerRoutes = require('./routes/discord_servers');
+const streamerRoutes      = require('./routes/streamers');
 const { setIO } = roomRoutes;
 
 const app = express();
@@ -42,6 +43,7 @@ app.use('/rooms', roomRoutes);
 app.use('/stats', statsRoutes);
 app.use('/social', socialRoutes);
 app.use('/discord-servers', discordServerRoutes);
+app.use('/streamers', streamerRoutes);
 
 app.get('/', (req, res) => {
   res.json({ status: 'ok', message: 'Mongolian Warcraft Gaming Platform Server ажиллаж байна' });

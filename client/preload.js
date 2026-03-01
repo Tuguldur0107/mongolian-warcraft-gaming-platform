@@ -119,6 +119,13 @@ contextBridge.exposeInMainWorld('api', {
   deleteDiscordServer: (id)       => ipcRenderer.invoke('discord:deleteServer', id),
   openDiscordInvite:   (url)      => ipcRenderer.invoke('discord:openInvite', url),
 
+  // Streamers
+  getStreamers:   ()         => ipcRenderer.invoke('streamers:getAll'),
+  addStreamer:     (data)     => ipcRenderer.invoke('streamers:add', data),
+  editStreamer:    (id, data) => ipcRenderer.invoke('streamers:edit', id, data),
+  deleteStreamer:  (id)       => ipcRenderer.invoke('streamers:delete', id),
+  openStreamerUrl: (url)      => ipcRenderer.invoke('streamers:openUrl', url),
+
   // ZeroTier автомат тохиргоо
   onZtSetupComplete: (cb) => ipcRenderer.on('zt:setup-complete', (_, result) => cb(result)),
 

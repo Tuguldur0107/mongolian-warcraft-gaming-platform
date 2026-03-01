@@ -158,7 +158,6 @@
   <!-- ② Үндсэн хуудас -->
   <div id="page-main" class="page">
     <header>
-      <div class="logo">⚔️ Mongolian Warcraft Gaming Platform</div>
       <nav>
         <button type="button" class="nav-btn active" data-tab="lobby">Lobby</button>
         <button type="button" class="nav-btn" data-tab="chat">
@@ -167,6 +166,7 @@
         </button>
         <button type="button" class="nav-btn" data-tab="ranking">Ranking</button>
         <button type="button" class="nav-btn" data-tab="discord">Discord</button>
+        <button type="button" class="nav-btn" data-tab="streamers">Streamers</button>
         <button type="button" class="nav-btn" data-tab="profile">Профайл</button>
         <button type="button" class="nav-btn" data-tab="settings">Тохиргоо</button>
       </nav>
@@ -519,6 +519,27 @@
       </div>
 
       <div id="discord-servers-list" class="rooms-grid">
+        <p class="empty-text">Ачааллаж байна...</p>
+      </div>
+    </div>
+    <!-- Streamers tab -->
+    <div id="tab-streamers" class="tab">
+      <h2>Streamers</h2>
+      <p class="hint mb-8">Warcraft стримерүүдийн суваг, хуудсыг нэмж хуваалцаарай</p>
+      <!-- Стример нэмэх форм -->
+      <div id="streamer-form" class="card hidden mb-16">
+        <h3 class="mb-8">Шинэ стример нэмэх</h3>
+        <input id="str-name"        type="text" placeholder="Стримерийн нэр"                  class="input" />
+        <input id="str-channel-url" type="url"  placeholder="https://twitch.tv/... эсвэл бусад" class="input" />
+        <input id="str-description" type="text" placeholder="Тайлбар (заавал биш)"              class="input" />
+        <p id="str-form-error" class="form-error"></p>
+        <div class="form-actions mt-8">
+          <button type="button" id="btn-str-submit" class="btn btn-primary">Нэмэх</button>
+          <button type="button" id="btn-str-cancel"  class="btn">Болих</button>
+        </div>
+      </div>
+
+      <div id="streamers-list" class="rooms-grid">
         <p class="empty-text">Ачааллаж байна...</p>
       </div>
     </div>

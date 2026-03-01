@@ -836,6 +836,25 @@ ipcMain.handle('discord:openInvite', async (_, url) => {
   }
 });
 
+// ── Streamers ──────────────────────────────────────────────
+ipcMain.handle('streamers:getAll', async () => {
+  try { return await apiService.getStreamers(); } catch { return []; }
+});
+ipcMain.handle('streamers:add', async (_, data) => {
+  try { return await apiService.addStreamer(data); } catch (err) { throw apiError(err); }
+});
+ipcMain.handle('streamers:edit', async (_, id, data) => {
+  try { return await apiService.editStreamer(id, data); } catch (err) { throw apiError(err); }
+});
+ipcMain.handle('streamers:delete', async (_, id) => {
+  try { return await apiService.deleteStreamer(id); } catch (err) { throw apiError(err); }
+});
+ipcMain.handle('streamers:openUrl', async (_, url) => {
+  if (/^https?:\/\/.+/i.test(url)) {
+    await shell.openExternal(url);
+  }
+});
+
 // ZeroTier статус & IP
 ipcMain.handle('zt:status', (_, networkId) => zerotierService.getStatus(networkId));
 ipcMain.handle('zt:ip',     (_, networkId) => zerotierService.getMyIp(networkId));

@@ -483,6 +483,7 @@ function showTab(name) {
   if (name === 'profile')  loadProfile();
   if (name === 'settings') loadSettings();
   if (name === 'discord')  loadDiscordServers();
+  if (name === 'streamers') loadStreamers();
   if (name === 'chat') {
     chatUnreadCount = 0;
     updateChatBadge();
@@ -3916,6 +3917,162 @@ document.getElementById('btn-ds-submit').onclick = async () => {
     }
     _resetDiscordForm();
     loadDiscordServers();
+  } catch (err) {
+    errEl.textContent = err.message;
+  }
+};
+
+// ── Streamers ─────────────────────────────────────────────
+const _platformIcons = {
+  Twitch:   '🟣',
+  YouTube:  '🔴',
+  Facebook: '🔵',
+  Kick:     '🟢',
+  TikTok:   '🎵',
+  Other:    '🌐',
+};
+
+function _streamerAddCard() {
+  return `
+    <div class="room-card streamer-card" id="streamer-add-card"
+         style="border:2px dashed var(--accent);cursor:pointer;text-align:center;padding:18px;opacity:0.85;"
+         title="Стример нэмэх">
+      <div style="font-size:2rem;margin-bottom:6px">➕</div>
+      <div style="font-size:0.85rem;color:var(--text2)">Стример нэмэх</div>
+    </div>`;
+}
+
+async function loadStreamers() {
+  const list = document.getElementById('streamers-list');
+  if (!list) return;
+  list.innerHTML = '<p class="empty-text">Ачааллаж байна...</p>';
+  try {
+    const streamers = await window.api.getStreamers();
+    const addCard = _streamerAddCard();
+    if (!streamers.length) {
+      list.innerHTML = addCard + '<p class="empty-text">Одоогоор стример нэмэгдээгүй байна.</p>';
+    } else {
+      list.innerHTML = addCard + streamers.map(s => {
+        const isOwn = currentUser && s.added_by_id === currentUser.id;
+        const icon = _platformIcons[s.platform] || '🌐';
+        return `
+        <div class="room-card streamer-card">
+          <div class="room-card-header">
+            <span style="font-size:1.4rem">${icon}</span>
+            <div style="flex:1;min-width:0">
+              <div class="room-card-title">${escHtml(s.name)}</div>
+              <div style="font-size:0.75rem;color:var(--text2)">${escHtml(s.platform)} — ${escHtml(s.added_by_username)}</div>
+            </div>
+          </div>
+          ${s.description ? `<p style="font-size:0.82rem;color:var(--text2);margin:6px 0 0">${escHtml(s.description)}</p>` : ''}
+          <div class="room-card-actions mt-8">
+            <button type="button" class="btn btn-primary btn-sm btn-streamer-open" data-url="${escHtml(s.channel_url)}">
+              Суваг нээх →
+            </button>
+            ${isOwn ? `
+              <button type="button" class="btn btn-sm btn-str-edit" data-id="${s.id}"
+                data-name="${escHtml(s.name)}" data-url="${escHtml(s.channel_url)}"
+                data-desc="${escHtml(s.description || '')}">✏️ Засах</button>
+              <button type="button" class="btn btn-sm btn-danger-soft btn-str-delete" data-id="${s.id}">Устгах</button>
+            ` : ''}
+          </div>
+        </div>`;
+      }).join('');
+    }
+    // Event listeners
+    list.querySelector('#streamer-add-card')?.addEventListener('click', () => toggleStreamerForm());
+    list.querySelectorAll('.btn-streamer-open').forEach(btn => {
+      btn.onclick = () => window.api.openStreamerUrl(btn.dataset.url);
+    });
+    list.querySelectorAll('.btn-str-delete').forEach(btn => {
+      btn.onclick = async () => {
+        if (!await showConfirm('Стример устгах', 'Энэ стримерийг жагсаалтаас устгах уу?')) return;
+        try {
+          await window.api.deleteStreamer(Number(btn.dataset.id));
+          showToast('Устгагдлаа', 'success');
+          loadStreamers();
+        } catch (err) {
+          showToast(`Алдаа: ${err.message}`, 'error');
+        }
+      };
+    });
+    list.querySelectorAll('.btn-str-edit').forEach(btn => {
+      btn.onclick = () => {
+        const form = document.getElementById('streamer-form');
+        const title = form.querySelector('h3');
+        const submitBtn = document.getElementById('btn-str-submit');
+        document.getElementById('str-name').value        = btn.dataset.name || '';
+        document.getElementById('str-channel-url').value = btn.dataset.url  || '';
+        document.getElementById('str-description').value = btn.dataset.desc || '';
+        document.getElementById('str-form-error').textContent = '';
+        form.dataset.editingId = btn.dataset.id;
+        if (title)    title.textContent    = 'Стример засах';
+        if (submitBtn) submitBtn.textContent = 'Хадгалах';
+        form.classList.remove('hidden');
+        document.getElementById('str-name').focus();
+        form.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      };
+    });
+  } catch (err) {
+    list.innerHTML = _streamerAddCard() + `<p class="empty-text">Алдаа: ${err.message}</p>`;
+    list.querySelector('#streamer-add-card')?.addEventListener('click', () => toggleStreamerForm());
+  }
+}
+
+function toggleStreamerForm() {
+  const form = document.getElementById('streamer-form');
+  const isHidden = form.classList.contains('hidden');
+  if (isHidden) {
+    const title = form.querySelector('h3');
+    const submitBtn = document.getElementById('btn-str-submit');
+    delete form.dataset.editingId;
+    if (title)    title.textContent     = 'Шинэ стример нэмэх';
+    if (submitBtn) submitBtn.textContent = 'Нэмэх';
+    form.classList.remove('hidden');
+    document.getElementById('str-name').focus();
+  } else {
+    _resetStreamerForm();
+  }
+}
+
+function _resetStreamerForm() {
+  const form = document.getElementById('streamer-form');
+  const title = form.querySelector('h3');
+  const submitBtn = document.getElementById('btn-str-submit');
+  form.classList.add('hidden');
+  delete form.dataset.editingId;
+  document.getElementById('str-name').value        = '';
+  document.getElementById('str-channel-url').value = '';
+  document.getElementById('str-description').value = '';
+  document.getElementById('str-form-error').textContent = '';
+  if (title)    title.textContent     = 'Шинэ стример нэмэх';
+  if (submitBtn) submitBtn.textContent = 'Нэмэх';
+}
+
+document.getElementById('btn-str-cancel').onclick = _resetStreamerForm;
+
+document.getElementById('btn-str-submit').onclick = async () => {
+  const name        = document.getElementById('str-name').value.trim();
+  const channel_url = document.getElementById('str-channel-url').value.trim();
+  const description = document.getElementById('str-description').value.trim();
+  const errEl       = document.getElementById('str-form-error');
+  const form        = document.getElementById('streamer-form');
+  errEl.textContent = '';
+  if (!name)        { errEl.textContent = 'Стримерийн нэр оруулна уу';  return; }
+  if (!channel_url) { errEl.textContent = 'Сувгийн холбоос оруулна уу'; return; }
+  if (!/^https?:\/\/.+/i.test(channel_url)) { errEl.textContent = 'Зөв URL холбоос оруулна уу (https://...)'; return; }
+
+  const editingId = form.dataset.editingId;
+  try {
+    if (editingId) {
+      await window.api.editStreamer(Number(editingId), { name, channel_url, description });
+      showToast('Стример шинэчлэгдлээ! ✅', 'success');
+    } else {
+      await window.api.addStreamer({ name, channel_url, description });
+      showToast('Стример нэмэгдлээ! 🎮', 'success');
+    }
+    _resetStreamerForm();
+    loadStreamers();
   } catch (err) {
     errEl.textContent = err.message;
   }

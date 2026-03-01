@@ -216,6 +216,24 @@ async function deleteDiscordServer(id) {
   return data;
 }
 
+// ── Streamers ─────────────────────────────────────────────
+async function getStreamers() {
+  const { data } = await getClient().get('/streamers');
+  return data;
+}
+async function addStreamer({ name, channel_url, description }) {
+  const { data } = await getClient().post('/streamers', { name, channel_url, description });
+  return data;
+}
+async function editStreamer(id, data) {
+  const { data: res } = await getClient().patch(`/streamers/${id}`, data);
+  return res;
+}
+async function deleteStreamer(id) {
+  const { data } = await getClient().delete(`/streamers/${id}`);
+  return data;
+}
+
 module.exports = {
   SERVER_URL,
   friendlyError,
@@ -259,4 +277,8 @@ module.exports = {
   addDiscordServer,
   editDiscordServer,
   deleteDiscordServer,
+  getStreamers,
+  addStreamer,
+  editStreamer,
+  deleteStreamer,
 };

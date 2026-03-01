@@ -140,7 +140,7 @@ header {
   transition: background 0.2s, border-color 0.2s;
 }
 .logo { font-size: 1.1rem; font-weight: 700; color: var(--accent); margin-right: auto; font-family: 'Cinzel Decorative', serif; letter-spacing: 0.02em; }
-nav { display: flex; gap: 2px; }
+nav { display: flex; gap: 2px; margin-right: auto; }
 .nav-btn {
   background: none; border: none; color: var(--text2);
   padding: 6px 12px; border-radius: 6px; cursor: pointer;
