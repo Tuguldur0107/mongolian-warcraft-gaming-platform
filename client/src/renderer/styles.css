@@ -525,22 +525,50 @@ body.light .profile-avatar-wrap img {
 .onboarding-overlay { position: fixed; inset: 0; z-index: 9990; background: transparent; }
 .onboarding-spotlight {
   position: fixed; z-index: 9991;
-  box-shadow: 0 0 0 9999px rgba(0,0,0,0.55);
+  box-shadow: 0 0 0 9999px rgba(0,0,0,0.6);
   border-radius: 8px; pointer-events: none;
-  transition: left 0.3s ease, top 0.3s ease, width 0.3s ease, height 0.3s ease;
+  transition: left 0.35s cubic-bezier(.4,0,.2,1), top 0.35s cubic-bezier(.4,0,.2,1),
+              width 0.35s cubic-bezier(.4,0,.2,1), height 0.35s cubic-bezier(.4,0,.2,1);
 }
 .onboarding-tooltip {
   position: fixed; z-index: 9992;
   background: var(--card); border: 1px solid var(--accent);
-  border-radius: 10px; padding: 16px 18px;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
-  transition: left 0.3s ease, top 0.3s ease;
+  border-radius: 12px; padding: 0;
+  box-shadow: 0 12px 32px rgba(0,0,0,0.5);
+  transition: left 0.35s cubic-bezier(.4,0,.2,1), top 0.35s cubic-bezier(.4,0,.2,1);
+  overflow: hidden;
 }
-.onboarding-tooltip h4 { margin-bottom: 6px; font-size: 0.95rem; color: var(--accent); }
-.onboarding-tooltip p { font-size: 0.84rem; color: var(--text2); margin-bottom: 12px; line-height: 1.4; }
-.onboarding-actions { display: flex; justify-content: space-between; align-items: center; }
-.onboarding-steps { font-size: 0.75rem; color: var(--text2); }
+.ob-progress-bar {
+  height: 3px; background: var(--bg2); width: 100%;
+}
+.ob-progress-fill {
+  height: 100%; background: var(--accent);
+  transition: width 0.4s cubic-bezier(.4,0,.2,1);
+  border-radius: 0 3px 3px 0;
+}
+.ob-header {
+  display: flex; align-items: center; gap: 10px;
+  padding: 14px 16px 0 16px;
+}
+.ob-icon { font-size: 1.3rem; line-height: 1; }
+.ob-header h4 { margin: 0; font-size: 0.95rem; color: var(--accent); display: flex; align-items: center; gap: 8px; }
+.ob-category {
+  font-size: 0.65rem; padding: 1px 7px; border-radius: 9px;
+  background: var(--accent); color: #fff; font-weight: 600;
+  letter-spacing: 0.3px; text-transform: uppercase;
+}
+.onboarding-tooltip p { font-size: 0.84rem; color: var(--text2); margin: 8px 16px 14px; line-height: 1.5; }
+.onboarding-actions {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 0 16px 14px; gap: 8px;
+}
+.onboarding-steps { font-size: 0.72rem; color: var(--text2); white-space: nowrap; }
 .onboarding-tooltip .btn { font-size: 0.82rem; padding: 5px 14px; }
+.ob-btn-stop {
+  padding: 4px 8px !important; font-size: 0.8rem !important;
+  min-width: auto; opacity: 0.6; transition: opacity 0.2s;
+}
+.ob-btn-stop:hover { opacity: 1; }
 
 /* ── Тоглоомын үр дүн modal ───────────────────────── */
 .result-modal-box { max-width: 480px; text-align: center; }

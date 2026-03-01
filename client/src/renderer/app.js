@@ -3620,41 +3620,51 @@ if (_scrollTopBtn) {
 
 // ── Onboarding Tour ──────────────────────────────────────
 const ONBOARDING_STEPS = [
-  { target: '[data-tab="lobby"]',    title: 'Lobby',          text: 'Энд бүх өрөөнүүдийг харж, нэгдэж болно.' },
-  { target: '#btn-create-room',      title: 'Өрөө үүсгэх',   text: 'Шинэ тоглоомын өрөө үүсгэхийн тулд энд дарна.' },
-  { target: '#btn-quickmatch',       title: 'Хурдан тоглолт', text: 'Нэг товчоор боломжтой өрөөнд автоматаар нэгдэнэ.' },
-  { target: '#room-search',          title: 'Хайлт',          text: 'Өрөөг нэрээр хайх боломжтой. Ctrl+K товчоор хурдан нээнэ.' },
-  { target: '#lobby-chat-input',     title: 'Чат',            text: 'Бүх хэрэглэгчидтэй чатлах боломжтой. @нэр бичвэл mention хийнэ.' },
-  { target: '[data-tab="ranking"]',  title: 'Ranking',        text: 'Тоглогчдын чансааг энд харна.' },
-  { target: '[data-tab="settings"]', title: 'Тохиргоо',       text: 'Профайл засах, нууц үг солих, тоглоом нэмэх зэрэг тохиргоо.' },
-  { target: '#btn-theme',            title: 'Загвар',         text: 'Гэрэл/харанхуй горим сольж болно.' },
+  // ── Үндсэн бүтэц ──
+  { target: '[data-tab="lobby"]',    title: 'Lobby',          text: 'Энд бүх өрөөнүүдийг харж, нэгдэж болно. Энэ бол платформын үндсэн хуудас.', category: 'Үндсэн', icon: '🏠' },
+  { target: '.online-bar',           title: 'Онлайн тоглогчид', text: 'Одоо хэдэн тоглогч онлайн байгааг энд харна.', category: 'Үндсэн', icon: '👥' },
+  { target: '#connection-status',    title: 'Холболтын төлөв', text: 'Сервертэй холболтын төлөв. 🟢 = Холбогдсон, 🔴 = Салсан.', category: 'Үндсэн', icon: '📡' },
+
+  // ── Өрөө ──
+  { target: '#btn-create-room',      title: 'Өрөө үүсгэх',   text: 'Шинэ тоглоомын өрөө үүсгэхийн тулд энд дарна. Нэр, тоглоом, нууц үг зэргийг тохируулна.', category: 'Өрөө', icon: '🚪' },
+  { target: '#btn-quickmatch',       title: 'Хурдан тоглолт', text: 'Нэг товчоор боломжтой өрөөнд автоматаар нэгдэнэ. Хамгийн хурдан арга!', category: 'Өрөө', icon: '⚡' },
+  { target: '#room-search',          title: 'Өрөө хайх',     text: 'Өрөөг нэрээр хайх боломжтой. Ctrl+K товчоор хурдан нээнэ.', category: 'Өрөө', icon: '🔍' },
+
+  // ── Чат & Найзууд ──
+  { target: '[data-tab="chat"]',     title: 'Чат таб',        text: 'Нийтийн чат болон хувийн мессеж (DM) энд байна. Найзуудтай шууд чатлах боломжтой.', category: 'Чат', icon: '💬' },
+  { target: '#lobby-chat-input',     title: 'Нийтийн чат',    text: 'Бүх хэрэглэгчидтэй чатлах боломжтой. @нэр бичвэл mention хийнэ.', category: 'Чат', icon: '🌐' },
+
+  // ── Бусад табууд ──
+  { target: '[data-tab="ranking"]',  title: 'Ranking',        text: 'Тоглогчдын чансаа, хожил/хожигдол, win% зэрэг статистикийг энд харна.', category: 'Табууд', icon: '🏆' },
+  { target: '[data-tab="discord"]',  title: 'Discord серверүүд', text: 'Монголын Warcraft Discord серверүүдийн жагсаалт. Өөрийн серверээ нэмж болно.', category: 'Табууд', icon: '🎙️' },
+  { target: '[data-tab="streamers"]', title: 'Streamers',     text: 'Стримерүүдийн Twitch/YouTube холбоосууд. Шууд үзэх боломжтой.', category: 'Табууд', icon: '📺' },
+  { target: '[data-tab="profile"]',  title: 'Профайл',        text: 'Өөрийн статистик, тоглоомын түүх, аватар зураг зэргийг энд харж засварлана.', category: 'Табууд', icon: '👤' },
+
+  // ── Тохиргоо ──
+  { target: '[data-tab="settings"]', title: 'Тохиргоо',       text: 'Тоглоом нэмэх, ZeroTier сүлжээ, нууц үг солих зэрэг бүх тохиргоо энд.', category: 'Тохиргоо', icon: '⚙️' },
+  { target: '#btn-theme',            title: 'Загвар солих',   text: 'Гэрэл/харанхуй горим сольж болно. Нүдэнд тохирох загвараа сонгоорой.', category: 'Тохиргоо', icon: '🎨' },
+  { target: '.user-info',            title: 'Хэрэглэгчийн мэдээлэл', text: 'Таны профайл зураг, нэр энд харагдана. Гарах товч мөн энд байна.', category: 'Тохиргоо', icon: '🔑' },
 ];
 
 let _onboardStep = 0;
 let _onboardOverlay = null;
 let _onboardSpotlight = null;
 let _onboardTooltip = null;
+let _onboardIsManual = false;  // restart товчоор эхэлсэн эсэх
 
 function startOnboarding() {
-  if (localStorage.getItem('onboarding_done')) return;
-  // Аль хэдийн ажиллаж байвал давхар нээхгүй
+  if (!_onboardIsManual && localStorage.getItem('onboarding_done')) return;
   if (_onboardOverlay) return;
   _onboardStep = 0;
 
-  // Overlay
   _onboardOverlay = document.createElement('div');
   _onboardOverlay.className = 'onboarding-overlay';
-  _onboardOverlay.addEventListener('click', (e) => {
-    if (e.target === _onboardOverlay) _onboardNext();
-  });
   document.body.appendChild(_onboardOverlay);
 
-  // Spotlight
   _onboardSpotlight = document.createElement('div');
   _onboardSpotlight.className = 'onboarding-spotlight';
   document.body.appendChild(_onboardSpotlight);
 
-  // Tooltip
   _onboardTooltip = document.createElement('div');
   _onboardTooltip.className = 'onboarding-tooltip';
   document.body.appendChild(_onboardTooltip);
@@ -3666,37 +3676,57 @@ function _onboardShow() {
   const step = ONBOARDING_STEPS[_onboardStep];
   if (!step) { _onboardFinish(); return; }
 
+  // lobby-chat-input чат таб дотор байгаа тул chat таб руу шилжүүлэх
+  if (step.target === '#lobby-chat-input') {
+    document.querySelector('[data-tab="chat"]')?.click();
+  }
+
   const el = document.querySelector(step.target);
   if (!el) { _onboardStep++; _onboardShow(); return; }
 
-  // Spotlight position
+  // Spotlight
   const rect = el.getBoundingClientRect();
-  const pad = 6;
+  const pad = 8;
   _onboardSpotlight.style.left   = (rect.left - pad) + 'px';
   _onboardSpotlight.style.top    = (rect.top - pad) + 'px';
   _onboardSpotlight.style.width  = (rect.width + pad * 2) + 'px';
   _onboardSpotlight.style.height = (rect.height + pad * 2) + 'px';
 
-  // Tooltip content
-  const isLast = _onboardStep === ONBOARDING_STEPS.length - 1;
+  // Progress
+  const total = ONBOARDING_STEPS.length;
+  const current = _onboardStep + 1;
+  const pct = Math.round((current / total) * 100);
+  const isFirst = _onboardStep === 0;
+  const isLast = _onboardStep === total - 1;
+
+  // Category badge
+  const catHtml = step.category ? `<span class="ob-category">${step.category}</span>` : '';
+
   _onboardTooltip.innerHTML = `
-    <h4>${step.title}</h4>
+    <div class="ob-progress-bar"><div class="ob-progress-fill" style="width:${pct}%"></div></div>
+    <div class="ob-header">
+      <span class="ob-icon">${step.icon || ''}</span>
+      <div>
+        <h4>${step.title} ${catHtml}</h4>
+      </div>
+    </div>
     <p>${step.text}</p>
     <div class="onboarding-actions">
-      <span class="onboarding-steps">${_onboardStep + 1} / ${ONBOARDING_STEPS.length}</span>
+      <span class="onboarding-steps">${current} / ${total}</span>
       <div style="display:flex;gap:6px">
-        <button class="btn" id="ob-skip">Алгасах</button>
-        <button class="btn btn-primary" id="ob-next">${isLast ? 'Дуусгах' : 'Дараах'}</button>
+        <button class="btn ob-btn-stop" id="ob-stop" title="Сургалтыг зогсоох">✕</button>
+        ${isFirst ? '' : '<button class="btn" id="ob-prev">← Өмнөх</button>'}
+        <button class="btn btn-primary" id="ob-next">${isLast ? '✓ Дуусгах' : 'Дараах →'}</button>
       </div>
     </div>
   `;
 
-  // Tooltip position — prefer below, fallback above
-  const ttW = 280;
+  // Position
+  const ttW = 320;
   let ttLeft = rect.left + rect.width / 2 - ttW / 2;
-  let ttTop = rect.bottom + 12;
-  if (ttTop + 150 > window.innerHeight) {
-    ttTop = rect.top - 12;
+  let ttTop = rect.bottom + 14;
+  if (ttTop + 180 > window.innerHeight) {
+    ttTop = rect.top - 14;
     _onboardTooltip.style.transform = 'translateY(-100%)';
   } else {
     _onboardTooltip.style.transform = 'none';
@@ -3707,7 +3737,9 @@ function _onboardShow() {
   _onboardTooltip.style.width = ttW + 'px';
 
   document.getElementById('ob-next').onclick = _onboardNext;
-  document.getElementById('ob-skip').onclick = _onboardFinish;
+  document.getElementById('ob-stop').onclick = _onboardCancel;
+  const prevBtn = document.getElementById('ob-prev');
+  if (prevBtn) prevBtn.onclick = _onboardPrev;
 }
 
 function _onboardNext() {
@@ -3716,13 +3748,33 @@ function _onboardNext() {
   _onboardShow();
 }
 
+function _onboardPrev() {
+  if (_onboardStep > 0) {
+    _onboardStep--;
+    _onboardShow();
+  }
+}
+
+function _onboardCancel() {
+  _onboardCleanup();
+  _onboardIsManual = false;
+  showToast('Сургалтыг зогсоолоо. Тохиргоо хэсгээс дахин эхлүүлж болно.', 'info');
+}
+
 function _onboardFinish() {
   localStorage.setItem('onboarding_done', '1');
+  _onboardCleanup();
+  _onboardIsManual = false;
+  // Lobby таб руу буцаах
+  document.querySelector('[data-tab="lobby"]')?.click();
+  showToast('Тавтай морил! Тоглоомоо эхлүүлээрэй 🎮', 'success');
+}
+
+function _onboardCleanup() {
   if (_onboardOverlay) _onboardOverlay.remove();
   if (_onboardSpotlight) _onboardSpotlight.remove();
   if (_onboardTooltip) _onboardTooltip.remove();
   _onboardOverlay = _onboardSpotlight = _onboardTooltip = null;
-  showToast('Тавтай морил! Тоглоомоо эхлүүлээрэй', 'success');
 }
 
 // Resize → reposition
@@ -3730,10 +3782,17 @@ window.addEventListener('resize', () => {
   if (_onboardTooltip) _onboardShow();
 });
 
+// Esc товчоор зогсоох
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && _onboardOverlay) {
+    _onboardCancel();
+  }
+});
+
 // Сургалт дахин эхлүүлэх товч
 document.getElementById('btn-restart-tour')?.addEventListener('click', () => {
+  _onboardIsManual = true;
   localStorage.removeItem('onboarding_done');
-  // Тохиргоо табаас lobby таб руу шилжих
   document.querySelector('[data-tab="lobby"]')?.click();
   setTimeout(() => startOnboarding(), 400);
 });
