@@ -1,184 +1,93 @@
-WC3/DotA Gaming Platform
-Техникийн Баримт Бичиг
-Хувийн Хобби Проект | 2025
+# Warcraft Platform
 
+Warcraft 3 / DotA community desktop app and backend server.
 
-1. Төслийн Тойм
-Энэхүү систем нь Warcraft 3 болон DotA 1 тоглоомын тоглогчдод зориулсан бүрэн дүүрэн gaming platform юм. Тоглогчид Discord акаунтаараа нэвтэрч, онлайн өрөө үүсгэж, бусадтай тоглож, хожил/хожигдлын статистикаа хянах боломжтой.
+This repository now has two clear usage paths:
 
-1.1 Үндсэн Зорилго
-•	GameRanger-ийн сүлжээний тогтвортой бус асуудлыг шийдэх
-•	Монгол хэл дээрх нэгдсэн gaming community platform бүтээх
-•	Тоглоомын үр дүнг автоматаар бүртгэж Discord-д нийтлэх
-•	Тоглогчдын статистик, ranking системтэй болгох
+## 1. End Users
 
-1.2 Гол Онцлогууд
-•	Discord OAuth2-ээр нэвтрэх
-•	Онлайн lobby үүсгэх, жагсаалт харах
-•	ZeroTier SDK-ийг нуугдсан байдлаар ашиглан сүлжээ холболт хийх
-•	Warcraft 3 replay файл автоматаар parse хийж үр дүн гаргах
-•	Discord Bot-оор хожил/хожигдол нийтлэх
-•	Chatbot-оор статистик, ranking асуух
+If someone only wants to use the app, they should not clone the repo.
 
+1. Open the project's GitHub Releases page.
+2. Download the latest Windows installer from `client/dist` release assets.
+3. Install and launch the app.
+4. Sign in and choose the Warcraft executable the first time.
 
-2. Системийн Архитектур
+The desktop app already points to the hosted production API by default, so end users do not need to run the backend locally.
 
-2.1 Өндөр Түвшний Архитектур
-Систем нь 4 үндсэн бүрэлдэхүүн хэсгээс бүрдэнэ:
+## 2. Local Development
 
-Бүрэлдэхүүн	Технологи	Үүрэг
-Desktop апп	Electron (Node.js)	Тоглогч суулгах апп, ZeroTier SDK, replay watcher
-Backend API	Node.js + FastAPI	Lobby, auth, статистик, REST API
-Өгөгдлийн сан	PostgreSQL	Тоглогч, өрөө, тоглоомын үр дүн
-Discord Integration	discord.js Bot	OAuth login, үр дүн нийтлэх, chatbot
+### Requirements
 
-2.2 Дата Урсгал
-1.	Тоглогч Desktop апп суулгаж Discord-ээр нэвтэрнэ
-2.	Апп дотроос ZeroTier SDK ажиллаж virtual LAN үүсгэнэ
-3.	Тоглогч lobby үүсгэж бусдыг урина
-4.	Warcraft 3-г LAN горимоор нээнэ
-5.	Тоглоом дуусахад replay файл үүснэ
-6.	Апп replay-г автоматаар parse хийж серверт илгээнэ
-7.	Backend үр дүнг боловсруулж DB-д хадгална
-8.	Discord Bot тохирох channel-д үр дүн нийтлэнэ
+- Node.js 20+
+- npm 10+
+- PostgreSQL
+- Windows, if you want to test the Electron + ZeroTier flow end-to-end
 
+### Quick Start
 
-3. Технологийн Стек
+```bash
+npm run setup
+copy server\.env.example server\.env
+copy client\.env.example client\.env
+npm start
+```
 
-3.1 Desktop Апп (Client)
-•	Electron — cross-platform desktop апп (Windows-д тохиромжтой)
-•	Node.js — бизнес логик
-•	ZeroTier SDK — virtual LAN эмуляц (тоглогчид харагдахгүй)
-•	Chokidar — Warcraft 3 replays фолдер хянах
-•	w3gjs — .w3g replay файл parse хийх
+What this does:
 
-3.2 Backend
-•	Node.js + Express эсвэл Python FastAPI
-•	PostgreSQL — үндсэн өгөгдлийн сан
-•	Redis — session, cache (заавал биш, хожим нэмж болно)
-•	JWT — authentication token
+- installs `server` dependencies
+- installs `client` dependencies
+- starts the backend on `http://127.0.0.1:3000`
+- starts the Electron app and points it at the local backend
 
-3.3 Discord Integration
-•	Discord OAuth2 — нэвтрэх
-•	discord.js — Bot хөгжүүлэлт
-•	Webhook эсвэл Bot — үр дүн нийтлэх
+## Environment Files
 
+### `server/.env`
 
-4. Өгөгдлийн Сангийн Загвар
+Minimum local configuration:
 
-4.1 Үндсэн Хүснэгтүүд
+```env
+PORT=3000
+CLIENT_URL=*
+DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/warcraft
+JWT_SECRET=change-this-in-production
+```
 
-users — Тоглогчийн мэдээлэл
-Талбар	Төрөл	Тайлбар	Жишээ
-id	UUID	Давтагдашгүй ID	uuid-v4
-discord_id	VARCHAR	Discord user ID	123456789
-username	VARCHAR	Discord нэр	Player#1234
-avatar_url	TEXT	Профайл зураг	https://cdn...
-wins	INTEGER	Нийт хожил	42
-losses	INTEGER	Нийт хожигдол	18
-created_at	TIMESTAMP	Бүртгэлийн огноо	2025-01-01
+Optional integrations:
 
-rooms — Тоглоомын өрөө
-Талбар	Төрөл	Тайлбар	Жишээ
-id	UUID	Өрөөний ID	uuid-v4
-name	VARCHAR	Өрөөний нэр	DotA Battle #5
-host_id	UUID	Үүсгэгч тоглогч	users.id
-zerotier_network_id	VARCHAR	ZeroTier network	abc123def456
-max_players	INTEGER	Хамгийн их тоглогч	10
-status	ENUM	waiting/playing/done	waiting
-game_type	VARCHAR	Тоглоомын төрөл	DotA, WC3
-created_at	TIMESTAMP	Үүсгэсэн огноо	2025-01-01
+- `DISCORD_CLIENT_ID`
+- `DISCORD_CLIENT_SECRET`
+- `DISCORD_REDIRECT_URI`
+- `ZEROTIER_API_TOKEN`
+- `ZEROTIER_DEFAULT_NETWORK`
+- `RZR_BOT_URL`
+- `WEBHOOK_SECRET`
 
-game_results — Тоглоомын үр дүн
-Талбар	Төрөл	Тайлбар	Жишээ
-id	UUID	Үр дүнгийн ID	uuid-v4
-room_id	UUID	Өрөөний ID	rooms.id
-winner_team	INTEGER	Хожсон баг (1 эсвэл 2)	1
-duration_minutes	INTEGER	Тоглоомын үргэлжлэх хугацаа	45
-replay_path	TEXT	Replay файлын зам	/replays/...
-discord_posted	BOOLEAN	Discord-д нийтлэгдсэн эсэх	true
-played_at	TIMESTAMP	Тоглосон огноо	2025-01-01
+### `client/.env`
 
+```env
+SERVER_URL=http://127.0.0.1:3000
+```
 
-5. Desktop Апп — Дэлгэрэнгүй
+The client also works without this file because production is the built-in fallback.
 
-5.1 Replay Watcher Модул
-Warcraft 3 replay файлууд дараах фолдерт хадгалагддаг:
-C:\Users\[нэр]\Documents\Warcraft III\Replays\
+## Root Commands
 
-Апп энэ фолдерыг тасралтгүй хянаж шинэ .w3g файл үүсэхэд автоматаар:
-9.	Файлыг w3gjs library-ээр parse хийнэ
-10.	Тоглогчдын нэр, хожсон баг, тоглоомын хугацааг гаргаж авна
-11.	Backend API руу POST хүсэлт илгээнэ
-12.	Backend Discord Bot-оор үр дүнг нийтлэнэ
+Run these from the repository root:
 
-5.2 ZeroTier Integration
-ZeroTier нь арын дэд бүтэц болж ажиллана. Тоглогч ZeroTier-ийн талаар огт мэдэхгүй — зөвхөн 'Манай апп суулга' гэж хэлнэ.
+- `npm run setup`: install both apps
+- `npm start`: start server + Electron for local development
+- `npm run server`: start only the backend
+- `npm run client`: start only the Electron app
+- `npm run test:server`: run backend tests
+- `npm run build:client`: build the Windows installer
 
-•	Өрөө үүсгэх үед: ZeroTier network автоматаар үүснэ
-•	Өрөөнд нэгдэх үед: Тэр network-д автоматаар join хийнэ
-•	Warcraft 3: LAN горимоор нээж тоглоно
-•	Богино тасралт (1-5 сек): Автоматаар reconnect хийнэ
+## Project Structure
 
+- `client/`: Electron desktop app
+- `server/`: Express API + Socket.IO backend
+- `notes/`: local progress notes
 
-6. Discord Integration
+## Packaging Recommendation
 
-6.1 Discord OAuth2 Login
-13.	Тоглогч 'Discord-ээр нэвтрэх' дарна
-14.	Discord-ийн зөвшөөрлийн хуудасруу redirect хийнэ
-15.	Тоглогч зөвшөөрч буцаана
-16.	Backend access token авч user мэдээллийг DB-д хадгална
-17.	JWT token үүсгэж апп руу буцаана
-
-6.2 Discord Bot Функцууд
-Команд/Үйлдэл	Тайлбар	Жишээ
-!stats @тоглогч	Тоглогчийн статистик	Wins: 42 | Losses: 18
-!ranking	Шилдэг тоглогчдын жагсаалт	Top 10 список
-!rooms	Одоогийн нээлттэй өрөөнүүд	Өрөөний жагсаалт
-Автомат нийтлэл	Тоглоом дуусахад үр дүн	🏆 Team 1 хожлоо! 45 мин
-
-
-7. Хөгжүүлэлтийн Үе Шатууд
-
-1-р шат — Суурь (2-3 долоо хоног)
-•	Discord OAuth2 login
-•	Энгийн lobby API (CRUD)
-•	PostgreSQL схем үүсгэх
-•	Энгийн frontend (Electron)
-
-2-р шат — Сүлжээ (1-2 долоо хоног)
-•	ZeroTier SDK интеграц
-•	Өрөө үүсгэх/нэгдэх автоматжуулалт
-•	LAN тоглоом туршилт
-
-3-р шат — Replay & Stats (1-2 долоо хоног)
-•	Chokidar replay watcher
-•	w3gjs parse интеграц
-•	Үр дүн DB-д хадгалах
-
-4-р шат — Discord Bot (1 долоо хоног)
-•	discord.js Bot тохируулах
-•	Үр дүн автоматаар нийтлэх
-•	!stats, !ranking командууд
-
-5-р шат — Chatbot (нэмэлт)
-•	Байгалийн хэлний асуулт хариулт
-•	Статистик харьцуулалт
-•	Тоглоомын зөвлөгөө
-
-
-8. Эрсдэл ба Шийдлүүд
-
-Эрсдэл	Магадлал	Шийдэл
-Replay parse хийхэд алдаа гарах	Дунд	w3gjs-ийн алдааг боловсруулах логик нэмэх
-ZeroTier урт тасралт (10+ сек)	Бага	Warcraft timeout-ийг тохируулах
-Discord OAuth token дуусах	Дунд	Refresh token автоматаар шинэчлэх
-Тоглогч apп татахгүй байх	Өндөр	Суулгах заавар, video tutorial хийх
-
-
-9. Товч Дүгнэлт
-Энэ платформ нь Монголын WC3/DotA тоглогчдод тогтвортой, хялбар хэрэглэхийн зэрэгцээ автомат статистиктай gaming орчин бүрдүүлнэ. ZeroTier-ийг нуугдсан байдлаар ашигласнаар GameRanger-ийн сүлжээний асуудлыг шийдэж, Discord интеграцаар community-г нэгтгэнэ.
-
-Нийт хөгжүүлэлтийн хугацаа: 6-10 долоо хоног (хобби хэмжээнд)
-Үндсэн технологи: Electron, Node.js, PostgreSQL, ZeroTier SDK, discord.js, w3gjs
-
+If the goal is to make installation easy for real users, distribute only the packaged Electron installer from GitHub Releases. Asking users to clone the repo, install Node.js, and run commands is still a developer workflow, not a user workflow.

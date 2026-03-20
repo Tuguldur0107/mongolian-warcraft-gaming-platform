@@ -63,6 +63,7 @@ contextBridge.exposeInMainWorld('api', {
   getZerotierIp:     (networkId) => ipcRenderer.invoke('zt:ip', networkId),
   getZerotierNodeId: ()          => ipcRenderer.invoke('zt:nodeId'),
   refreshZerotier:   ()          => ipcRenderer.invoke('zt:refresh'),
+  downloadZerotier:  ()          => ipcRenderer.invoke('zt:download'),
 
   // Game Relay — Host: capture+forward, Player: search+rebroadcast
   startHostRelay:  (playerIps) => ipcRenderer.invoke('relay:startHost', playerIps),

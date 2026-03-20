@@ -427,6 +427,7 @@ async function connectSocket() {
   window.api.onGameExited(async () => {
     if (!currentRoom) return;
     if (currentRoom.isHost) {
+      if (socket) socket.emit('room:game_ended_player', { roomId: currentRoom.id });
       // HOST: тоглогчдод мэдэгдэж, дахин эхлүүлэх товч харуулах
       if (socket) socket.emit('room:host_game_ended', { roomId: currentRoom.id });
       // REST API fallback — socket алдагдсан ч room status waiting болно
@@ -440,6 +441,7 @@ async function connectSocket() {
     } else {
       // PLAYER: host хаасан үед killGame() → game:exited гарна, давхардуулахгүй
       if (_hostKilledGame) { _hostKilledGame = false; return; }
+      if (socket) socket.emit('room:game_ended_player', { roomId: currentRoom.id });
       appendSysMsg('⚠ WC3 хаагдлаа. Дахин нэвтрэхийн тулд доорх товчийг дарна уу.');
       setLaunchBtnRejoin();
       showToast('WC3 хаагдлаа — "↩ Дахин нэвтрэх" дарж буцаж орно уу', 'warning', 8000);
@@ -541,23 +543,6 @@ async function init() {
     return;
   }
 
-  // Анхны удаа firewall тохируулах (нэвтэрсний дараа)
-  async function promptFirewallSetup() {
-    if (localStorage.getItem('firewall_configured')) return;
-    const ok = await showConfirm(
-      'Сүлжээ тохируулах',
-      'Windows Firewall-г тохируулж LAN тоглоом асуудалгүй ажиллахын тулд сүлжээний зөвшөөрөл нэмэх үү?\n\nWindows-ийн зөвшөөрлийн цонх гарна.'
-    );
-    if (!ok) return;
-    try {
-      const result = await window.api.setupFirewall();
-      if (result.firewall) {
-        localStorage.setItem('firewall_configured', '1');
-        showToast('Сүлжээ амжилттай тохируулагдлаа!', 'success', 4000);
-      }
-    } catch {}
-  }
-
   // Өрөөний цонх горим: URL-аас params унших
   if (isRoomMode()) {
     // Нэвтрэх хуудас харагдахаас урьдчилан сэргийлэх
@@ -603,7 +588,6 @@ async function init() {
     loadRooms();
     connectSocket();
     loadUnreadDMCounts();
-    setTimeout(() => promptFirewallSetup(), 2000);
     // Серверээс бүрэн мэдээлэл (avatar_url г.м.) шинэчлэх
     window.api.refreshUser?.().then(async () => {
       const fresh = await window.api.getUser();
@@ -622,7 +606,6 @@ async function init() {
     connectSocket();
     loadUnreadDMCounts();
     if (!localStorage.getItem('onboarding_done')) setTimeout(() => startOnboarding(), 600);
-    setTimeout(() => promptFirewallSetup(), 2000);
   });
 
   window.api.onGameResult((data) => showGameResult(data));
@@ -653,32 +636,23 @@ async function init() {
   window.api.onZtSetupComplete?.(async (result) => {
     _ztSetupInProgress = false;
     if (result.ok) {
-      console.log('[ZT] Автомат тохиргоо амжилттай. IP:', result.ip || 'хүлээж байна');
+      console.log('[ZT] Existing ZeroTier connected. IP:', result.ip || 'pending');
 
-      // Adapter priority / Firewall амжилтгүй бол warning харуулах
-      if (result.metricSet === false) {
-        showToast('ZeroTier adapter priority тохируулж чадсангүй. Тоглоом олдохгүй бол апп-г admin эрхтэй нээнэ үү.', 'warning', 12000);
-      }
-      if (result.firewallSet === false) {
-        showToast('Windows Firewall rule нэмж чадсангүй. Тоглоом олдохгүй бол Firewall-г шалгана уу.', 'warning', 10000);
-      }
-
-      // Серверээр автоматаар authorize хийлгэх (private network-д шаардлагатай)
       try {
         const nodeId = await window.api.getZerotierNodeId();
         const cfg = await fetch(SERVER + '/config').then(r => r.json());
         if (nodeId && cfg.zerotierNetworkId && socket) {
           socket.emit('zt:authorize', { nodeId, networkId: cfg.zerotierNetworkId });
         }
-      } catch (e) { console.warn('[ZT] Authorize хүсэлт алдаа:', e.message); }
+      } catch (e) { console.warn('[ZT] Authorize request failed:', e.message); }
     } else {
       const msgs = {
-        'install-failed': 'ZeroTier суулгалт амжилтгүй болсон. Гараар суулгана уу: zerotier.com/download',
-        'service-failed': 'ZeroTier сервис эхлүүлж чадсангүй. Компьютерээ дахин асаагаад оролдоно уу.',
-        'join-failed':    'ZeroTier сүлжээнд нэгдэж чадсангүй.',
-        'no-network-id':  'Серверт ZeroTier сүлжээ тохируулаагүй байна.',
+        'not-installed': 'ZeroTier is not installed. Open Settings and use the official installer link.',
+        'service-stopped': 'ZeroTier is installed but its service is not running. Start ZeroTier or restart Windows.',
+        'join-failed': 'ZeroTier network join failed.',
+        'no-network-id': 'Server ZeroTier network is not configured.',
       };
-      showToast(msgs[result.error] || `ZeroTier алдаа: ${result.error}`, 'error', 10000);
+      showToast(msgs[result.error] || `ZeroTier error: ${result.error}`, result.error === 'not-installed' ? 'warning' : 'error', 10000);
     }
   });
 
@@ -780,9 +754,9 @@ document.getElementById('btn-forgot-send').onclick = async (e) => {
   if (!email) { errEl.textContent = 'Имэйл оруулна уу'; return; }
   btn.disabled = true; btn.textContent = '...';
   try {
-    const data = await window.api.forgotPassword(email);
-    // Show the reset token to the user (they copy it)
-    document.getElementById('forgot-token-display').textContent = data.resetToken;
+    await window.api.forgotPassword(email);
+    document.getElementById('forgot-token-display').textContent =
+      'Хэрэв энэ и-мэйл бүртгэлтэй бол сэргээх хүсэлт сервер дээр бүртгэгдлээ.';
     document.getElementById('forgot-step-1').classList.add('hidden');
     document.getElementById('forgot-step-2').classList.remove('hidden');
   } catch (err) {
@@ -2476,12 +2450,9 @@ let _cachedOnlineUsers = [];
 function renderOnlineUsers(users) {
   _cachedOnlineUsers = users;
   const countEl = document.getElementById('online-count');
-  const namesEl = document.getElementById('online-names');
   const total   = users.length;
-  const names   = users.map(u => (typeof u === 'object' ? u.username : u));
 
   if (countEl) countEl.textContent = total;
-  if (namesEl) namesEl.textContent = total ? '— ' + names.join(', ') : '';
 
   // Онлайн tab тоо шинэчлэх
   const onlineBadge = document.getElementById('dm-online-badge');
@@ -3084,8 +3055,16 @@ document.getElementById('btn-zt-refresh')?.addEventListener('click', async () =>
       if (result.ip) {
         lines.push(`IP: ${result.ip}`);
         msgEl.style.color = 'var(--green)';
+      } else if (result.error === 'not-installed') {
+        lines.push('ZeroTier not installed');
+        lines.push('Use the official installer button below');
+        msgEl.style.color = 'var(--yellow, orange)';
+      } else if (result.error === 'service-stopped') {
+        lines.push('ZeroTier service is not running');
+        lines.push('Open ZeroTier or restart Windows');
+        msgEl.style.color = 'var(--yellow, orange)';
       } else {
-        lines.push('IP олдсонгүй — authorize хийгдээгүй эсвэл сүлжээ өөр байж магадгүй');
+        lines.push('IP not available yet');
         msgEl.style.color = 'var(--red)';
       }
       msgEl.innerHTML = lines.join('<br>');
@@ -3095,11 +3074,15 @@ document.getElementById('btn-zt-refresh')?.addEventListener('click', async () =>
   } finally {
     btn.disabled = false;
     if (btn.querySelector('svg')) {
-      btn.lastChild.textContent = ' IP шинэчлэх';
+      btn.lastChild.textContent = ' Холболт шалгах';
     } else {
-      btn.textContent = 'IP шинэчлэх';
+      btn.textContent = 'Холболт шалгах';
     }
   }
+});
+
+document.getElementById('btn-zt-download')?.addEventListener('click', async () => {
+  await window.api.downloadZerotier();
 });
 
 function renderGamesList() {

@@ -1,6 +1,6 @@
 {
   "name": "mongolian-warcraft-gaming-platform-client",
-  "version": "1.6.1",
+  "version": "1.7.0",
   "description": "Mongolian Warcraft Gaming Platform Desktop App",
   "main": "main.js",
   "scripts": {
@@ -40,13 +40,6 @@
       "shortcutName": "Mongolian Warcraft Platform",
       "include": "nsis-extra.nsh"
     },
-    "extraResources": [
-      {
-        "from": "resources/ZeroTierOne.msi",
-        "to": "ZeroTierOne.msi",
-        "filter": ["**/*"]
-      }
-    ],
     "files": [
       "**/*",
       "!dist/**",

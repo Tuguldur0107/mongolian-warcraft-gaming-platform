@@ -36,6 +36,38 @@ function isInstalled() {
   return ZT_PATHS.some(p => fs.existsSync(p));
 }
 
+async function connectExistingInstall(networkId) {
+  if (!networkId) {
+    return { ok: false, error: 'no-network-id', installed: false, running: false, ip: null };
+  }
+
+  const installed = isInstalled();
+  if (!installed) {
+    return { ok: false, error: 'not-installed', installed: false, running: false, ip: null };
+  }
+
+  const running = isRunning();
+  if (!running) {
+    return { ok: false, error: 'service-stopped', installed: true, running: false, ip: null };
+  }
+
+  try {
+    await joinNetwork(networkId);
+  } catch (e) {
+    console.error('[ZeroTier] join алдаа:', e.message);
+    return { ok: false, error: 'join-failed', installed: true, running: true, ip: null };
+  }
+
+  let myIp = null;
+  for (let i = 0; i < 8; i++) {
+    await new Promise(r => setTimeout(r, 1000));
+    myIp = getMyIp(networkId);
+    if (myIp) break;
+  }
+
+  return { ok: true, installed: true, running: true, ip: myIp };
+}
+
 // ZeroTier node ID авах (authorize-д хэрэгтэй)
 function getNodeId() {
   const cmd = getZtCmd();
@@ -414,5 +446,5 @@ function disconnect() {
 module.exports = {
   joinNetwork, disconnect,
   isInstalled, isRunning, getMyIp, getNodeId, getStatus,
-  ensureInstalled, ensureRunning, autoSetup, elevatedNetworkSetup,
+  ensureInstalled, ensureRunning, autoSetup, elevatedNetworkSetup, connectExistingInstall,
 };

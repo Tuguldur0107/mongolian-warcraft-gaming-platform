@@ -1,0 +1,14 @@
+{
+  "name": "warcraft-platform-workspace",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Root scripts for the Warcraft platform monorepo",
+  "scripts": {
+    "setup": "node scripts/setup.js",
+    "start": "node scripts/dev.js",
+    "server": "npm --prefix server run dev",
+    "client": "npm --prefix client run dev",
+    "test:server": "npm --prefix server test",
+    "build:client": "npm --prefix client run build"
+  }
+}

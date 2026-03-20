@@ -84,10 +84,11 @@ async function initZeroTier() {
       return;
     }
 
-    // 2. Автомат суулгалт + тохиргоо
-    console.log('[ZT] Автомат тохиргоо эхэлж байна... Network:', networkId);
-    const result = await zerotierService.autoSetup(networkId);
-    console.log('[ZT] Автомат тохиргоо:', result);
+    // 2. Апп эхлэхэд зөвхөн одоо байгаа ZeroTier-ийг ашиглаж холбохыг оролдоно.
+    // Hidden install / hidden elevation хийхгүй.
+    console.log('[ZT] Existing ZeroTier шалгаж байна... Network:', networkId);
+    const result = await zerotierService.connectExistingInstall(networkId);
+    console.log('[ZT] Existing ZeroTier result:', result);
 
     // 3. Settings-д хадгалах
     writeSettings({ zerotierNetworkId: networkId });
@@ -112,7 +113,7 @@ app.whenReady().then(() => {
     setTimeout(() => autoUpdater.checkForUpdates().catch(() => {}), 5000);
   }
 
-  // ZeroTier автомат тохиргоо (3 сек хүлээж, UI ачаалах хугацаа)
+  // Startup дээр зөвхөн existing ZeroTier-ийг шалгана. Privileged setup нь user action-аар хийгдэнэ.
   setTimeout(() => initZeroTier(), 3000);
 
   app.on('activate', () => {
@@ -326,13 +327,14 @@ ipcMain.handle('auth:emailLogin', async (_, { email, password }) => {
 // Discord холбох (одоо байгаа хэрэглэгчтэй)
 ipcMain.handle('auth:linkDiscord', () => {
   const user = authService.getUser();
-  if (!user) return;
+  const token = authService.getToken();
+  if (!user || !token) return;
   const authWin = new BrowserWindow({
     width: 520, height: 700, title: 'Discord холбох',
     parent: mainWindow, modal: true,
     webPreferences: { nodeIntegration: false, contextIsolation: true },
   });
-  authWin.loadURL(`${apiService.SERVER_URL}/auth/discord?link=${user.id}`);
+  authWin.loadURL(`${apiService.SERVER_URL}/auth/discord?link=1&token=${encodeURIComponent(token)}`);
   const handleRedirect = (url) => {
     if (url.startsWith('wc3platform://')) {
       authWin.close();
@@ -870,12 +872,14 @@ ipcMain.handle('zt:refresh', async () => {
     } catch {}
   }
   if (!networkId) return { ok: false, error: 'no-network-id', installed: false, running: false, ip: null, nodeId: null };
-  // Game paths-г settings-аас авч firewall rule нэмэх
-  const gamePaths = (s.games || []).map(g => g.path).filter(p => p);
-  // Бүрэн autoSetup — суулгах, сервис, join, IP хүлээх, metric+firewall
-  const result = await zerotierService.autoSetup(networkId, gamePaths);
+  const result = await zerotierService.connectExistingInstall(networkId);
   const nodeId = zerotierService.getNodeId();
   return { ...result, nodeId, networkId };
+});
+
+ipcMain.handle('zt:download', async () => {
+  await shell.openExternal('https://www.zerotier.com/download/');
+  return true;
 });
 
 // Firewall + сүлжээ тохиргоо (тусдаа товчноос)

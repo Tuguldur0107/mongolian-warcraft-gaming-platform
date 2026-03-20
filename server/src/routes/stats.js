@@ -155,6 +155,12 @@ router.get('/ranking', async (req, res) => {
 router.post('/result', auth, async (req, res) => {
   const { room_id, winner_team, duration_minutes, replay_path, players } = req.body;
 
+  if (!await dbAvailable()) {
+    return res.status(503).json({ error: 'Service temporarily unavailable' });
+  }
+  if (!room_id) {
+    return res.status(400).json({ error: 'room_id is required' });
+  }
   if (!winner_team || !Array.isArray(players) || players.length === 0) {
     return res.status(400).json({ error: 'Мэдээлэл дутуу байна' });
   }
@@ -162,80 +168,97 @@ router.post('/result', auth, async (req, res) => {
     return res.status(400).json({ error: 'winner_team 1 эсвэл 2 байх ёстой' });
   }
 
-  // room_id байгаа бол room membership шалгах + давхар бүртгэл сэргийлэх
-  if (room_id) {
-    try {
-      const membership = await db.query(
-        'SELECT 1 FROM room_players WHERE room_id=$1 AND user_id=$2',
-        [room_id, req.user.id]
-      );
-      if (!membership.rows[0])
-        return res.status(403).json({ error: 'Энэ өрөөний гишүүн биш байна' });
-
-      const room = await db.query('SELECT host_id, status FROM rooms WHERE id=$1', [room_id]);
-      if (!room.rows[0])
-        return res.status(404).json({ error: 'Өрөө олдсонгүй' });
-
-      // Давхар бүртгэл шалгах — энэ өрөөнд аль хэдийн үр дүн бүртгэгдсэн эсэх
-      const existing = await db.query(
-        'SELECT id FROM game_results WHERE room_id=$1', [room_id]
-      );
-      if (existing.rows[0]) {
-        return res.json({ message: 'Үр дүн аль хэдийн бүртгэгдсэн', result: existing.rows[0], duplicate: true });
-      }
-    } catch (err) {
-      console.error(err);
-      return res.status(500).json({ error: 'Серверийн алдаа' });
-    }
-  }
-
   try {
+    const membership = await db.query(
+      'SELECT 1 FROM room_players WHERE room_id=$1 AND user_id=$2',
+      [room_id, req.user.id]
+    );
+    if (!membership.rows[0]) {
+      return res.status(403).json({ error: 'Энэ өрөөний гишүүн биш байна' });
+    }
+
+    const room = await db.query('SELECT host_id, status FROM rooms WHERE id=$1', [room_id]);
+    if (!room.rows[0]) {
+      return res.status(404).json({ error: 'Өрөө олдсонгүй' });
+    }
+    if (String(room.rows[0].host_id) !== String(req.user.id)) {
+      return res.status(403).json({ error: 'Зөвхөн host үр дүн бүртгэнэ' });
+    }
+    if (room.rows[0].status !== 'playing') {
+      return res.status(400).json({ error: 'Тоглолт эхлээгүй эсвэл аль хэдийн дууссан байна' });
+    }
+
+    const existing = await db.query(
+      'SELECT id FROM game_results WHERE room_id=$1',
+      [room_id]
+    );
+    if (existing.rows[0]) {
+      return res.json({ message: 'Үр дүн аль хэдийн бүртгэгдсэн', result: existing.rows[0], duplicate: true });
+    }
+
+    const membersResult = await db.query(
+      `SELECT u.id, u.username, u.discord_id
+       FROM room_players rp
+       JOIN users u ON u.id = rp.user_id
+       WHERE rp.room_id = $1`,
+      [room_id]
+    );
+    const roomMembers = membersResult.rows;
+    const roomMemberIds = new Set(roomMembers.map((member) => String(member.id)));
+
+    const resolvedPlayers = players.map((player) => {
+      let matchedUserId = null;
+
+      if (player.user_id !== undefined && player.user_id !== null && player.user_id !== '') {
+        const providedId = String(player.user_id);
+        if (!roomMemberIds.has(providedId)) {
+          throw new Error(`player-not-in-room:${providedId}`);
+        }
+        matchedUserId = Number(providedId);
+      } else if (player.discord_id && typeof player.discord_id === 'string') {
+        const matchedMember = roomMembers.find((member) => member.discord_id === player.discord_id);
+        matchedUserId = matchedMember ? memberIdToNumber(matchedMember.id) : null;
+      } else if (player.name && typeof player.name === 'string') {
+        const targetName = player.name.trim().toLowerCase();
+        const matchedMember = roomMembers.find((member) => String(member.username || '').trim().toLowerCase() === targetName);
+        matchedUserId = matchedMember ? memberIdToNumber(matchedMember.id) : null;
+      }
+
+      return {
+        ...player,
+        user_id: matchedUserId,
+      };
+    });
+
     // Үр дүн хадгалах
     const resultRow = await db.query(
       `INSERT INTO game_results (room_id, winner_team, duration_minutes, replay_path)
        VALUES ($1, $2, $3, $4) RETURNING *`,
-      [room_id || null, winner_team, duration_minutes, replay_path]
+      [room_id, winner_team, duration_minutes, replay_path]
     );
 
     // Тоглогчдын win/loss шинэчлэх + game_players-д бичих
     const ALLOWED_COLUMNS = ['wins', 'losses'];
     const gameResultId = resultRow.rows[0].id;
-    for (const player of players) {
+    for (const player of resolvedPlayers) {
       const isWinner = Number(player.team) === Number(winner_team);
       const column   = isWinner ? 'wins' : 'losses';
       if (!ALLOWED_COLUMNS.includes(column)) continue;
 
-      let resolvedUserId = player.user_id || null;
-
-      // 1. user_id-гаар шинэчлэх
-      if (resolvedUserId) {
+      if (player.user_id) {
         await db.query(
           `UPDATE users SET ${column} = ${column} + 1 WHERE id = $1`,
-          [resolvedUserId]
+          [player.user_id]
         );
-      // 2. discord_id-гаар хайх
-      } else if (player.discord_id && typeof player.discord_id === 'string') {
-        const uRow = await db.query(
-          `UPDATE users SET ${column} = ${column} + 1 WHERE discord_id = $1 RETURNING id`,
-          [player.discord_id]
-        );
-        resolvedUserId = uRow.rows[0]?.id || null;
-      // 3. In-game нэрээр хайх (username тааруулга)
-      } else if (player.name && typeof player.name === 'string') {
-        const uRow = await db.query(
-          `UPDATE users SET ${column} = ${column} + 1 WHERE LOWER(username) = LOWER($1) RETURNING id`,
-          [player.name.trim()]
-        );
-        resolvedUserId = uRow.rows[0]?.id || null;
       }
 
       // game_players-д хадгалах (user_id байгаа бол)
-      if (resolvedUserId) {
+      if (player.user_id) {
         await db.query(
           `INSERT INTO game_players (game_result_id, user_id, team, is_winner)
            VALUES ($1, $2, $3, $4)
            ON CONFLICT DO NOTHING`,
-          [gameResultId, resolvedUserId, player.team, isWinner]
+          [gameResultId, player.user_id, player.team, isWinner]
         );
       }
     }
@@ -253,9 +276,17 @@ router.post('/result', auth, async (req, res) => {
       result: resultRow.rows[0],
     });
   } catch (err) {
+    if (String(err.message || '').startsWith('player-not-in-room:')) {
+      return res.status(400).json({ error: 'Submitted player does not belong to the room' });
+    }
     console.error(err);
     res.status(500).json({ error: 'Серверийн алдаа' });
   }
 });
+
+function memberIdToNumber(id) {
+  const parsed = Number(id);
+  return Number.isFinite(parsed) ? parsed : null;
+}
 
 module.exports = router;

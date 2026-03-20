@@ -1,21 +1,32 @@
 const express = require('express');
-const bcrypt  = require('bcrypt');
-const axios   = require('axios');
-const auth    = require('../middleware/auth');
+const bcrypt = require('bcrypt');
+const axios = require('axios');
+const auth = require('../middleware/auth');
+
 const optAuth = auth.optional;
-const strictAuth = auth; // strict — token заавал шаардана
+const strictAuth = auth;
 
 let db;
 try { db = require('../config/db'); } catch { db = null; }
 
+const allowInMemoryFallback = process.env.NODE_ENV !== 'production';
+const ZT_API = 'https://api.zerotier.com/api/v1';
+const ZT_TOKEN = process.env.ZEROTIER_API_TOKEN;
+const router = express.Router();
+
 async function dbOk() {
   if (!db) return false;
-  try { await db.query('SELECT 1'); return true; } catch { return false; }
+  try {
+    await db.query('SELECT 1');
+    return true;
+  } catch {
+    return false;
+  }
 }
 
-// ── ZeroTier Central API ──────────────────────────────────
-const ZT_API   = 'https://api.zerotier.com/api/v1';
-const ZT_TOKEN = process.env.ZEROTIER_API_TOKEN;
+function requireOperationalDb(res) {
+  return res.status(503).json({ error: 'Service temporarily unavailable' });
+}
 
 async function ztCreateNetwork(roomName) {
   if (!ZT_TOKEN) return null;
@@ -23,17 +34,16 @@ async function ztCreateNetwork(roomName) {
     const { data } = await axios.post(`${ZT_API}/network`, {
       config: {
         name: `WC3-${roomName}`.slice(0, 64),
-        private: false, // authorization хэрэггүй — автоматаар нэгдэнэ
-        enableBroadcast: true, // WC3 LAN game discovery-д заавал хэрэгтэй
+        private: false,
+        enableBroadcast: true,
         v4AssignMode: { zt: true },
         ipAssignmentPools: [{ ipRangeStart: '10.147.20.1', ipRangeEnd: '10.147.20.254' }],
         routes: [{ target: '10.147.20.0/24' }],
       },
     }, { headers: { Authorization: `token ${ZT_TOKEN}` } });
-    console.log(`[ZeroTier] Network үүслээ: ${data.id} (${roomName})`);
     return data.id;
   } catch (e) {
-    console.error('[ZeroTier] Network үүсгэхэд алдаа:', e.message);
+    console.error('[ZeroTier] create network:', e.message);
     return null;
   }
 }
@@ -44,64 +54,56 @@ async function ztDeleteNetwork(networkId) {
     await axios.delete(`${ZT_API}/network/${networkId}`, {
       headers: { Authorization: `token ${ZT_TOKEN}` },
     });
-    console.log(`[ZeroTier] Network устгагдлаа: ${networkId}`);
   } catch (e) {
-    console.error('[ZeroTier] Network устгахад алдаа:', e.message);
+    console.error('[ZeroTier] delete network:', e.message);
   }
 }
 
-const router = express.Router();
-
-// ── In-memory room store ──────────────────────────────────
-// id → { id, name, host_id, host_name, max_players, game_type, status,
-//         has_password, password_hash, players: Map<userId, username> }
 const memRooms = new Map();
-let memNextId  = 1;
-
-// socket.io instance-г routes-д ашиглахын тулд
+let memNextId = 1;
 let _io = null;
-function setIO(io) { _io = io; }
+
+function setIO(io) {
+  _io = io;
+}
 
 function emitRoomsUpdated() {
   if (_io) _io.emit('rooms:updated');
 }
 
-function roomToPublic(r) {
-  const members = [...r.players.entries()].map(([id, name]) => ({ id: String(id), name }));
+function roomToPublic(room) {
+  const members = [...room.players.entries()].map(([id, name]) => ({ id: String(id), name }));
   return {
-    id:           r.id,
-    name:         r.name,
-    host_id:      String(r.host_id),
-    host_name:    r.host_name,
-    max_players:  r.max_players,
-    game_type:    r.game_type,
-    description:  r.description || '',
-    game_mode:    r.game_mode || '',
-    status:       r.status,
-    has_password: r.has_password,
-    player_count: r.players.size,
+    id: room.id,
+    name: room.name,
+    host_id: String(room.host_id),
+    host_name: room.host_name,
+    max_players: room.max_players,
+    game_type: room.game_type,
+    description: room.description || '',
+    game_mode: room.game_mode || '',
+    status: room.status,
+    has_password: room.has_password,
+    player_count: room.players.size,
     members,
   };
 }
 
-// Хэрэглэгч аль өрөөнд байгааг хайх (in-memory)
 function findUserRoom(userId) {
   const uid = String(userId);
-  for (const r of memRooms.values()) {
-    if ([...r.players.keys()].map(String).includes(uid)) return r;
+  for (const room of memRooms.values()) {
+    if ([...room.players.keys()].map(String).includes(uid)) return room;
   }
   return null;
 }
 
-// ── GET /rooms — бүх өрөө ────────────────────────────────
 router.get('/', optAuth, async (req, res) => {
   if (await dbOk()) {
     try {
-      const r = await db.query(`
+      const result = await db.query(`
         SELECT r.id, r.name, r.host_id, u.username AS host_name,
           r.max_players, r.game_type, r.description, r.game_mode,
-          r.status, r.has_password,
-          r.zerotier_network_id,
+          r.status, r.has_password, r.zerotier_network_id,
           COUNT(rp.user_id) AS player_count,
           JSON_AGG(JSON_BUILD_OBJECT('id', u2.id::text, 'name', u2.username)
             ORDER BY rp.joined_at) FILTER (WHERE u2.username IS NOT NULL) AS members
@@ -113,21 +115,25 @@ router.get('/', optAuth, async (req, res) => {
         GROUP BY r.id, u.username
         ORDER BY r.created_at DESC
       `);
-      return res.json(r.rows.map(row => ({ ...row, members: row.members || [] })));
-    } catch (e) { console.error(e); }
+      return res.json(result.rows.map((row) => ({ ...row, members: row.members || [] })));
+    } catch (e) {
+      console.error(e);
+    }
   }
-  res.json([...memRooms.values()].filter(r => r.status !== 'done').map(roomToPublic));
+
+  if (!allowInMemoryFallback) return requireOperationalDb(res);
+  return res.json([...memRooms.values()].filter((room) => room.status !== 'done').map(roomToPublic));
 });
 
-// ── GET /rooms/mine — өөрийн өрөө ────────────────────────
 router.get('/mine', optAuth, async (req, res) => {
+  if (!req.user) return res.json(null);
+
   if (await dbOk()) {
     try {
-      const r = await db.query(`
+      const result = await db.query(`
         SELECT r.id, r.name, r.host_id, u.username AS host_name,
           r.max_players, r.game_type, r.description, r.game_mode,
-          r.status, r.has_password,
-          r.zerotier_network_id,
+          r.status, r.has_password, r.zerotier_network_id,
           COUNT(rp2.user_id) AS player_count,
           JSON_AGG(JSON_BUILD_OBJECT('id', u2.id::text, 'name', u2.username)
             ORDER BY rp2.joined_at) FILTER (WHERE u2.username IS NOT NULL) AS members
@@ -140,75 +146,92 @@ router.get('/mine', optAuth, async (req, res) => {
         GROUP BY r.id, u.username
         LIMIT 1
       `, [req.user.id]);
-      return res.json(r.rows[0] ? { ...r.rows[0], members: r.rows[0].members || [] } : null);
-    } catch (e) { console.error(e); }
+      return res.json(result.rows[0] ? { ...result.rows[0], members: result.rows[0].members || [] } : null);
+    } catch (e) {
+      console.error(e);
+    }
   }
+
+  if (!allowInMemoryFallback) return requireOperationalDb(res);
   const room = findUserRoom(req.user.id);
-  res.json(room ? roomToPublic(room) : null);
+  return res.json(room ? roomToPublic(room) : null);
 });
 
-// ── POST /rooms — шинэ өрөө үүсгэх ──────────────────────
 router.post('/', strictAuth, async (req, res) => {
   const { name, max_players = 10, game_type = '', password, description = '', game_mode = '' } = req.body;
-  if (!name) return res.status(400).json({ error: 'Өрөөний нэр шаардлагатай' });
-  if (!game_type) return res.status(400).json({ error: 'Тоглоомын төрөл шаардлагатай' });
+  if (!name) return res.status(400).json({ error: 'Room name is required' });
+  if (!game_type) return res.status(400).json({ error: 'Game type is required' });
 
-  const has_password  = !!(password?.length);
-  const password_hash = has_password ? await bcrypt.hash(password, 8) : null;
-  const descTrimmed   = (description || '').trim().slice(0, 200);
-  const hostName      = req.user.username || 'Тоглогч';
-  const userId        = req.user.id;
+  const hasPassword = !!(password?.length);
+  const passwordHash = hasPassword ? await bcrypt.hash(password, 8) : null;
+  const descTrimmed = String(description || '').trim().slice(0, 200);
+  const hostName = req.user.username || 'Guest';
+  const userId = req.user.id;
 
   if (await dbOk()) {
     try {
-      // Аль хэдийн өрөөнд байгаа эсэх шалгах
       const existing = await db.query(
         `SELECT r.id FROM rooms r
          JOIN room_players rp ON r.id = rp.room_id
-         WHERE rp.user_id = $1 AND r.status IN ('waiting','playing') LIMIT 1`,
+         WHERE rp.user_id = $1 AND r.status IN ('waiting','playing')
+         LIMIT 1`,
         [userId]
       );
-      if (existing.rows[0])
-        return res.status(409).json({ error: 'Та аль хэдийн өрөөнд байна. Эхлээд гарна уу.' });
+      if (existing.rows[0]) {
+        return res.status(409).json({ error: 'Leave your current room first' });
+      }
 
-      const r = await db.query(
+      const result = await db.query(
         `INSERT INTO rooms (name, host_id, max_players, game_type, has_password, password_hash, description, game_mode)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
-        [name, userId, max_players, game_type, has_password, password_hash, descTrimmed, game_mode || '']
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+         RETURNING *`,
+        [name, userId, max_players, game_type, hasPassword, passwordHash, descTrimmed, game_mode || '']
       );
-      const room = r.rows[0];
-      await db.query('INSERT INTO room_players (room_id, user_id) VALUES ($1,$2)', [room.id, userId]);
 
-      // Глобал ZeroTier network ашиглана (бүх тоглогчид нэг сүлжээнд)
+      const room = result.rows[0];
+      await db.query('INSERT INTO room_players (room_id, user_id) VALUES ($1, $2)', [room.id, userId]);
+
       const ztNetId = process.env.ZEROTIER_DEFAULT_NETWORK || null;
       if (ztNetId) {
-        await db.query('UPDATE rooms SET zerotier_network_id=$1 WHERE id=$2', [ztNetId, room.id]);
+        await db.query('UPDATE rooms SET zerotier_network_id = $1 WHERE id = $2', [ztNetId, room.id]);
         room.zerotier_network_id = ztNetId;
       }
 
       emitRoomsUpdated();
-      return res.status(201).json({ ...room, host_name: hostName, members: [{ id: String(userId), name: hostName }], player_count: 1 });
-    } catch (e) { console.error(e); }
+      return res.status(201).json({
+        ...room,
+        host_name: hostName,
+        members: [{ id: String(userId), name: hostName }],
+        player_count: 1,
+      });
+    } catch (e) {
+      console.error(e);
+      return res.status(500).json({ error: 'Server error' });
+    }
   }
 
-  // In-memory: аль хэдийн өрөөнд байгаа эсэх
-  if (findUserRoom(userId))
-    return res.status(409).json({ error: 'Та аль хэдийн өрөөнд байна. Эхлээд гарна уу.' });
+  if (!allowInMemoryFallback) return requireOperationalDb(res);
+  if (findUserRoom(userId)) return res.status(409).json({ error: 'Leave your current room first' });
 
   const room = {
-    id: String(memNextId++), name,
-    host_id: userId, host_name: hostName,
-    max_players, game_type, status: 'waiting',
-    has_password, password_hash,
-    description: descTrimmed, game_mode: game_mode || '',
+    id: String(memNextId++),
+    name,
+    host_id: userId,
+    host_name: hostName,
+    max_players,
+    game_type,
+    status: 'waiting',
+    has_password: hasPassword,
+    password_hash: passwordHash,
+    description: descTrimmed,
+    game_mode: game_mode || '',
     players: new Map([[userId, hostName]]),
   };
   memRooms.set(room.id, room);
   emitRoomsUpdated();
-  res.status(201).json(roomToPublic(room));
+  return res.status(201).json(roomToPublic(room));
 });
 
-// ── POST /rooms/:id/join ──────────────────────────────────
 router.post('/:id/join', strictAuth, async (req, res) => {
   const { id } = req.params;
   const { password } = req.body;
@@ -216,193 +239,245 @@ router.post('/:id/join', strictAuth, async (req, res) => {
 
   if (await dbOk()) {
     try {
-      // Аль хэдийн өрөөнд байгаа эсэх
       const already = await db.query(
         `SELECT r.id FROM rooms r
          JOIN room_players rp ON r.id = rp.room_id
-         WHERE rp.user_id = $1 AND r.status IN ('waiting','playing') LIMIT 1`,
+         WHERE rp.user_id = $1 AND r.status IN ('waiting','playing')
+         LIMIT 1`,
         [userId]
       );
+
       if (already.rows[0]) {
-        // Яг тэр өрөөнд аль хэдийн байгаа → амжилт буцаана (idempotent)
         if (String(already.rows[0].id) === String(id)) {
-          const rr2 = await db.query('SELECT * FROM rooms WHERE id=$1', [id]);
-          return res.json({ message: 'Өрөөнд нэгдлээ', room: rr2.rows[0] });
+          const roomResult = await db.query('SELECT * FROM rooms WHERE id = $1', [id]);
+          return res.json({ message: 'Joined room', room: roomResult.rows[0] });
         }
-        // Өөр өрөөнд байна → автоматаар гарч, шинэ өрөөнд нэгдэнэ
+
         const oldId = already.rows[0].id;
-        await db.query('DELETE FROM room_players WHERE room_id=$1 AND user_id=$2', [oldId, userId]);
-        const oldRoom = await db.query('SELECT host_id FROM rooms WHERE id=$1', [oldId]);
+        await db.query('DELETE FROM room_players WHERE room_id = $1 AND user_id = $2', [oldId, userId]);
+        const oldRoom = await db.query('SELECT host_id, zerotier_network_id FROM rooms WHERE id = $1', [oldId]);
         if (String(oldRoom.rows[0]?.host_id) === String(userId)) {
-          await db.query('DELETE FROM rooms WHERE id=$1', [oldId]);
-          if (_io) _io.to(String(oldId)).emit('room:closed', { reason: 'Өрөөний эзэн гарлаа' });
+          await db.query('DELETE FROM rooms WHERE id = $1', [oldId]);
+          if (_io) _io.to(String(oldId)).emit('room:closed', { reason: 'Host left the room' });
+          if (oldRoom.rows[0]?.zerotier_network_id && !process.env.ZEROTIER_DEFAULT_NETWORK) {
+            await ztDeleteNetwork(oldRoom.rows[0].zerotier_network_id);
+          }
         }
         emitRoomsUpdated();
       }
 
-      const rr = await db.query('SELECT * FROM rooms WHERE id = $1', [id]);
-      const room = rr.rows[0];
-      if (!room)                  return res.status(404).json({ error: 'Өрөө олдсонгүй' });
-      if (room.status === 'done') return res.status(400).json({ error: 'Өрөө дууссан байна' });
+      const roomResult = await db.query('SELECT * FROM rooms WHERE id = $1', [id]);
+      const room = roomResult.rows[0];
+      if (!room) return res.status(404).json({ error: 'Room not found' });
+      if (room.status === 'done') return res.status(400).json({ error: 'Room is closed' });
+
       if (room.has_password) {
-        if (!password)            return res.status(403).json({ error: 'Нууц үг шаардлагатай', need_password: true });
+        if (!password) return res.status(403).json({ error: 'Password required', need_password: true });
         const ok = await bcrypt.compare(password, room.password_hash);
-        if (!ok)                  return res.status(403).json({ error: 'Нууц үг буруу' });
+        if (!ok) return res.status(403).json({ error: 'Invalid password' });
       }
-      const cnt = await db.query('SELECT COUNT(*) FROM room_players WHERE room_id=$1', [id]);
-      if (parseInt(cnt.rows[0].count) >= room.max_players)
-        return res.status(400).json({ error: 'Өрөө дүүрсэн байна' });
-      await db.query('INSERT INTO room_players (room_id,user_id) VALUES ($1,$2) ON CONFLICT DO NOTHING', [id, userId]);
+
+      const countResult = await db.query('SELECT COUNT(*) FROM room_players WHERE room_id = $1', [id]);
+      if (Number(countResult.rows[0].count) >= room.max_players) {
+        return res.status(400).json({ error: 'Room is full' });
+      }
+
+      await db.query('INSERT INTO room_players (room_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [id, userId]);
       emitRoomsUpdated();
-      return res.json({ message: 'Өрөөнд нэгдлээ', room });
+      return res.json({ message: 'Joined room', room });
     } catch (e) {
       console.error('[Join]', e);
-      return res.status(500).json({ error: 'Серверийн алдаа гарлаа' });
+      return res.status(500).json({ error: 'Server error' });
     }
   }
 
-  // In-memory
-  if (findUserRoom(userId))
-    return res.status(409).json({ error: 'Та аль хэдийн өрөөнд байна. Эхлээд гарна уу.' });
+  if (!allowInMemoryFallback) return requireOperationalDb(res);
+  if (findUserRoom(userId)) return res.status(409).json({ error: 'Leave your current room first' });
 
   const room = memRooms.get(id);
-  if (!room) return res.status(404).json({ error: 'Өрөө олдсонгүй' });
+  if (!room) return res.status(404).json({ error: 'Room not found' });
   if (room.has_password) {
-    if (!password) return res.status(403).json({ error: 'Нууц үг шаардлагатай', need_password: true });
+    if (!password) return res.status(403).json({ error: 'Password required', need_password: true });
     const ok = await bcrypt.compare(password, room.password_hash);
-    if (!ok) return res.status(403).json({ error: 'Нууц үг буруу' });
+    if (!ok) return res.status(403).json({ error: 'Invalid password' });
   }
-  if (room.players.size >= room.max_players)
-    return res.status(400).json({ error: 'Өрөө дүүрсэн байна' });
-  room.players.set(userId, req.user.username || 'Тоглогч');
-  res.json({ message: 'Өрөөнд нэгдлээ', room: roomToPublic(room) });
+  if (room.players.size >= room.max_players) return res.status(400).json({ error: 'Room is full' });
+
+  room.players.set(userId, req.user.username || 'Guest');
+  return res.json({ message: 'Joined room', room: roomToPublic(room) });
 });
 
-// ── POST /rooms/:id/leave ─────────────────────────────────
 router.post('/:id/leave', strictAuth, async (req, res) => {
   const { id } = req.params;
   const userId = req.user.id;
 
   if (await dbOk()) {
     try {
-      await db.query('DELETE FROM room_players WHERE room_id=$1 AND user_id=$2', [id, userId]);
-      const rr = await db.query('SELECT * FROM rooms WHERE id=$1', [id]);
-      if (rr.rows[0]?.host_id === userId || String(rr.rows[0]?.host_id) === String(userId)) {
-        await db.query('DELETE FROM rooms WHERE id=$1', [id]);
-        if (_io) _io.to(id).emit('room:closed', { reason: 'Өрөөний эзэн гарлаа' });
+      await db.query('DELETE FROM room_players WHERE room_id = $1 AND user_id = $2', [id, userId]);
+      const result = await db.query('SELECT * FROM rooms WHERE id = $1', [id]);
+      if (result.rows[0] && String(result.rows[0].host_id) === String(userId)) {
+        await db.query('DELETE FROM rooms WHERE id = $1', [id]);
+        if (_io) _io.to(id).emit('room:closed', { reason: 'Host left the room' });
+        if (result.rows[0].zerotier_network_id && !process.env.ZEROTIER_DEFAULT_NETWORK) {
+          await ztDeleteNetwork(result.rows[0].zerotier_network_id);
+        }
         emitRoomsUpdated();
-        return res.json({ message: 'Өрөө устгагдлаа' });
+        return res.json({ message: 'Room deleted' });
       }
+
       emitRoomsUpdated();
-      return res.json({ message: 'Өрөөнөөс гарлаа' });
-    } catch (e) { console.error(e); }
+      return res.json({ message: 'Left room' });
+    } catch (e) {
+      console.error(e);
+      return res.status(500).json({ error: 'Server error' });
+    }
   }
+
+  if (!allowInMemoryFallback) return requireOperationalDb(res);
   const room = memRooms.get(id);
   if (room) {
     room.players.delete(userId);
     if (String(room.host_id) === String(userId)) {
       memRooms.delete(id);
-      if (_io) _io.to(id).emit('room:closed', { reason: 'Өрөөний эзэн гарлаа' });
+      if (_io) _io.to(id).emit('room:closed', { reason: 'Host left the room' });
     }
   }
-  res.json({ message: 'Өрөөнөөс гарлаа' });
+  return res.json({ message: 'Left room' });
 });
 
-// ── DELETE /rooms/:id — өрөөг хаах (эзэн л хийж болно) ──
 router.delete('/:id', strictAuth, async (req, res) => {
   const { id } = req.params;
   const userId = req.user.id;
 
   if (await dbOk()) {
     try {
-      const rr = await db.query('SELECT host_id FROM rooms WHERE id=$1', [id]);
-      if (!rr.rows[0]) return res.status(404).json({ error: 'Өрөө олдсонгүй' });
-      if (String(rr.rows[0].host_id) !== String(userId))
-        return res.status(403).json({ error: 'Зөвхөн өрөөний эзэн хаах эрхтэй' });
-      await db.query('DELETE FROM rooms WHERE id=$1', [id]);
-      if (_io) _io.to(id).emit('room:closed', { reason: 'Өрөөний эзэн өрөөг хаалаа' });
+      const result = await db.query('SELECT host_id, zerotier_network_id FROM rooms WHERE id = $1', [id]);
+      if (!result.rows[0]) return res.status(404).json({ error: 'Room not found' });
+      if (String(result.rows[0].host_id) !== String(userId)) {
+        return res.status(403).json({ error: 'Only the host can close the room' });
+      }
+
+      await db.query('DELETE FROM rooms WHERE id = $1', [id]);
+      if (_io) _io.to(id).emit('room:closed', { reason: 'Host closed the room' });
+      if (result.rows[0].zerotier_network_id && !process.env.ZEROTIER_DEFAULT_NETWORK) {
+        await ztDeleteNetwork(result.rows[0].zerotier_network_id);
+      }
       emitRoomsUpdated();
-      return res.json({ message: 'Өрөө хаагдлаа' });
-    } catch (e) { console.error(e); }
+      return res.json({ message: 'Room closed' });
+    } catch (e) {
+      console.error(e);
+      return res.status(500).json({ error: 'Server error' });
+    }
   }
+
+  if (!allowInMemoryFallback) return requireOperationalDb(res);
   const room = memRooms.get(id);
-  if (!room) return res.status(404).json({ error: 'Өрөө олдсонгүй' });
-  if (String(room.host_id) !== String(userId))
-    return res.status(403).json({ error: 'Зөвхөн өрөөний эзэн хаах эрхтэй' });
+  if (!room) return res.status(404).json({ error: 'Room not found' });
+  if (String(room.host_id) !== String(userId)) {
+    return res.status(403).json({ error: 'Only the host can close the room' });
+  }
   memRooms.delete(id);
-  if (_io) _io.to(id).emit('room:closed', { reason: 'Өрөөний эзэн өрөөг хаалаа' });
-  res.json({ message: 'Өрөө хаагдлаа' });
+  if (_io) _io.to(id).emit('room:closed', { reason: 'Host closed the room' });
+  return res.json({ message: 'Room closed' });
 });
 
-// ── POST /rooms/:id/kick/:userId — тоглогч kick ──────────
 router.post('/:id/kick/:targetId', strictAuth, async (req, res) => {
   const { id, targetId } = req.params;
   const userId = req.user.id;
 
   if (await dbOk()) {
     try {
-      const rr = await db.query('SELECT host_id FROM rooms WHERE id=$1', [id]);
-      if (!rr.rows[0]) return res.status(404).json({ error: 'Өрөө олдсонгүй' });
-      if (String(rr.rows[0].host_id) !== String(userId))
-        return res.status(403).json({ error: 'Зөвхөн өрөөний эзэн kick хийж болно' });
-      if (String(targetId) === String(userId))
-        return res.status(400).json({ error: 'Өөрийгөө kick хийж болохгүй' });
-      await db.query('DELETE FROM room_players WHERE room_id=$1 AND user_id=$2', [id, targetId]);
+      const result = await db.query('SELECT host_id FROM rooms WHERE id = $1', [id]);
+      if (!result.rows[0]) return res.status(404).json({ error: 'Room not found' });
+      if (String(result.rows[0].host_id) !== String(userId)) {
+        return res.status(403).json({ error: 'Only the host can kick players' });
+      }
+      if (String(targetId) === String(userId)) {
+        return res.status(400).json({ error: 'Cannot kick yourself' });
+      }
+
+      await db.query('DELETE FROM room_players WHERE room_id = $1 AND user_id = $2', [id, targetId]);
       if (_io) _io.to(id).emit('room:kicked', { userId: String(targetId) });
-      return res.json({ message: 'Тоглогч гаргагдлаа' });
-    } catch (e) { console.error(e); }
+      return res.json({ message: 'Player kicked' });
+    } catch (e) {
+      console.error(e);
+      return res.status(500).json({ error: 'Server error' });
+    }
   }
+
+  if (!allowInMemoryFallback) return requireOperationalDb(res);
   const room = memRooms.get(id);
-  if (!room) return res.status(404).json({ error: 'Өрөө олдсонгүй' });
-  if (String(room.host_id) !== String(userId))
-    return res.status(403).json({ error: 'Зөвхөн өрөөний эзэн kick хийж болно' });
+  if (!room) return res.status(404).json({ error: 'Room not found' });
+  if (String(room.host_id) !== String(userId)) {
+    return res.status(403).json({ error: 'Only the host can kick players' });
+  }
   room.players.delete(targetId);
   if (_io) _io.to(id).emit('room:kicked', { userId: String(targetId) });
-  res.json({ message: 'Тоглогч гаргагдлаа' });
+  return res.json({ message: 'Player kicked' });
 });
 
-// ── POST /rooms/:id/start ─────────────────────────────────
 router.post('/:id/start', strictAuth, async (req, res) => {
   const { id } = req.params;
   const userId = req.user.id;
 
   if (await dbOk()) {
     try {
-      await db.query("UPDATE rooms SET status='playing' WHERE id=$1 AND host_id=$2", [id, userId]);
+      const roomResult = await db.query('SELECT host_id, status FROM rooms WHERE id = $1', [id]);
+      if (!roomResult.rows[0]) return res.status(404).json({ error: 'Room not found' });
+      if (String(roomResult.rows[0].host_id) !== String(userId)) {
+        return res.status(403).json({ error: 'Only the host can start the game' });
+      }
+      if (roomResult.rows[0].status === 'playing') {
+        return res.json({ message: 'Game already started' });
+      }
+
+      await db.query("UPDATE rooms SET status = 'playing' WHERE id = $1 AND host_id = $2", [id, userId]);
       if (_io) _io.to(id).emit('room:started');
       emitRoomsUpdated();
-      return res.json({ message: 'Тоглолт эхэллээ' });
-    } catch (e) { console.error(e); }
+      return res.json({ message: 'Game started' });
+    } catch (e) {
+      console.error(e);
+      return res.status(500).json({ error: 'Server error' });
+    }
   }
+
+  if (!allowInMemoryFallback) return requireOperationalDb(res);
   const room = memRooms.get(id);
   if (room && String(room.host_id) === String(userId)) {
     room.status = 'playing';
     if (_io) _io.to(id).emit('room:started');
   }
-  res.json({ message: 'Тоглолт эхэллээ' });
+  return res.json({ message: 'Game started' });
 });
 
-// ── POST /rooms/:id/end — Тоглолт дуусгах (host WC3 хаасан) ──
 router.post('/:id/end', strictAuth, async (req, res) => {
   const { id } = req.params;
   const userId = req.user.id;
 
   if (await dbOk()) {
     try {
-      const rr = await db.query('SELECT host_id, status FROM rooms WHERE id=$1', [id]);
-      if (!rr.rows[0]) return res.status(404).json({ error: 'Өрөө олдсонгүй' });
-      if (String(rr.rows[0].host_id) !== String(userId))
-        return res.status(403).json({ error: 'Зөвхөн эзэн' });
-      if (rr.rows[0].status !== 'playing')
-        return res.json({ message: 'Аль хэдийн waiting' });
-      await db.query("UPDATE rooms SET status='waiting' WHERE id=$1", [id]);
+      const result = await db.query('SELECT host_id, status FROM rooms WHERE id = $1', [id]);
+      if (!result.rows[0]) return res.status(404).json({ error: 'Room not found' });
+      if (String(result.rows[0].host_id) !== String(userId)) {
+        return res.status(403).json({ error: 'Only the host can end the game' });
+      }
+      if (result.rows[0].status !== 'playing') {
+        return res.json({ message: 'Already waiting' });
+      }
+
+      await db.query("UPDATE rooms SET status = 'waiting' WHERE id = $1", [id]);
       if (_io) {
         _io.to(String(id)).emit('room:host_game_ended');
         emitRoomsUpdated();
       }
-      return res.json({ message: 'Тоглолт дууслаа' });
-    } catch (e) { console.error(e); }
+      return res.json({ message: 'Game ended' });
+    } catch (e) {
+      console.error(e);
+      return res.status(500).json({ error: 'Server error' });
+    }
   }
+
+  if (!allowInMemoryFallback) return requireOperationalDb(res);
   const room = memRooms.get(id);
   if (room && String(room.host_id) === String(userId)) {
     room.status = 'waiting';
@@ -411,10 +486,9 @@ router.post('/:id/end', strictAuth, async (req, res) => {
       emitRoomsUpdated();
     }
   }
-  res.json({ message: 'Тоглолт дууслаа' });
+  return res.json({ message: 'Game ended' });
 });
 
-// ── PATCH /rooms/:id — Өрөөний тохиргоо засах (эзэн) ────
 router.patch('/:id', strictAuth, async (req, res) => {
   const { id } = req.params;
   const userId = req.user.id;
@@ -422,18 +496,22 @@ router.patch('/:id', strictAuth, async (req, res) => {
 
   if (await dbOk()) {
     try {
-      const rr = await db.query('SELECT host_id FROM rooms WHERE id=$1', [id]);
-      if (!rr.rows[0]) return res.status(404).json({ error: 'Өрөө олдсонгүй' });
-      if (String(rr.rows[0].host_id) !== String(userId))
-        return res.status(403).json({ error: 'Зөвхөн өрөөний эзэн тохиргоо өөрчилж болно' });
+      const roomResult = await db.query('SELECT host_id FROM rooms WHERE id = $1', [id]);
+      if (!roomResult.rows[0]) return res.status(404).json({ error: 'Room not found' });
+      if (String(roomResult.rows[0].host_id) !== String(userId)) {
+        return res.status(403).json({ error: 'Only the host can update the room' });
+      }
 
       const updates = [];
-      const params  = [];
+      const params = [];
+
       if (name && name.trim()) {
-        params.push(name.trim()); updates.push(`name=$${params.length}`);
+        params.push(name.trim());
+        updates.push(`name=$${params.length}`);
       }
       if (max_players && Number.isInteger(Number(max_players)) && Number(max_players) > 0) {
-        params.push(Number(max_players)); updates.push(`max_players=$${params.length}`);
+        params.push(Number(max_players));
+        updates.push(`max_players=$${params.length}`);
       }
       if (password !== undefined) {
         if (password === null || password === '') {
@@ -445,42 +523,52 @@ router.patch('/:id', strictAuth, async (req, res) => {
         }
       }
       if (description !== undefined) {
-        params.push((description || '').trim().slice(0, 200)); updates.push(`description=$${params.length}`);
+        params.push(String(description || '').trim().slice(0, 200));
+        updates.push(`description=$${params.length}`);
       }
       if (game_mode !== undefined) {
-        params.push((game_mode || '').trim()); updates.push(`game_mode=$${params.length}`);
+        params.push(String(game_mode || '').trim());
+        updates.push(`game_mode=$${params.length}`);
       }
+
       if (updates.length > 0) {
         params.push(id);
         await db.query(`UPDATE rooms SET ${updates.join(',')} WHERE id=$${params.length}`, params);
       }
-      const updated = await db.query('SELECT * FROM rooms WHERE id=$1', [id]);
+
+      const updated = await db.query('SELECT * FROM rooms WHERE id = $1', [id]);
       if (_io) _io.to(id).emit('room:updated', updated.rows[0]);
       return res.json({ ok: true, room: updated.rows[0] });
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      console.error(e);
+      return res.status(500).json({ error: 'Server error' });
+    }
   }
-  // In-memory fallback
+
+  if (!allowInMemoryFallback) return requireOperationalDb(res);
   const room = memRooms.get(id);
-  if (!room) return res.status(404).json({ error: 'Өрөө олдсонгүй' });
-  if (String(room.host_id) !== String(userId)) return res.status(403).json({ error: 'Зөвхөн эзэн өөрчилж болно' });
+  if (!room) return res.status(404).json({ error: 'Room not found' });
+  if (String(room.host_id) !== String(userId)) {
+    return res.status(403).json({ error: 'Only the host can update the room' });
+  }
+
   if (name) room.name = name.trim();
   if (max_players) room.max_players = Number(max_players);
-  if (description !== undefined) room.description = (description || '').trim().slice(0, 200);
-  if (game_mode !== undefined) room.game_mode = (game_mode || '').trim();
+  if (description !== undefined) room.description = String(description || '').trim().slice(0, 200);
+  if (game_mode !== undefined) room.game_mode = String(game_mode || '').trim();
   if (_io) _io.to(id).emit('room:updated', roomToPublic(room));
-  res.json({ ok: true, room: roomToPublic(room) });
+  return res.json({ ok: true, room: roomToPublic(room) });
 });
 
-// ── POST /rooms/quickmatch ────────────────────────────────
 router.post('/quickmatch', strictAuth, async (req, res) => {
   const { game_type } = req.body;
-  if (!game_type) return res.status(400).json({ error: 'game_type шаардлагатай' });
-  const userId   = req.user.id;
-  const hostName = req.user.username || 'Тоглогч';
+  if (!game_type) return res.status(400).json({ error: 'game_type is required' });
+
+  const userId = req.user.id;
+  const hostName = req.user.username || 'Guest';
 
   if (await dbOk()) {
     try {
-      // Тухайн game_type-тай, нууц үггүй, waiting, дүүрээгүй өрөө хайх
       const available = await db.query(`
         SELECT r.id, COUNT(rp.user_id) AS player_count
         FROM rooms r
@@ -494,62 +582,105 @@ router.post('/quickmatch', strictAuth, async (req, res) => {
 
       if (available.rows[0]) {
         const roomId = available.rows[0].id;
-        await db.query('INSERT INTO room_players (room_id, user_id) VALUES ($1,$2) ON CONFLICT DO NOTHING', [roomId, userId]);
-        const rr = await db.query(`
+        await db.query('INSERT INTO room_players (room_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [roomId, userId]);
+        const roomResult = await db.query(`
           SELECT r.id, r.name, r.host_id, u.username AS host_name,
             r.max_players, r.game_type, r.status, r.has_password,
             COUNT(rp.user_id) AS player_count,
             JSON_AGG(JSON_BUILD_OBJECT('id', u2.id::text, 'name', u2.username)
               ORDER BY rp.joined_at) FILTER (WHERE u2.username IS NOT NULL) AS members
-          FROM rooms r JOIN users u ON r.host_id=u.id
+          FROM rooms r
+          JOIN users u ON r.host_id=u.id
           LEFT JOIN room_players rp ON r.id=rp.room_id
           LEFT JOIN users u2 ON rp.user_id=u2.id
-          WHERE r.id=$1 GROUP BY r.id, u.username
+          WHERE r.id=$1
+          GROUP BY r.id, u.username
         `, [roomId]);
-        return res.json({ joined: true, room: { ...rr.rows[0], members: rr.rows[0].members || [] } });
+        return res.json({ joined: true, room: { ...roomResult.rows[0], members: roomResult.rows[0].members || [] } });
       }
 
-      // Шинэ өрөө үүсгэх
       const qname = `Quick Match #${Math.floor(Math.random() * 9000) + 1000}`;
-      const r = await db.query(
-        `INSERT INTO rooms (name, host_id, max_players, game_type, has_password) VALUES ($1,$2,10,$3,FALSE) RETURNING *`,
+      const result = await db.query(
+        'INSERT INTO rooms (name, host_id, max_players, game_type, has_password) VALUES ($1, $2, 10, $3, FALSE) RETURNING *',
         [qname, userId, game_type]
       );
-      const room = r.rows[0];
-      await db.query('INSERT INTO room_players (room_id, user_id) VALUES ($1,$2)', [room.id, userId]);
-      return res.status(201).json({ joined: false, room: { ...room, host_name: hostName, members: [{ id: String(userId), name: hostName }], player_count: 1 } });
-    } catch (e) { console.error(e); return res.status(500).json({ error: 'Серверийн алдаа' }); }
+      const room = result.rows[0];
+      await db.query('INSERT INTO room_players (room_id, user_id) VALUES ($1, $2)', [room.id, userId]);
+      return res.status(201).json({
+        joined: false,
+        room: { ...room, host_name: hostName, members: [{ id: String(userId), name: hostName }], player_count: 1 },
+      });
+    } catch (e) {
+      console.error(e);
+      return res.status(500).json({ error: 'Server error' });
+    }
   }
-  res.status(503).json({ error: 'DB байхгүй' });
+
+  return requireOperationalDb(res);
 });
 
-// ── PATCH /rooms/:id/team — Баг солих ────────────────────
 router.patch('/:id/team', strictAuth, async (req, res) => {
   const { id } = req.params;
   const userId = req.user.id;
-  const team   = Number(req.body.team);
-  if (![1, 2].includes(team)) return res.status(400).json({ error: 'team 1 эсвэл 2 байх ёстой' });
+  const team = Number(req.body.team);
+  if (![1, 2].includes(team)) return res.status(400).json({ error: 'team must be 1 or 2' });
 
   if (await dbOk()) {
     try {
-      const rr = await db.query('SELECT max_players FROM rooms WHERE id=$1', [id]);
-      if (!rr.rows[0]) return res.status(404).json({ error: 'Өрөө олдсонгүй' });
-      // Тухайн багийн гишүүний тоо шалгах
-      const cnt = await db.query(
-        'SELECT COUNT(*) FROM room_players WHERE room_id=$1 AND team=$2',
-        [id, team]
+      const roomResult = await db.query('SELECT max_players FROM rooms WHERE id = $1', [id]);
+      if (!roomResult.rows[0]) return res.status(404).json({ error: 'Room not found' });
+
+      const countResult = await db.query('SELECT COUNT(*) FROM room_players WHERE room_id = $1 AND team = $2', [id, team]);
+      const max = Math.ceil(roomResult.rows[0].max_players / 2);
+      if (Number(countResult.rows[0].count) >= max) {
+        return res.status(400).json({ error: 'Team is full' });
+      }
+
+      const updateResult = await db.query(
+        'UPDATE room_players SET team = $1 WHERE room_id = $2 AND user_id = $3 RETURNING user_id',
+        [team, id, userId]
       );
-      const max = Math.ceil(rr.rows[0].max_players / 2);
-      if (parseInt(cnt.rows[0].count) >= max)
-        return res.status(400).json({ error: 'Баг дүүрсэн байна' });
-      await db.query('UPDATE room_players SET team=$1 WHERE room_id=$2 AND user_id=$3', [team, id, userId]);
+      if (!updateResult.rows[0]) {
+        return res.status(403).json({ error: 'You are not a member of this room' });
+      }
       if (_io) _io.to(id).emit('room:team_changed', { userId: String(userId), team });
       return res.json({ ok: true, team });
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      console.error(e);
+      return res.status(500).json({ error: 'Server error' });
+    }
   }
-  res.json({ ok: true });
+
+  if (!allowInMemoryFallback) return requireOperationalDb(res);
+  return res.json({ ok: true });
 });
+
+async function isUserInRoom(userId, roomId) {
+  if (!userId || !roomId) return false;
+
+  if (await dbOk()) {
+    try {
+      const result = await db.query(
+        `SELECT 1
+         FROM room_players rp
+         JOIN rooms r ON r.id = rp.room_id
+         WHERE rp.user_id = $1 AND rp.room_id = $2 AND r.status IN ('waiting', 'playing')
+         LIMIT 1`,
+        [userId, roomId]
+      );
+      return !!result.rows[0];
+    } catch (e) {
+      console.error('[RoomMembership]', e.message);
+      return false;
+    }
+  }
+
+  if (!allowInMemoryFallback) return false;
+  const room = memRooms.get(String(roomId)) || memRooms.get(roomId);
+  return !!room?.players?.has(userId);
+}
 
 module.exports = router;
 module.exports.setIO = setIO;
 module.exports.memRooms = memRooms;
+module.exports.isUserInRoom = isUserInRoom;

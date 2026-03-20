@@ -20,6 +20,8 @@ const io = new Server(server, {
   cors: { origin: '*' },
 });
 
+module.exports = { app, server, io };
+
 const PORT = process.env.PORT || 3000;
 
 // Middleware
@@ -250,6 +252,35 @@ function checkRateLimit(socket) {
   return false;
 }
 
+async function setRoomWaitingIfNoPlayersInGame(roomId) {
+  if (!roomId) return false;
+
+  const hasActiveInGamePlayer = [...onlineUsers.entries()].some(([socketId, user]) => {
+    if (user?.status !== 'in_game') return false;
+    const sock = io.sockets.sockets.get(socketId);
+    return sock && String(sock.data.roomId) === String(roomId);
+  });
+
+  if (hasActiveInGamePlayer) return false;
+
+  if (dbForMigration) {
+    try {
+      await dbForMigration.query(
+        "UPDATE rooms SET status='waiting' WHERE id=$1 AND status='playing'",
+        [roomId]
+      );
+    } catch (e) {
+      console.error('[RoomStatusFallback]', e.message);
+    }
+  }
+
+  const memRoom = roomRoutes.memRooms.get(String(roomId));
+  if (memRoom && memRoom.status === 'playing') memRoom.status = 'waiting';
+
+  io.emit('rooms:updated');
+  return true;
+}
+
 // ── Socket.io — Чат & өрөөний event ─────────────────────
 // roomId → Map<username, userId>
 const roomMembers = {};
@@ -287,6 +318,18 @@ io.use((socket, next) => {
     next(new Error('Invalid token'));
   }
 });
+
+async function ensureRoomMembership(socket, roomId) {
+  if (!roomId || !socket.user?.id) return false;
+
+  const allowed = await roomRoutes.isUserInRoom(socket.user.id, roomId);
+  if (!allowed) {
+    socket.emit('room:error', { roomId: String(roomId), error: 'Room access denied' });
+    return false;
+  }
+
+  return true;
+}
 
 io.on('connection', (socket) => {
   console.log(`[Socket] холбогдлоо: ${socket.id} (${socket.user?.username})`);
@@ -332,7 +375,7 @@ io.on('connection', (socket) => {
     const userId   = String(socket.user.id);
     const username = socket.user.username;
     // Хүлээн авагч илгээгчийг хаасан эсэх шалгах
-    if (socialRoutes.isUserBlocked(String(toUserId), userId)) return;
+    if (await socialRoutes.isUserBlocked(String(toUserId), userId)) return;
     const safeText = escapeHtml(text.trim());
     // DB-д хадгалах
     const saved = await socialRoutes.saveMessage(socket.user.id, toUserId, safeText);
@@ -352,9 +395,10 @@ io.on('connection', (socket) => {
   });
 
   // Өрөөнд нэгдэх
-  socket.on('room:join', ({ roomId }) => {
+  socket.on('room:join', async ({ roomId }) => {
     const username = socket.user.username;
     const userId   = String(socket.user.id);
+    if (!await ensureRoomMembership(socket, roomId)) return;
 
     // ── Хуучин өрөөнөөс бүрэн гарах (room isolation) ──
     const prevRoom = socket.data.roomId;
@@ -430,9 +474,11 @@ io.on('connection', (socket) => {
   });
 
   // Өрөөний чат мессеж
-  socket.on('chat:message', ({ roomId, text }) => {
+  socket.on('chat:message', async ({ roomId, text }) => {
     if (!text?.trim() || !roomId) return;
     if (checkRateLimit(socket)) return;
+    if (String(socket.data.roomId) !== String(roomId)) return;
+    if (!await ensureRoomMembership(socket, roomId)) return;
     const msg = {
       userId: socket.user.id,
       username: socket.user.username,
@@ -472,11 +518,12 @@ io.on('connection', (socket) => {
   });
 
   // Host-ын IP хаягийг өрөөний тоглогчдод дамжуулах
-  socket.on('room:host_ip', ({ roomId, ip }) => {
+  socket.on('room:host_ip', async ({ roomId, ip }) => {
     if (!ip || !roomId) return;
     // Socket тухайн өрөөнд байгаа эсэх шалгах (room isolation)
     if (String(socket.data.roomId) !== String(roomId)) return;
     // Зөвхөн тухайн өрөөнд байгаа тоглогчдод broadcast
+    if (!await ensureRoomMembership(socket, roomId)) return;
     socket.to(String(roomId)).emit('room:host_ip', {
       ip,
       hostUsername: socket.user.username,
@@ -485,8 +532,14 @@ io.on('connection', (socket) => {
   });
 
   // ZeroTier node-г автоматаар authorize хийх
-  socket.on('zt:authorize', async ({ nodeId, networkId }) => {
+  socket.on('zt:authorize', async ({ nodeId, networkId, roomId }) => {
     if (!nodeId || !networkId) return;
+    if (!roomId) { socket.emit('zt:authorize_result', { ok: false, error: 'room-required' }); return; }
+    if (String(socket.data.roomId) !== String(roomId)) { socket.emit('zt:authorize_result', { ok: false, error: 'room-mismatch' }); return; }
+    if (!await ensureRoomMembership(socket, roomId)) {
+      socket.emit('zt:authorize_result', { ok: false, error: 'room-access-denied' });
+      return;
+    }
     const token = process.env.ZEROTIER_API_TOKEN;
     if (!token) { socket.emit('zt:authorize_result', { ok: false, error: 'no-api-token' }); return; }
     try {
@@ -505,12 +558,13 @@ io.on('connection', (socket) => {
   });
 
   // Тоглогчийн ZeroTier IP бүртгэх — relay-д хэрэгтэй
-  socket.on('room:zt_ip', ({ roomId, ip }) => {
+  socket.on('room:zt_ip', async ({ roomId, ip }) => {
     if (!ip || !roomId) return;
     if (checkRateLimit(socket)) return;
     // Socket тухайн өрөөнд байгаа эсэх шалгах (room isolation)
     if (String(socket.data.roomId) !== String(roomId)) return;
     // IP формат шалгах (IPv4 only)
+    if (!await ensureRoomMembership(socket, roomId)) return;
     if (!/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(ip)) return;
     const userId = String(socket.user.id);
     if (!roomZtIps[roomId]) roomZtIps[roomId] = new Map();
@@ -523,8 +577,9 @@ io.on('connection', (socket) => {
   });
 
   // Тоглогчийн бэлэн/бэлэн биш төлөв
-  socket.on('room:ready', ({ roomId, ready }) => {
+  socket.on('room:ready', async ({ roomId, ready }) => {
     if (!roomId || String(socket.data.roomId) !== String(roomId)) return;
+    if (!await ensureRoomMembership(socket, roomId)) return;
     const userId = String(socket.user.id);
     if (!roomReady[roomId]) roomReady[roomId] = new Set();
     if (ready) roomReady[roomId].add(userId);
@@ -533,18 +588,20 @@ io.on('connection', (socket) => {
   });
 
   // Host relay-д зориулсан тоглогчдын IP жагсаалт авах
-  socket.on('room:get_zt_ips', ({ roomId }) => {
+  socket.on('room:get_zt_ips', async ({ roomId }) => {
     if (!roomId) return;
     // Socket тухайн өрөөнд байгаа эсэх шалгах (room isolation)
     if (String(socket.data.roomId) !== String(roomId)) return;
+    if (!await ensureRoomMembership(socket, roomId)) return;
     const ips = roomZtIps[roomId] ? Object.fromEntries(roomZtIps[roomId]) : {};
     socket.emit('room:zt_ips', { ips });
   });
 
   // Host тоглогчид ZT IP refresh хүсэлт илгээх
-  socket.on('room:refresh_zt', ({ roomId, targetUserId }) => {
+  socket.on('room:refresh_zt', async ({ roomId, targetUserId }) => {
     if (!roomId || !targetUserId) return;
     if (String(socket.data.roomId) !== String(roomId)) return;
+    if (!await ensureRoomMembership(socket, roomId)) return;
     io.to(String(roomId)).emit('room:do_refresh_zt', { targetUserId: String(targetUserId) });
   });
 
@@ -591,13 +648,14 @@ io.on('connection', (socket) => {
   });
 
   // Тоглогч (host биш) тоглоом хаагдсан → online статус in_room болгох
-  socket.on('room:game_ended_player', () => {
+  socket.on('room:game_ended_player', async ({ roomId } = {}) => {
     const username = socket.user.username;
     const userId   = String(socket.user.id);
     if (onlineUsers.has(socket.id)) {
       onlineUsers.set(socket.id, { username, userId, status: 'in_room' });
       io.emit('lobby:online_users', [...onlineUsers.values()]);
     }
+    await setRoomWaitingIfNoPlayersInGame(roomId || socket.data.roomId);
   });
 
   // Typing indicator (DM)
@@ -644,6 +702,7 @@ io.on('connection', (socket) => {
       onlineUsers.set(socket.id, { username, userId, status: 'online' });
       io.emit('lobby:online_users', [...onlineUsers.values()]);
     }
+    setRoomWaitingIfNoPlayersInGame(roomId);
   });
 
   // Унтрах үед
@@ -710,6 +769,7 @@ io.on('connection', (socket) => {
         }, REJOIN_GRACE_MS),
       };
       console.log(`[Socket] салгагдлаа: ${socket.id} (${username}) — ${REJOIN_GRACE_MS / 1000}с grace period`);
+      setRoomWaitingIfNoPlayersInGame(roomId);
     } else {
       console.log(`[Socket] салгагдлаа: ${socket.id} (${username})`);
     }
@@ -717,7 +777,7 @@ io.on('connection', (socket) => {
 });
 
 // ── Өрөөний auto-expire (2 цаг тутам) ───────────────────
-setInterval(async () => {
+const autoExpireInterval = setInterval(async () => {
   if (!dbForMigration) return;
   try {
     await dbForMigration.query("DELETE FROM rooms WHERE status='waiting' AND created_at < NOW() - INTERVAL '6 hours'");
@@ -725,6 +785,7 @@ setInterval(async () => {
     console.log('[AutoExpire] Хуучин өрөөнүүдийг цэвэрлэлээ');
   } catch (e) { console.error('[AutoExpire]', e.message); }
 }, 2 * 60 * 60 * 1000);
+if (typeof autoExpireInterval.unref === 'function') autoExpireInterval.unref();
 
 // ─────────────────────────────────────────────────────────
 server.listen(PORT, () => {
