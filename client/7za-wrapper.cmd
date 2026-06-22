@@ -2,7 +2,7 @@
 setlocal
 
 :: Run real 7za with all args
-"D:\Personal files\Personal\New\Personal projects\warcraft\client\node_modules\7zip-bin\win\x64\7za.exe" %*
+"%~dp0node_modules\7zip-bin\win\x64\7za.exe" %*
 set EXIT_CODE=%errorlevel%
 
 :: 7za exit code 2 = "Fatal error" but on Windows without Developer Mode,

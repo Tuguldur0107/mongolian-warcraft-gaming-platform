@@ -13,14 +13,13 @@ const socialRoutes        = require('./routes/social');
 const discordServerRoutes = require('./routes/discord_servers');
 const streamerRoutes      = require('./routes/streamers');
 const { setIO } = roomRoutes;
+const { runMigrations } = require('./db/migrate');
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: { origin: '*' },
 });
-
-module.exports = { app, server, io };
 
 const PORT = process.env.PORT || 3000;
 
@@ -90,125 +89,20 @@ app.get('/config', async (req, res) => {
   res.json({ zerotierNetworkId: networkId });
 });
 
-// ── DB migration: бүх хүснэгтийг автоматаар үүсгэх ──────
 let dbForMigration;
 try { dbForMigration = require('./config/db'); } catch {}
-if (dbForMigration) {
-  // 1. Core tables — users хамгийн эхэнд (бусад нь FK references users)
-  dbForMigration.query(`
-    CREATE TABLE IF NOT EXISTS users (
-      id            SERIAL PRIMARY KEY,
-      discord_id    VARCHAR(255) UNIQUE,
-      username      VARCHAR(255) NOT NULL,
-      email         VARCHAR(255) UNIQUE,
-      password_hash TEXT,
-      avatar_url    TEXT,
-      wins          INTEGER DEFAULT 0,
-      losses        INTEGER DEFAULT 0,
-      created_at    TIMESTAMP DEFAULT NOW()
-    );
-    CREATE INDEX IF NOT EXISTS idx_users_discord_id ON users(discord_id);
-    CREATE INDEX IF NOT EXISTS idx_users_wins       ON users(wins DESC);
-  `).catch(e => console.error('[Migration] users table:', e.message));
+const shouldRunDbMigrations =
+  process.env.SKIP_DB_MIGRATIONS !== 'true'
+  && (process.env.NODE_ENV !== 'test' || process.env.RUN_DB_MIGRATIONS_IN_TESTS === 'true');
 
-  dbForMigration.query(`
-    CREATE TABLE IF NOT EXISTS rooms (
-      id                  SERIAL PRIMARY KEY,
-      name                VARCHAR(255) NOT NULL,
-      host_id             INTEGER REFERENCES users(id) ON DELETE CASCADE,
-      zerotier_network_id VARCHAR(255),
-      max_players         INTEGER DEFAULT 10,
-      status              VARCHAR(50) DEFAULT 'waiting',
-      game_type           VARCHAR(50) DEFAULT 'DotA',
-      has_password        BOOLEAN DEFAULT FALSE,
-      password_hash       TEXT,
-      created_at          TIMESTAMP DEFAULT NOW()
-    );
-    CREATE INDEX IF NOT EXISTS idx_rooms_status ON rooms(status);
-  `).catch(e => console.error('[Migration] rooms table:', e.message));
-
-  dbForMigration.query(`
-    CREATE TABLE IF NOT EXISTS room_players (
-      room_id   INTEGER REFERENCES rooms(id) ON DELETE CASCADE,
-      user_id   INTEGER REFERENCES users(id) ON DELETE CASCADE,
-      team      INTEGER DEFAULT NULL,
-      joined_at TIMESTAMP DEFAULT NOW(),
-      PRIMARY KEY (room_id, user_id)
-    );
-    CREATE INDEX IF NOT EXISTS idx_room_players_user ON room_players(user_id);
-    CREATE INDEX IF NOT EXISTS idx_room_players_room ON room_players(room_id);
-  `).catch(e => console.error('[Migration] room_players table:', e.message));
-
-  dbForMigration.query(`
-    CREATE TABLE IF NOT EXISTS game_results (
-      id               SERIAL PRIMARY KEY,
-      room_id          INTEGER REFERENCES rooms(id) ON DELETE SET NULL,
-      winner_team      INTEGER NOT NULL,
-      duration_minutes INTEGER,
-      replay_path      TEXT,
-      discord_posted   BOOLEAN DEFAULT FALSE,
-      played_at        TIMESTAMP DEFAULT NOW()
-    );
-  `).catch(e => console.error('[Migration] game_results table:', e.message));
-
-  dbForMigration.query(`
-    CREATE TABLE IF NOT EXISTS messages (
-      id          SERIAL PRIMARY KEY,
-      sender_id   INTEGER REFERENCES users(id) ON DELETE CASCADE,
-      receiver_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-      text        TEXT NOT NULL,
-      is_read     BOOLEAN DEFAULT FALSE,
-      created_at  TIMESTAMP DEFAULT NOW()
-    );
-    CREATE INDEX IF NOT EXISTS idx_messages_conversation
-      ON messages(LEAST(sender_id, receiver_id), GREATEST(sender_id, receiver_id), created_at DESC);
-    CREATE INDEX IF NOT EXISTS idx_messages_unread
-      ON messages(receiver_id, is_read) WHERE is_read = FALSE;
-  `).catch(e => console.error('[Migration] messages table:', e.message));
-
-  // 2. Dependent tables (users & game_results байх ёстой)
-  dbForMigration.query(`
-    CREATE TABLE IF NOT EXISTS game_players (
-      id             SERIAL PRIMARY KEY,
-      game_result_id INTEGER REFERENCES game_results(id) ON DELETE CASCADE,
-      user_id        INTEGER REFERENCES users(id) ON DELETE CASCADE,
-      team           INTEGER NOT NULL,
-      is_winner      BOOLEAN NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS idx_game_players_user ON game_players(user_id);
-  `).catch(e => console.error('[Migration] game_players table:', e.message));
-
-  dbForMigration.query(`
-    CREATE TABLE IF NOT EXISTS password_resets (
-      id         SERIAL PRIMARY KEY,
-      user_id    INTEGER REFERENCES users(id) ON DELETE CASCADE,
-      token      VARCHAR(64) UNIQUE NOT NULL,
-      expires_at TIMESTAMP NOT NULL,
-      used       BOOLEAN DEFAULT FALSE,
-      created_at TIMESTAMP DEFAULT NOW()
-    );
-  `).catch(e => console.error('[Migration] password_resets table:', e.message));
-
-  // 3. Column migrations (хэрэв байхгүй бол нэмэх)
-  dbForMigration.query(`
-    DO $$ BEGIN
-      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='room_players' AND column_name='team') THEN
-        ALTER TABLE room_players ADD COLUMN team INTEGER DEFAULT NULL;
-      END IF;
-    END $$
-  `).catch(e => console.error('[Migration] team column:', e.message));
-
-  // 4. rooms description + game_mode columns
-  dbForMigration.query(`
-    DO $$ BEGIN
-      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='rooms' AND column_name='description') THEN
-        ALTER TABLE rooms ADD COLUMN description TEXT DEFAULT '';
-      END IF;
-      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='rooms' AND column_name='game_mode') THEN
-        ALTER TABLE rooms ADD COLUMN game_mode VARCHAR(100) DEFAULT '';
-      END IF;
-    END $$
-  `).catch(e => console.error('[Migration] rooms description/game_mode:', e.message));
+async function runStartupMigrations() {
+  if (!dbForMigration || !shouldRunDbMigrations) return;
+  try {
+    await runMigrations(dbForMigration);
+    console.log('[Migration] Database schema is up to date');
+  } catch (e) {
+    console.error('[Migration]', e.message);
+  }
 }
 
 // Rooms router-т io дамжуулах (kick/close event илгээхэд хэрэг)
@@ -787,7 +681,22 @@ const autoExpireInterval = setInterval(async () => {
 }, 2 * 60 * 60 * 1000);
 if (typeof autoExpireInterval.unref === 'function') autoExpireInterval.unref();
 
-// ─────────────────────────────────────────────────────────
-server.listen(PORT, () => {
-  console.log(`Server http://localhost:${PORT} дээр ажиллаж байна`);
-});
+async function start(port = PORT) {
+  if (server.listening) return server;
+  await runStartupMigrations();
+  return new Promise((resolve) => {
+    server.listen(port, () => {
+      console.log(`Server http://localhost:${port} дээр ажиллаж байна`);
+      resolve(server);
+    });
+  });
+}
+
+if (require.main === module) {
+  start().catch((error) => {
+    console.error('[Startup]', error);
+    process.exit(1);
+  });
+}
+
+module.exports = { app, server, io, start, runStartupMigrations };

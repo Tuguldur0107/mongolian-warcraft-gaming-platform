@@ -81,3 +81,36 @@ CREATE INDEX IF NOT EXISTS idx_messages_conversation
   ON messages(LEAST(sender_id, receiver_id), GREATEST(sender_id, receiver_id), created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_messages_unread
   ON messages(receiver_id, is_read) WHERE is_read = FALSE;
+
+-- Friend requests and accepted friendships
+CREATE TABLE IF NOT EXISTS friendships (
+  id           SERIAL PRIMARY KEY,
+  requester_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  receiver_id  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  status       VARCHAR(20) DEFAULT 'pending',
+  created_at   TIMESTAMP DEFAULT NOW(),
+  UNIQUE(requester_id, receiver_id)
+);
+CREATE INDEX IF NOT EXISTS idx_friendships_requester ON friendships(requester_id);
+CREATE INDEX IF NOT EXISTS idx_friendships_receiver  ON friendships(receiver_id);
+
+-- User block list
+CREATE TABLE IF NOT EXISTS blocked_users (
+  id              SERIAL PRIMARY KEY,
+  user_id          INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  blocked_user_id  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at       TIMESTAMP DEFAULT NOW(),
+  UNIQUE(user_id, blocked_user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_blocked_users_user ON blocked_users(user_id);
+
+-- Password reset tokens store SHA-256 token hashes, not raw reset tokens
+CREATE TABLE IF NOT EXISTS password_resets (
+  id         SERIAL PRIMARY KEY,
+  user_id    INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  token      VARCHAR(64) UNIQUE NOT NULL,
+  expires_at TIMESTAMP NOT NULL,
+  used       BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_password_resets_token ON password_resets(token);

@@ -2,7 +2,7 @@ const assert = require('node:assert/strict');
 const path = require('node:path');
 const jwt = require('jsonwebtoken');
 
-const serverDir = 'D:\\Personal files\\Personal\\New\\Personal projects\\warcraft\\server';
+const serverDir = path.resolve(__dirname, '..');
 const serverIndexPath = path.join(serverDir, 'src', 'index.js');
 const dbModulePath = path.join(serverDir, 'src', 'config', 'db.js');
 
@@ -49,6 +49,7 @@ async function startServer(envOverrides = {}, options = {}) {
     PORT: String(port),
     JWT_SECRET: 'test-secret',
     NODE_ENV: 'test',
+    SKIP_DB_MIGRATIONS: 'true',
     DISCORD_CLIENT_ID: 'dummy-client',
     DISCORD_CLIENT_SECRET: 'dummy-secret',
     DISCORD_REDIRECT_URI: 'http://localhost/callback',
@@ -63,6 +64,7 @@ async function startServer(envOverrides = {}, options = {}) {
   clearServerModules();
   if (options.mockDb) installMockDb(options.mockDb);
   const serverModule = require(serverIndexPath);
+  await serverModule.start(port);
   await waitForServer(`http://127.0.0.1:${port}/`);
 
   return {

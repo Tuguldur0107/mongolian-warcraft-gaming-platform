@@ -85,8 +85,6 @@ async function initTables() {
   }
 }
 
-initTables();
-
 function setIO(io) {
   _io = io;
 }
