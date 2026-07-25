@@ -102,11 +102,12 @@
         <div class="login-divider"><span>эсвэл</span></div>
         <button type="button" id="btn-login" class="btn btn-discord btn-block">Discord-ээр нэвтрэх</button>
         <div class="qr-section">
-          <p class="qr-label">Утасны Discord апп-аар скан хийж нэвтрэх</p>
+          <p class="qr-label">Утасны камераар QR уншуулж нэвтрэх</p>
           <div class="qr-box">
             <img id="qr-img" src="" alt="QR" />
             <div id="qr-loading" class="qr-loading">Ачааллаж байна...</div>
           </div>
+          <p class="qr-hint">📱 Утасны камер эсвэл QR скан апп ашиглана уу — холбоос нээгдээд Discord-оор баталгаажуулна. (Discord апп доторх QR scanner ажиллахгүй)</p>
           <button type="button" id="btn-refresh-qr" class="btn btn-sm btn-with-icon mt-8">
             <svg class="btn-icon-svg"><use href="#ico-refresh"/></svg>
             Шинэчлэх
@@ -514,6 +515,7 @@
         <h3 class="mb-8">Шинэ Discord сервер нэмэх</h3>
         <input id="ds-name"        type="text" placeholder="Серверийн нэр"           class="input" />
         <input id="ds-invite-url"  type="url"  placeholder="https://discord.gg/..."  class="input" />
+        <p class="meta hint" style="margin:4px 0 8px">💡 Discord дээр урилга үүсгэхдээ "Expire after: <b>Never</b>" сонгоно уу — энгийн урилга 7 хоногт дуусдаг тул хүлээж авахгүй.</p>
         <input id="ds-description" type="text" placeholder="Тайлбар (заавал биш)"    class="input" />
         <p id="ds-form-error" class="form-error"></p>
         <div class="form-actions mt-8">

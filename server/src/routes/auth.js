@@ -302,11 +302,12 @@ router.get('/discord/callback', async (req, res) => {
 
     if (qrState) {
       pendingTokens.set(qrState, jwtToken);
-      setTimeout(() => pendingTokens.delete(qrState), 5 * 60 * 1000);
+      // Client 10 минут polling хийдэг — TTL-ийг үүнтэй ижил байлгана
+      setTimeout(() => pendingTokens.delete(qrState), 10 * 60 * 1000);
       return res.send(`<!DOCTYPE html>
-<html><head><meta charset="UTF-8"><title>Login Complete</title>
-<style>body{font-family:sans-serif;background:#0d0d1a;color:#e0e0e0;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;flex-direction:column;gap:12px}h2{color:#43b581}p{color:#a0a0b0}</style>
-</head><body><h2>Login complete</h2><p>Return to the app to continue.</p></body></html>`);
+<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Нэвтрэлт амжилттай</title>
+<style>body{font-family:sans-serif;background:#0d0d1a;color:#e0e0e0;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;flex-direction:column;gap:12px;text-align:center;padding:20px}h2{color:#43b581}p{color:#a0a0b0}</style>
+</head><body><div style="font-size:48px">✅</div><h2>Нэвтрэлт амжилттай!</h2><p>Компьютер дээрх апп руугаа буцна уу — хэдхэн секундэд автоматаар нэвтэрнэ.</p></body></html>`);
     }
 
     return res.redirect(`wc3platform://auth?token=${jwtToken}`);

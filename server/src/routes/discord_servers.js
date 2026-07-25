@@ -30,7 +30,7 @@ async function fetchInviteMeta(inviteCode) {
   if (cached && Date.now() - cached.ts < CACHE_TTL) return cached.data;
   try {
     const res = await fetch(
-      `https://discord.com/api/v10/invites/${encodeURIComponent(inviteCode)}?with_counts=true`
+      `https://discord.com/api/v10/invites/${encodeURIComponent(inviteCode)}?with_counts=true&with_expiration=true`
     );
     if (!res.ok) return null;
     const json = await res.json();
@@ -42,12 +42,28 @@ async function fetchInviteMeta(inviteCode) {
       guild_icon: guild.icon,
       member_count: json.approximate_member_count || 0,
       presence_count: json.approximate_presence_count || 0,
+      // null = байнгын урилга; огноотой бол түр урилга (7 хоногийн дараа үхдэг)
+      expires_at: json.expires_at || null,
     };
     inviteCache.set(`invite:${inviteCode}`, { data, ts: Date.now() });
     return data;
   } catch {
     return null;
   }
+}
+
+// Урилга байнгын (never expire) эсэхийг шалгаад алдааны мессеж буцаана.
+// Discord-ын анхдагч урилга 7 хоногт дуусдаг тул хугацаатай урилга нэмбэл
+// хэсэг хугацааны дараа "хүчингүй" болж таб эвдэрсэн мэт харагддаг.
+function validatePermanentInvite(meta) {
+  if (!meta) {
+    return 'Урилгын холбоос хүчингүй эсвэл хугацаа нь дууссан байна. Discord дээр шинэ урилга үүсгэж оруулна уу.';
+  }
+  if (meta.expires_at) {
+    const exp = new Date(meta.expires_at).toISOString().slice(0, 10);
+    return `Энэ урилга түр хугацааных (${exp} хүртэл). Discord дээр урилга үүсгэхдээ "Expire after: Never" (Хэзээ ч дуусахгүй) сонгож байнгын холбоос оруулна уу.`;
+  }
+  return null;
 }
 
 // Widget API — guild_id-аар instant_invite + voice channel тоо авах
@@ -191,9 +207,11 @@ router.post('/', authMW, async (req, res) => {
   const safeName = name.trim().slice(0, 100);
   const safeUrl  = invite_url.trim();
 
-  // Invite metadata татаж guild_id авах
+  // Invite metadata татаж guild_id авах + байнгын урилга мөн эсэхийг шалгах
   const inviteCode = extractInviteCode(safeUrl);
   const meta = await fetchInviteMeta(inviteCode);
+  const inviteError = validatePermanentInvite(meta);
+  if (inviteError) return res.status(400).json({ error: inviteError });
   const guildId   = meta?.guild_id || null;
   const guildIcon = meta?.guild_icon || null;
 
@@ -245,6 +263,14 @@ router.patch('/:id', authMW, async (req, res) => {
   const safeUrl  = invite_url?.trim();
   const desc     = description?.trim().slice(0, 200) ?? undefined;
 
+  // Шинэ урилга өгсөн бол байнгын (never expire) эсэхийг шалгана
+  let newMeta = null;
+  if (safeUrl !== undefined) {
+    newMeta = await fetchInviteMeta(extractInviteCode(safeUrl));
+    const inviteError = validatePermanentInvite(newMeta);
+    if (inviteError) return res.status(400).json({ error: inviteError });
+  }
+
   if (await dbOk()) {
     try {
       const { rows: existing } = await db.query('SELECT added_by_id FROM discord_servers WHERE id=$1', [id]);
@@ -267,12 +293,9 @@ router.patch('/:id', authMW, async (req, res) => {
       if (safeUrl  !== undefined) { fields.push(`invite_url=$${idx++}`);  vals.push(safeUrl); }
       if (desc     !== undefined) { fields.push(`description=$${idx++}`); vals.push(desc); }
       // Invite URL өөрчлөгдвөл guild_id/icon шинэчлэх
-      if (safeUrl) {
-        const newMeta = await fetchInviteMeta(extractInviteCode(safeUrl));
-        if (newMeta) {
-          fields.push(`guild_id=$${idx++}`);   vals.push(newMeta.guild_id);
-          fields.push(`guild_icon=$${idx++}`);  vals.push(newMeta.guild_icon);
-        }
+      if (newMeta) {
+        fields.push(`guild_id=$${idx++}`);   vals.push(newMeta.guild_id);
+        fields.push(`guild_icon=$${idx++}`);  vals.push(newMeta.guild_icon);
       }
       if (!fields.length) return res.status(400).json({ error: 'Өөрчлөх утга байхгүй' });
 

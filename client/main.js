@@ -36,6 +36,14 @@ let mainWindow;
 let roomWindow = null;
 const dmWindows = new Map(); // userId -> BrowserWindow
 
+// Event-ийг бүх цонх руу илгээх — өрөөний цонх тусдаа BrowserWindow тул
+// зөвхөн mainWindow руу илгээвэл өрөөний logic (currentRoom) хүлээж авдаггүй
+function broadcastToWindows(channel, data) {
+  BrowserWindow.getAllWindows().forEach((win) => {
+    if (!win.isDestroyed()) win.webContents.send(channel, data);
+  });
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1000,
@@ -240,34 +248,42 @@ ipcMain.handle('auth:login', () => {
 });
 
 // QR кодны data URL үүсгэх + polling эхлүүлэх
+let _qrPollInterval = null;
 ipcMain.handle('auth:qr', async () => {
   try {
-    const sessionId = Math.random().toString(36).slice(2) + Date.now().toString(36);
+    // Таамаглагдахгүй session ID (token хулгайлахаас хамгаална)
+    const sessionId = require('crypto').randomBytes(16).toString('hex');
     const url = `${apiService.SERVER_URL}/auth/discord?state=${sessionId}`;
 
     console.log('[QR] Үүсгэж байна:', url);
 
+    // Стандарт бараан-код-цагаан-дэвсгэр QR — урвуу өнгөтэй QR-ийг
+    // утасны камер болон скан аппууд таньдаггүй!
     const dataUrl = await QRCode.toDataURL(url, {
       width: 240,
       margin: 2,
-      color: { dark: '#ffffff', light: '#16213e' },
+      color: { dark: '#16213e', light: '#ffffff' },
     });
 
     console.log('[QR] Амжилттай үүсгэлээ');
 
-    // QR скан хийгдэх хүртэл polling хийнэ (3 минут)
+    // Өмнөх polling давхардахгүй — QR шинэчлэх бүрд хуучныг зогсооно
+    if (_qrPollInterval) { clearInterval(_qrPollInterval); _qrPollInterval = null; }
+
+    // QR скан хийгдэх хүртэл polling хийнэ (10 минут — серверийн token TTL-тэй ижил)
     const axios = require('axios');
     let attempts = 0;
-    const poll = setInterval(async () => {
+    _qrPollInterval = setInterval(async () => {
       attempts++;
-      if (attempts > 60) { clearInterval(poll); return; }
+      if (attempts > 200) { clearInterval(_qrPollInterval); _qrPollInterval = null; return; }
       try {
         const { data } = await axios.get(
           `${apiService.SERVER_URL}/auth/poll/${sessionId}`,
           { timeout: 2000 }
         );
         if (data.token) {
-          clearInterval(poll);
+          clearInterval(_qrPollInterval);
+          _qrPollInterval = null;
           authService.saveToken(data.token);
           fetchAndSaveUser().then(() => {
             mainWindow?.webContents.send('auth:success', authService.getUser());
@@ -528,8 +544,10 @@ ipcMain.handle('auth:unlinkDiscord', async () => {
 });
 
 // Replay watcher — тоглоом дуусахад renderer руу мэдэгдэх
+// Өрөөний цонх нээлттэй бол түүнд (хэрэглэгч тэнд байгаа), үгүй бол main цонхонд
 replayService.onResult((data) => {
-  mainWindow?.webContents.send('game:result', data);
+  const target = (roomWindow && !roomWindow.isDestroyed()) ? roomWindow : mainWindow;
+  target?.webContents.send('game:result', data);
 });
 
 // Өрөөний гишүүдийг replay service-д дамжуулах (player matching)
@@ -678,6 +696,23 @@ ipcMain.handle('room:openWindow', (event, roomData) => {
       status:  roomData.status || '',
       ztNetId: roomData.zerotierNetworkId || '',
     },
+  });
+  // Тоглолт явагдаж байхад санамсаргүй хаахаас сэргийлнэ — цонх хаагдвал
+  // өрөөнөөс гарч (host бол өрөө устаж), relay зогсож холболт тасарна
+  roomWindow.on('close', (e) => {
+    if (!_gameProc) return;
+    const choice = dialog.showMessageBoxSync(roomWindow, {
+      type: 'warning',
+      buttons: ['Хаах', 'Болих'],
+      defaultId: 1,
+      cancelId: 1,
+      title: 'Тоглолт явагдаж байна',
+      message: 'WC3 тоглолт ажиллаж байна!',
+      detail: roomData.isHost
+        ? 'Өрөөний цонхыг хаавал өрөө хаагдаж, бүх тоглогчийн холболт тасарна.'
+        : 'Өрөөний цонхыг хаавал өрөөнөөс гарч, тоглоомын холболт тасарна.',
+    });
+    if (choice !== 0) e.preventDefault();
   });
   roomWindow.on('closed', () => {
     roomWindow = null;
@@ -923,10 +958,10 @@ ipcMain.handle('game:launch', (_, gameType) => {
   const proc = spawn(game.path, [], { detached: false, stdio: 'ignore' });
   _gameProc = proc;
 
-  // WC3 хаагдахад renderer-т мэдэгдэнэ
+  // WC3 хаагдахад renderer-т мэдэгдэнэ (өрөөний цонх currentRoom-той тул бүх цонх руу)
   proc.on('exit', () => {
     _gameProc = null;
-    mainWindow?.webContents.send('game:exited');
+    broadcastToWindows('game:exited');
   });
 
   return true;

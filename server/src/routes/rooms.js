@@ -62,9 +62,20 @@ async function ztDeleteNetwork(networkId) {
 const memRooms = new Map();
 let memNextId = 1;
 let _io = null;
+// index.js-ээс өгөгдөнө — өрөө устгагдахад socket талын in-memory
+// төлөвийг (чат түүх, ZT IP, ready, гишүүд) цэвэрлэнэ
+let _cleanupRoom = null;
 
 function setIO(io) {
   _io = io;
+}
+
+function setRoomCleanup(fn) {
+  _cleanupRoom = fn;
+}
+
+function cleanupRoom(roomId) {
+  if (_cleanupRoom) _cleanupRoom(String(roomId));
 }
 
 function emitRoomsUpdated() {
@@ -259,6 +270,7 @@ router.post('/:id/join', strictAuth, async (req, res) => {
         if (String(oldRoom.rows[0]?.host_id) === String(userId)) {
           await db.query('DELETE FROM rooms WHERE id = $1', [oldId]);
           if (_io) _io.to(String(oldId)).emit('room:closed', { reason: 'Host left the room' });
+          cleanupRoom(oldId);
           if (oldRoom.rows[0]?.zerotier_network_id && !process.env.ZEROTIER_DEFAULT_NETWORK) {
             await ztDeleteNetwork(oldRoom.rows[0].zerotier_network_id);
           }
@@ -318,6 +330,7 @@ router.post('/:id/leave', strictAuth, async (req, res) => {
       if (result.rows[0] && String(result.rows[0].host_id) === String(userId)) {
         await db.query('DELETE FROM rooms WHERE id = $1', [id]);
         if (_io) _io.to(id).emit('room:closed', { reason: 'Host left the room' });
+        cleanupRoom(id);
         if (result.rows[0].zerotier_network_id && !process.env.ZEROTIER_DEFAULT_NETWORK) {
           await ztDeleteNetwork(result.rows[0].zerotier_network_id);
         }
@@ -359,6 +372,7 @@ router.delete('/:id', strictAuth, async (req, res) => {
 
       await db.query('DELETE FROM rooms WHERE id = $1', [id]);
       if (_io) _io.to(id).emit('room:closed', { reason: 'Host closed the room' });
+      cleanupRoom(id);
       if (result.rows[0].zerotier_network_id && !process.env.ZEROTIER_DEFAULT_NETWORK) {
         await ztDeleteNetwork(result.rows[0].zerotier_network_id);
       }
@@ -682,5 +696,6 @@ async function isUserInRoom(userId, roomId) {
 
 module.exports = router;
 module.exports.setIO = setIO;
+module.exports.setRoomCleanup = setRoomCleanup;
 module.exports.memRooms = memRooms;
 module.exports.isUserInRoom = isUserInRoom;

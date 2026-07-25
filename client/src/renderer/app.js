@@ -4,6 +4,9 @@ const SERVER = 'https://mongolian-warcraft-gaming-platform-production.up.railway
 let socket = null;
 let currentRoom = null;
 let currentUser = null;
+// WC3 энэ цонхноос нээгдэж одоо ажиллаж байгаа эсэх —
+// reconnect үед in_game статусыг серверт сэргээхэд ашиглана
+let _gameRunning = false;
 // Өрөөний мэдээлэл кэш (roomCard onclick-д ашиглана)
 let roomsCache = {}; // id → room object
 
@@ -136,6 +139,9 @@ async function connectSocket() {
       if (currentRoom) {
         console.log(`[Rejoin] Дахин холбогдлоо, өрөө ${currentRoom.id} руу дахин нэгдэж байна`);
         socket.emit('room:join', { roomId: currentRoom.id });
+        // WC3 ажилласаар байвал in_game статусыг сэргээх — үгүй бол сервер
+        // тоглолт дуусаагүй байхад өрөөг waiting болгож магадгүй
+        if (_gameRunning) socket.emit('room:game_started');
       }
     }
   });
@@ -354,13 +360,16 @@ async function connectSocket() {
     playSound('gameStart');
     showDesktopNotif('▶ Тоглолт эхэллээ!', `${currentRoom?.name || 'Өрөө'} — WC3 нээж байна...`);
     appendSysMsg('▶ Тоглолт эхэллээ! WC3 нээж байна...');
-    socket.emit('room:game_started');
     // "Дахин нэвтрэх" товчийг харуулах
     const launchBtn = document.getElementById('btn-launch-wc3');
     if (launchBtn) launchBtn.style.display = '';
     setLaunchBtnRejoin();
     try {
       await window.api.launchGame(currentRoom?.gameType || '');
+      // Зөвхөн WC3 амжилттай нээгдсэний ДАРАА in_game болгоно —
+      // үгүй бол launch fail болоход 'in_game' гэж гацна
+      _gameRunning = true;
+      socket.emit('room:game_started');
       appendSysMsg('✓ Тоглоом нээгдлээ. Тоглоом хайж байна...');
     } catch (err) {
       appendSysMsg(`⚠️ WC3 нээхэд алдаа: ${err.message}`);
@@ -425,6 +434,7 @@ async function connectSocket() {
   // WC3 хаагдсан
   let _hostKilledGame = false; // host хаасан учир game:exited давхар харуулахгүй
   window.api.onGameExited(async () => {
+    _gameRunning = false;
     if (!currentRoom) return;
     if (currentRoom.isHost) {
       if (socket) socket.emit('room:game_ended_player', { roomId: currentRoom.id });
@@ -455,6 +465,7 @@ async function connectSocket() {
     if (_hostEndedHandled) return; // давхар event-ээс хамгаалах
     _hostEndedHandled = true;
     _hostKilledGame = true; // game:exited давхар handler-г зогсоох
+    _gameRunning = false;
     appendSysMsg('⚠ Host тоглоомыг хаалаа. Таны WC3 хаагдаж байна...');
     showToast('Host тоглоомыг хаалаа', 'warning', 5000);
     // WC3 kill + relay зогсоох
@@ -551,6 +562,9 @@ async function init() {
     if (!user) { window.close(); return; }
     currentUser = user;
     connectSocket();
+
+    // Тоглолтын үр дүн (replay watcher) — өрөөний цонхонд харуулна
+    window.api.onGameResult((data) => showGameResult(data));
 
     const p       = new URLSearchParams(window.location.search);
     const id      = p.get('roomId');
@@ -1384,12 +1398,15 @@ document.getElementById('btn-launch-wc3').onclick = async () => {
 
   try {
     await window.api.launchGame(gameType);
+    _gameRunning = true;
+    // Бүх launch зам дээр (host, тоглогч, дахин нэвтрэх) in_game статус илгээнэ —
+    // үгүй бол rejoin хийсэн тоглогчийг сервер мөрдөж чадахгүй
+    if (socket) socket.emit('room:game_started');
     appendSysMsg('✓ Тоглоом нээгдлээ. LAN горим сонгоно уу.');
     if (!isRejoin && currentRoom?.isHost) {
       try {
         await window.api.startRoom(currentRoom.id);
         appendSysMsg('▶ Тоглолт эхэллээ!');
-        if (socket) socket.emit('room:game_started');
         setLaunchBtnRejoin();
         try {
           const ip = await window.api.getZerotierIp();
@@ -3822,7 +3839,7 @@ async function loadDiscordServers() {
         ? `<span class="discord-meta-counts"><span class="discord-members">👥 ${m.member_count.toLocaleString()} гишүүн</span><span class="discord-online">🟢 ${m.presence_count.toLocaleString()} онлайн</span>${voiceHtml}</span>`
         : '';
       const expiredHtml = expired
-        ? `<p class="discord-expired-warning">⚠️ Урилга холбоос хүчингүй болсон${isOwn ? ' — Засах товч дарж шинэ холбоос оруулна уу' : ''}</p>`
+        ? `<p class="discord-expired-warning">⚠️ Урилгын хугацаа дууссан${isOwn ? ' — "Засах" дарж Discord-ын байнгын (Expire after: Never) урилга оруулна уу' : ''}</p>`
         : '';
       return `
         <div class="room-card discord-server-card${expired ? ' discord-expired' : ''}">

@@ -23,6 +23,11 @@ const io = new Server(server, {
 
 const PORT = process.env.PORT || 3000;
 
+// Railway/reverse proxy-ийн ард ажилладаг тул жинхэнэ client IP-г
+// X-Forwarded-For-оос авна — үгүй бол rate limiter бүх хэрэглэгчийг
+// proxy-ийн ганц IP гэж үзээд нийтэд нь хязгаарлана
+app.set('trust proxy', 1);
+
 // Middleware
 app.use(cors({ origin: process.env.CLIENT_URL || '*' }));
 app.use(express.json({ limit: '5mb' }));
@@ -107,17 +112,13 @@ async function runStartupMigrations() {
 
 // Rooms router-т io дамжуулах (kick/close event илгээхэд хэрэг)
 setIO(io);
+// REST-ээр өрөө устгагдахад socket талын in-memory төлөвийг цэвэрлэх
+roomRoutes.setRoomCleanup((roomId) => cleanupRoomState(roomId));
 // Social router-т io дамжуулах (friend request мэдэгдэлд хэрэг)
 socialRoutes.setIO(io);
 
-// ── XSS хамгаалалт ───────────────────────────────────────
-function escapeHtml(str) {
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
+// XSS хамгаалалт: escape-ыг client render үед хийдэг (escHtml) —
+// энд давхар escape хийвэл хэрэглэгчид "&lt;" гэх мэт зүйл харагдана
 
 // ── Socket rate limiting ──────────────────────────────────
 function checkRateLimit(socket) {
@@ -146,16 +147,27 @@ function checkRateLimit(socket) {
   return false;
 }
 
-async function setRoomWaitingIfNoPlayersInGame(roomId) {
-  if (!roomId) return false;
-
-  const hasActiveInGamePlayer = [...onlineUsers.entries()].some(([socketId, user]) => {
+// Тухайн өрөөнд in_game статустай идэвхтэй socket байгаа эсэх
+function roomHasInGamePlayer(roomId) {
+  return [...onlineUsers.entries()].some(([socketId, user]) => {
     if (user?.status !== 'in_game') return false;
     const sock = io.sockets.sockets.get(socketId);
     return sock && String(sock.data.roomId) === String(roomId);
   });
+}
 
-  if (hasActiveInGamePlayer) return false;
+// Өрөөний in-memory төлөвийг бүрэн цэвэрлэх (устгагдсан өрөөнд)
+function cleanupRoomState(roomId) {
+  const id = String(roomId);
+  delete roomMessages[id];
+  delete roomZtIps[id];
+  delete roomReady[id];
+  delete roomMembers[id];
+}
+
+async function setRoomWaitingIfNoPlayersInGame(roomId) {
+  if (!roomId) return false;
+  if (roomHasInGamePlayer(roomId)) return false;
 
   if (dbForMigration) {
     try {
@@ -186,6 +198,20 @@ function membersArray(roomId) {
 }
 // socketId → { username, userId, status } (лобби дахь онлайн тоглогчид)
 const onlineUsers = new Map();
+// Нэг хэрэглэгч олон цонхноос (main, өрөө, DM, найзууд) тус тусдаа socket-оор
+// холбогддог тул userId-гаар нэгтгэж, хамгийн идэвхтэй статусыг нь харуулна —
+// үгүй бол лоббид нэг хүн 2-3 удаа давхардаж харагдана
+const STATUS_PRIORITY = { in_game: 3, in_room: 2, online: 1 };
+function onlineUsersList() {
+  const byUser = new Map();
+  for (const user of onlineUsers.values()) {
+    const prev = byUser.get(user.userId);
+    if (!prev || (STATUS_PRIORITY[user.status] || 0) > (STATUS_PRIORITY[prev.status] || 0)) {
+      byUser.set(user.userId, user);
+    }
+  }
+  return [...byUser.values()];
+}
 // String(userId) → socketId (private мессеж илгээхэд хэрэг)
 const userSockets = new Map();
 // Лобби чатын түүх (сүүлийн 100)
@@ -240,7 +266,7 @@ io.on('connection', (socket) => {
       userSockets.set(userId, socket.id);
       socket.join(`user:${userId}`);
     }
-    io.emit('lobby:online_users', [...onlineUsers.values()]);
+    io.emit('lobby:online_users', onlineUsersList());
     // Лобби чатын сүүлийн 50 мессеж илгээх
     socket.emit('lobby:history', lobbyHistory.slice(-50));
     console.log(`[Socket] ${username} онлайн (нийт: ${onlineUsers.size})`);
@@ -253,7 +279,7 @@ io.on('connection', (socket) => {
     const msg = {
       userId: socket.user.id,
       username: socket.user.username,
-      text: escapeHtml(text.trim().slice(0, 500)),
+      text: text.trim().slice(0, 500),
       time: new Date().toISOString(),
     };
     // Түүхэнд хадгалах
@@ -270,7 +296,7 @@ io.on('connection', (socket) => {
     const username = socket.user.username;
     // Хүлээн авагч илгээгчийг хаасан эсэх шалгах
     if (await socialRoutes.isUserBlocked(String(toUserId), userId)) return;
-    const safeText = escapeHtml(text.trim());
+    const safeText = text.trim().slice(0, 1000);
     // DB-д хадгалах
     const saved = await socialRoutes.saveMessage(socket.user.id, toUserId, safeText);
     const msg = {
@@ -280,10 +306,8 @@ io.on('connection', (socket) => {
       time:         saved?.created_at?.toISOString() || new Date().toISOString(),
       id:           saved?.id || null,
     };
-    const toSocketId = userSockets.get(String(toUserId));
-    if (toSocketId) {
-      io.to(toSocketId).emit('private:message', msg);
-    }
+    // user:<id> room-оор бүх цонх руу илгээнэ (main, DM, өрөөний цонх өөр socket-той)
+    io.to(`user:${String(toUserId)}`).emit('private:message', msg);
     // Илгээгчид баталгаа буцаах
     socket.emit('private:sent', { ...msg, toUserId: String(toUserId) });
   });
@@ -346,7 +370,7 @@ io.on('connection', (socket) => {
     // Онлайн статус шинэчлэх
     if (onlineUsers.has(socket.id)) {
       onlineUsers.set(socket.id, { username, userId, status: 'in_room' });
-      io.emit('lobby:online_users', [...onlineUsers.values()]);
+      io.emit('lobby:online_users', onlineUsersList());
     }
 
     io.to(roomId).emit('room:members', membersArray(roomId));
@@ -356,15 +380,12 @@ io.on('connection', (socket) => {
 
   // Өрөөний урилга
   socket.on('room:invite', ({ toUserId, roomId, roomName }) => {
-    const toSocketId = userSockets.get(String(toUserId));
-    if (toSocketId) {
-      io.to(toSocketId).emit('room:invited', {
-        fromUsername: socket.user.username,
-        fromUserId:   String(socket.user.id),
-        roomId,
-        roomName,
-      });
-    }
+    io.to(`user:${String(toUserId)}`).emit('room:invited', {
+      fromUsername: socket.user.username,
+      fromUserId:   String(socket.user.id),
+      roomId,
+      roomName,
+    });
   });
 
   // Өрөөний чат мессеж
@@ -376,7 +397,7 @@ io.on('connection', (socket) => {
     const msg = {
       userId: socket.user.id,
       username: socket.user.username,
-      text: escapeHtml(text.trim().slice(0, 500)),
+      text: text.trim().slice(0, 500),
       time: new Date().toISOString(),
     };
     // Өрөөний чат түүхэнд хадгалах (max 100)
@@ -505,7 +526,7 @@ io.on('connection', (socket) => {
     const userId   = String(socket.user.id);
     if (onlineUsers.has(socket.id)) {
       onlineUsers.set(socket.id, { username, userId, status: 'in_game' });
-      io.emit('lobby:online_users', [...onlineUsers.values()]);
+      io.emit('lobby:online_users', onlineUsersList());
     }
   });
 
@@ -536,7 +557,7 @@ io.on('connection', (socket) => {
     const username = socket.user.username;
     if (onlineUsers.has(socket.id)) {
       onlineUsers.set(socket.id, { username, userId, status: 'in_room' });
-      io.emit('lobby:online_users', [...onlineUsers.values()]);
+      io.emit('lobby:online_users', onlineUsersList());
     }
     console.log(`[HostGameEnded] ${username} → room ${roomId} waiting`);
   });
@@ -547,24 +568,18 @@ io.on('connection', (socket) => {
     const userId   = String(socket.user.id);
     if (onlineUsers.has(socket.id)) {
       onlineUsers.set(socket.id, { username, userId, status: 'in_room' });
-      io.emit('lobby:online_users', [...onlineUsers.values()]);
+      io.emit('lobby:online_users', onlineUsersList());
     }
     await setRoomWaitingIfNoPlayersInGame(roomId || socket.data.roomId);
   });
 
   // Typing indicator (DM)
   socket.on('typing:start', ({ toUserId }) => {
-    const toSocketId = userSockets.get(String(toUserId));
-    if (toSocketId) {
-      io.to(toSocketId).emit('typing:start', { fromUserId: String(socket.user.id), fromUsername: socket.user.username });
-    }
+    io.to(`user:${String(toUserId)}`).emit('typing:start', { fromUserId: String(socket.user.id), fromUsername: socket.user.username });
   });
 
   socket.on('typing:stop', ({ toUserId }) => {
-    const toSocketId = userSockets.get(String(toUserId));
-    if (toSocketId) {
-      io.to(toSocketId).emit('typing:stop', { fromUserId: String(socket.user.id) });
-    }
+    io.to(`user:${String(toUserId)}`).emit('typing:stop', { fromUserId: String(socket.user.id) });
   });
 
   // Өрөөнөөс гарах
@@ -594,7 +609,7 @@ io.on('connection', (socket) => {
     // Онлайн статус шинэчлэх
     if (onlineUsers.has(socket.id)) {
       onlineUsers.set(socket.id, { username, userId, status: 'online' });
-      io.emit('lobby:online_users', [...onlineUsers.values()]);
+      io.emit('lobby:online_users', onlineUsersList());
     }
     setRoomWaitingIfNoPlayersInGame(roomId);
   });
@@ -605,10 +620,11 @@ io.on('connection', (socket) => {
     const username = socket.user?.username || socket.data.username;
     const userId   = String(socket.user?.id || socket.data.userId || '');
 
-    // Socket mapping-уудыг шууд устгах
+    // Socket mapping-уудыг шууд устгах — userSockets-ыг зөвхөн энэ socket
+    // эзэмшиж байсан бол устгана (өөр цонхны socket idэвхтэй үлдэж болно)
     onlineUsers.delete(socket.id);
-    if (userId) userSockets.delete(userId);
-    io.emit('lobby:online_users', [...onlineUsers.values()]);
+    if (userId && userSockets.get(userId) === socket.id) userSockets.delete(userId);
+    io.emit('lobby:online_users', onlineUsersList());
 
     // Өрөөнд байсан бол grace period эхлүүлэх
     if (roomId && username && roomMembers[roomId]) {
@@ -650,10 +666,7 @@ io.on('connection', (socket) => {
               if (rr.rows[0]) {
                 await dbForMigration.query('DELETE FROM rooms WHERE id=$1', [roomId]);
                 io.to(roomId).emit('room:closed', { reason: 'Өрөөний эзэн гарлаа' });
-                delete roomMessages[roomId];
-                delete roomZtIps[roomId];
-                delete roomReady[roomId];
-                delete roomMembers[roomId];
+                cleanupRoomState(roomId);
                 io.emit('rooms:updated');
                 console.log(`[AutoClose] Host timeout → room ${roomId} хаагдлаа`);
               }
@@ -671,12 +684,55 @@ io.on('connection', (socket) => {
 });
 
 // ── Өрөөний auto-expire (2 цаг тутам) ───────────────────
+// Зөвхөн ИДЭВХГҮЙ өрөөг цэвэрлэнэ: дотор нь холбогдсон гишүүн эсвэл
+// тоглож буй хүн байвал хуучирсан ч хүрэхгүй. Устгахдаа room:closed +
+// rooms:updated мэдэгдэж, in-memory төлөвийг цэвэрлэнэ.
+function roomHasActiveMembers(roomId) {
+  const members = roomMembers[String(roomId)];
+  return !!(members && members.size > 0);
+}
+
 const autoExpireInterval = setInterval(async () => {
   if (!dbForMigration) return;
   try {
-    await dbForMigration.query("DELETE FROM rooms WHERE status='waiting' AND created_at < NOW() - INTERVAL '6 hours'");
-    await dbForMigration.query("UPDATE rooms SET status='done' WHERE status='playing' AND created_at < NOW() - INTERVAL '12 hours'");
-    console.log('[AutoExpire] Хуучин өрөөнүүдийг цэвэрлэлээ');
+    let changed = false;
+
+    // 6+ цаг хүлээж буй өрөө — гишүүнгүй бол устгана
+    const oldWaiting = await dbForMigration.query(
+      "SELECT id FROM rooms WHERE status='waiting' AND created_at < NOW() - INTERVAL '6 hours'"
+    );
+    for (const row of oldWaiting.rows) {
+      if (roomHasActiveMembers(row.id)) continue;
+      await dbForMigration.query('DELETE FROM rooms WHERE id=$1', [row.id]);
+      io.to(String(row.id)).emit('room:closed', { reason: 'Өрөө удаан идэвхгүй байсан тул хаагдлаа' });
+      cleanupRoomState(row.id);
+      changed = true;
+    }
+
+    // 12+ цаг playing өрөө — тоглож буй хүн байвал орхино,
+    // гишүүдтэй бол waiting болгоно, хоосон бол устгана
+    const oldPlaying = await dbForMigration.query(
+      "SELECT id FROM rooms WHERE status='playing' AND created_at < NOW() - INTERVAL '12 hours'"
+    );
+    for (const row of oldPlaying.rows) {
+      if (roomHasInGamePlayer(row.id)) continue;
+      if (roomHasActiveMembers(row.id)) {
+        await dbForMigration.query("UPDATE rooms SET status='waiting' WHERE id=$1", [row.id]);
+      } else {
+        await dbForMigration.query('DELETE FROM rooms WHERE id=$1', [row.id]);
+        io.to(String(row.id)).emit('room:closed', { reason: 'Өрөө удаан идэвхгүй байсан тул хаагдлаа' });
+        cleanupRoomState(row.id);
+      }
+      changed = true;
+    }
+
+    // Хуучин 'done' мөрүүдийг устгах (DB бөглөрөхөөс сэргийлнэ)
+    await dbForMigration.query("DELETE FROM rooms WHERE status='done' AND created_at < NOW() - INTERVAL '7 days'");
+
+    if (changed) {
+      io.emit('rooms:updated');
+      console.log('[AutoExpire] Идэвхгүй өрөөнүүдийг цэвэрлэлээ');
+    }
   } catch (e) { console.error('[AutoExpire]', e.message); }
 }, 2 * 60 * 60 * 1000);
 if (typeof autoExpireInterval.unref === 'function') autoExpireInterval.unref();
