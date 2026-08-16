@@ -110,6 +110,62 @@ router.get('/api/users', adminMW, async (req, res) => {
   }
 });
 
+// ── WarKey desktop апп-ын хэрэглэгчид ──────────────────────────────────────
+// Онлайн = сүүлийн 2 минутад heartbeat илгээсэн (апп нээлттэй).
+router.get('/api/warkey/summary', adminMW, async (req, res) => {
+  if (!(await dbOk())) return res.json({ online: 0, total: 0 });
+  try {
+    const online = await db.query(
+      "SELECT COUNT(*)::int AS c FROM warkey_users WHERE last_seen > NOW() - INTERVAL '2 minutes'"
+    );
+    const total = await db.query('SELECT COUNT(*)::int AS c FROM warkey_users');
+    res.json({ online: online.rows[0].c, total: total.rows[0].c });
+  } catch (e) {
+    console.error('[Admin] warkey summary:', e.message);
+    res.json({ online: 0, total: 0 });
+  }
+});
+
+router.get('/api/warkey/users', adminMW, async (req, res) => {
+  const search = String(req.query.search || '').trim();
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);
+  const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+  const offset = (page - 1) * limit;
+
+  if (!(await dbOk())) return res.status(503).json({ error: 'Service temporarily unavailable' });
+
+  try {
+    const params = [];
+    let where = '';
+    if (search) {
+      params.push(`%${search}%`);
+      where = 'WHERE w.discord_id ILIKE $1 OR w.username ILIKE $1';
+    }
+
+    const totalRes = await db.query(`SELECT COUNT(*)::int AS c FROM warkey_users w ${where}`, params);
+    const rowsRes = await db.query(
+      `SELECT w.discord_id,
+              COALESCE(u.username, w.username) AS username,
+              u.avatar_url,
+              w.version,
+              w.first_seen,
+              w.last_seen,
+              (w.last_seen > NOW() - INTERVAL '2 minutes') AS online
+       FROM warkey_users w
+       LEFT JOIN users u ON u.discord_id = w.discord_id
+       ${where}
+       ORDER BY w.last_seen DESC
+       LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+      [...params, limit, offset]
+    );
+
+    res.json({ total: totalRes.rows[0].c, page, limit, users: rowsRes.rows });
+  } catch (e) {
+    console.error('[Admin] warkey users:', e.message);
+    res.status(500).json({ error: 'Failed to load WarKey users' });
+  }
+});
+
 // ── Админ эрх удирдах ─────────────────────────────────────────────────────
 // env-ийн үндсэн админууд (locked) + DB-ийн динамик админуудыг нэгтгэж жагсаана.
 router.get('/api/admins', adminMW, async (req, res) => {

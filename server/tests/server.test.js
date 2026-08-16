@@ -473,11 +473,71 @@ async function testAdminManagement() {
   }
 }
 
+async function testWarkeyTracking() {
+  const wkStore = new Map(); // discord_id -> row
+  const mockDb = {
+    query: async (sql, params = []) => {
+      const s = sql.replace(/\s+/g, ' ').trim();
+      if (s === 'SELECT 1') return { rows: [{ '?column?': 1 }] };
+      if (s.startsWith('INSERT INTO warkey_users')) {
+        wkStore.set(String(params[0]), { discord_id: String(params[0]), username: params[1], version: params[2] });
+        return { rows: [], rowCount: 1 };
+      }
+      if (s.includes('FROM warkey_users WHERE last_seen')) return { rows: [{ c: wkStore.size }] };
+      if (s.startsWith('SELECT COUNT(*)::int AS c FROM warkey_users')) return { rows: [{ c: wkStore.size }] };
+      if (s.startsWith('SELECT w.discord_id')) {
+        return { rows: [...wkStore.values()].map((u) => ({
+          discord_id: u.discord_id, username: u.username, avatar_url: null, version: u.version,
+          first_seen: new Date(), last_seen: new Date(), online: true,
+        })) };
+      }
+      return { rows: [], rowCount: 0 };
+    },
+  };
+
+  const server = await startServer({ ADMIN_DISCORD_IDS: '999' }, { mockDb });
+  try {
+    // A Discord-linked WarKey user's heartbeat registers them.
+    const user = makeAuthToken({ id: 7, username: 'Gamer', discord_id: '777' });
+    let res = await fetch(`${server.baseUrl}/warkey/heartbeat`, {
+      method: 'POST', headers: { Authorization: `Bearer ${user}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ version: '2.1.0' }),
+    });
+    assert.equal(res.status, 200);
+    assert.ok(wkStore.has('777'));
+    assert.equal(wkStore.get('777').version, '2.1.0');
+
+    // A non-Discord (local) account is not tracked as a WarKey user.
+    const local = makeAuthToken({ id: 8, username: 'Local' });
+    res = await fetch(`${server.baseUrl}/warkey/heartbeat`, {
+      method: 'POST', headers: { Authorization: `Bearer ${local}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ version: '2.1.0' }),
+    });
+    assert.equal(res.status, 400);
+
+    // The admin dashboard lists the WarKey user with their version.
+    const admin = makeAuthToken({ id: 1, username: 'Boss', discord_id: '999' });
+    res = await fetch(`${server.baseUrl}/admin/api/warkey/users`, { headers: { Authorization: `Bearer ${admin}` } });
+    assert.equal(res.status, 200);
+    const data = await res.json();
+    assert.equal(data.total, 1);
+    assert.equal(data.users[0].discord_id, '777');
+    assert.equal(data.users[0].version, '2.1.0');
+
+    // Non-admins cannot read the WarKey user list.
+    res = await fetch(`${server.baseUrl}/admin/api/warkey/users`, { headers: { Authorization: `Bearer ${user}` } });
+    assert.equal(res.status, 403);
+  } finally {
+    await server.stop();
+  }
+}
+
 (async () => {
   await runTest('server smoke flow supports register/login/me and guarded auth endpoints', testSmokeFlow);
   await runTest('admin dashboard gates its API behind a Discord ID whitelist', testAdminDashboardAccess);
   await runTest('admin whitelist that is empty denies everyone', testAdminEmptyWhitelistDeniesEveryone);
   await runTest('admins can be added and removed by Discord ID from the dashboard', testAdminManagement);
+  await runTest('warkey heartbeats register Discord users and surface in the dashboard', testWarkeyTracking);
   await runTest('production mode rejects DB-backed room listing when DB is unavailable', testProductionRoomGuard);
   await runTest('rooms/start rejects non-host users', testRoomStartRequiresHost);
   await runTest('rooms/team rejects users who are not room members', testRoomTeamRequiresMembership);

@@ -123,3 +123,14 @@ CREATE TABLE IF NOT EXISTS admin_whitelist (
   added_by   VARCHAR(255),
   created_at TIMESTAMP DEFAULT NOW()
 );
+
+-- LexusWarKey desktop апп-ын хэрэглэгчид. Апп нээгдэхэд Discord-оор нэвтэрч,
+-- тогтмол heartbeat илгээснээр last_seen шинэчлэгдэнэ (онлайн эсэхийг үүгээр тодорхойлно).
+CREATE TABLE IF NOT EXISTS warkey_users (
+  discord_id VARCHAR(255) PRIMARY KEY,
+  username   VARCHAR(255),
+  version    VARCHAR(50),
+  first_seen TIMESTAMP DEFAULT NOW(),
+  last_seen  TIMESTAMP DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_warkey_users_last_seen ON warkey_users(last_seen DESC);

@@ -13,6 +13,7 @@ const socialRoutes        = require('./routes/social');
 const discordServerRoutes = require('./routes/discord_servers');
 const streamerRoutes      = require('./routes/streamers');
 const adminRoutes         = require('./routes/admin');
+const warkeyRoutes        = require('./routes/warkey');
 const { setIO } = roomRoutes;
 const { runMigrations } = require('./db/migrate');
 
@@ -52,6 +53,7 @@ app.use('/social', socialRoutes);
 app.use('/discord-servers', discordServerRoutes);
 app.use('/streamers', streamerRoutes);
 app.use('/admin', adminRoutes);
+app.use('/warkey', warkeyRoutes);
 
 app.get('/', (req, res) => {
   res.json({ status: 'ok', message: 'Mongolian Warcraft Gaming Platform Server ажиллаж байна' });

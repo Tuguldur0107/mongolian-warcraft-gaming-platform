@@ -110,7 +110,31 @@
       </div>
 
       <div class="section">
-        <h2><span class="dot live"></span> Одоо онлайн <span id="onlineCount" class="mono"></span></h2>
+        <h2>🎮 WarKey хэрэглэгчид <span id="wkOnlineCount" class="mono"></span></h2>
+        <div class="cards" style="margin-bottom:12px">
+          <div class="card"><div class="label">Одоо онлайн</div><div class="value ok" id="wkOnline">–</div></div>
+          <div class="card"><div class="label">Нийт бүртгэлтэй</div><div class="value" id="wkTotal">–</div></div>
+        </div>
+        <div class="toolbar">
+          <input type="search" id="wkSearch" placeholder="Нэр эсвэл Discord ID-аар хайх…">
+        </div>
+        <div class="panel">
+          <table>
+            <thead><tr>
+              <th>Хэрэглэгч</th><th>Discord ID</th><th>Хувилбар</th><th>Анх орсон</th><th>Сүүлд идэвхтэй</th><th>Төлөв</th>
+            </tr></thead>
+            <tbody id="wkBody"><tr><td colspan="6" class="empty">Ачааллаж байна…</td></tr></tbody>
+          </table>
+        </div>
+        <div class="pager">
+          <button class="btn ghost" style="padding:6px 12px;font-size:13px" id="wkPrev" onclick="changeWkPage(-1)">‹ Өмнөх</button>
+          <span id="wkPageInfo"></span>
+          <button class="btn ghost" style="padding:6px 12px;font-size:13px" id="wkNext" onclick="changeWkPage(1)">Дараах ›</button>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2><span class="dot live"></span> Платформ — одоо онлайн <span id="onlineCount" class="mono"></span></h2>
         <div class="panel">
           <table>
             <thead><tr><th>Хэрэглэгч</th><th>Төлөв</th></tr></thead>
@@ -120,7 +144,7 @@
       </div>
 
       <div class="section">
-        <h2>Бүх хэрэглэгч</h2>
+        <h2>Платформ хэрэглэгчид</h2>
         <div class="toolbar">
           <input type="search" id="search" placeholder="Нэр, и-мэйл эсвэл Discord ID-аар хайх…">
         </div>
@@ -264,6 +288,56 @@
     else if (res.status === 401) logout();
   }
 
+  function fmtTime(d) {
+    if (!d) return '–';
+    try { return new Date(d).toLocaleString('mn-MN'); } catch { return '–'; }
+  }
+
+  // ── WarKey хэрэглэгчид ──
+  let wkPage = 1, wkTotalPages = 1, wkSearchTerm = '';
+
+  async function loadWarkeySummary() {
+    const res = await api('/admin/api/warkey/summary');
+    if (!res.ok) return handleAuth(res);
+    const s = await res.json();
+    $('wkOnline').textContent = s.online;
+    $('wkTotal').textContent = s.total;
+    $('wkOnlineCount').textContent = `(${s.online} онлайн / ${s.total})`;
+  }
+
+  async function loadWarkeyUsers() {
+    const q = new URLSearchParams({ page: String(wkPage), limit: '25' });
+    if (wkSearchTerm) q.set('search', wkSearchTerm);
+    const res = await api('/admin/api/warkey/users?' + q.toString());
+    if (!res.ok) {
+      if (res.status === 401 || res.status === 403) return handleAuth(res);
+      $('wkBody').innerHTML = `<tr><td colspan="6" class="empty">Ачаалж чадсангүй</td></tr>`;
+      return;
+    }
+    const data = await res.json();
+    wkTotalPages = Math.max(1, Math.ceil(data.total / data.limit));
+    $('wkBody').innerHTML = data.users.length
+      ? data.users.map((u) => `<tr>
+          <td>${userCell(u)}</td>
+          <td class="mono">${esc(u.discord_id)}</td>
+          <td class="mono">${esc(u.version || '–')}</td>
+          <td>${fmtDate(u.first_seen)}</td>
+          <td>${fmtTime(u.last_seen)}</td>
+          <td>${statusBadge(u.online ? 'online' : 'offline')}</td>
+        </tr>`).join('')
+      : `<tr><td colspan="6" class="empty">WarKey хэрэглэгч алга</td></tr>`;
+    $('wkPageInfo').textContent = `${wkPage} / ${wkTotalPages} — нийт ${data.total}`;
+    $('wkPrev').disabled = wkPage <= 1;
+    $('wkNext').disabled = wkPage >= wkTotalPages;
+  }
+
+  function changeWkPage(delta) {
+    const next = wkPage + delta;
+    if (next < 1 || next > wkTotalPages) return;
+    wkPage = next;
+    loadWarkeyUsers();
+  }
+
   async function apiSend(method, path, body) {
     return fetch(path, {
       method,
@@ -338,6 +412,12 @@
     searchTimer = setTimeout(() => { searchTerm = e.target.value.trim(); page = 1; loadUsers(); }, 300);
   });
 
+  let wkSearchTimer;
+  $('wkSearch').addEventListener('input', (e) => {
+    clearTimeout(wkSearchTimer);
+    wkSearchTimer = setTimeout(() => { wkSearchTerm = e.target.value.trim(); wkPage = 1; loadWarkeyUsers(); }, 300);
+  });
+
   let refreshTimer;
   async function boot() {
     if (!token) { show('login'); return; }
@@ -352,9 +432,10 @@
     $('whoName').textContent = admin.username || 'Admin';
     show('app');
     loadSummary(); loadOnline(); loadUsers(); loadAdmins();
+    loadWarkeySummary(); loadWarkeyUsers();
     // Онлайн төлөв, тоон үзүүлэлтийг 5 секунд тутам сэргээнэ.
     clearInterval(refreshTimer);
-    refreshTimer = setInterval(() => { loadSummary(); loadOnline(); }, 5000);
+    refreshTimer = setInterval(() => { loadSummary(); loadOnline(); loadWarkeySummary(); loadWarkeyUsers(); }, 5000);
   }
 
   boot();
