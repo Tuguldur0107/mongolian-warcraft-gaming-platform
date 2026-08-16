@@ -68,6 +68,26 @@
     border-radius: 8px; padding: 9px 12px; color: var(--text); font-size: 14px; }
   .pager { display: flex; align-items: center; gap: 10px; margin-top: 12px; color: var(--dim); font-size: 13px; }
   .empty { padding: 26px; text-align: center; color: var(--dim); }
+
+  /* Row action buttons */
+  .iconbtn { background: transparent; border: none; cursor: pointer; font-size: 14px; padding: 4px 6px;
+    border-radius: 6px; opacity: .75; }
+  .iconbtn:hover { opacity: 1; background: var(--panel2); }
+  .iconbtn.danger:hover { background: rgba(240,71,71,.18); }
+
+  /* Modal */
+  .modalBg { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: flex; align-items: center;
+    justify-content: center; z-index: 50; }
+  .modal { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 22px;
+    width: 340px; max-width: 92vw; box-shadow: 0 20px 60px rgba(0,0,0,.5); }
+  .modalTitle { font-size: 16px; font-weight: 700; margin-bottom: 16px; }
+  .modal label { display: block; color: var(--dim); font-size: 12px; margin: 10px 0 4px; }
+  .modal input { width: 100%; background: var(--panel2); border: 1px solid var(--border); border-radius: 8px;
+    padding: 9px 11px; color: var(--text); font-size: 14px; }
+  .modal .row2 { display: flex; gap: 12px; }
+  .modal .row2 > div { flex: 1; }
+  .modal .err { color: var(--game); font-size: 12px; min-height: 16px; margin-top: 10px; }
+  .modalBtns { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
 </style>
 </head>
 <body>
@@ -151,9 +171,9 @@
         <div class="panel">
           <table>
             <thead><tr>
-              <th>Хэрэглэгч</th><th>Discord ID</th><th>Хож/Хож</th><th>Тоглолт</th><th>Бүртгүүлсэн</th><th>Төлөв</th>
+              <th>Хэрэглэгч</th><th>Discord ID</th><th>Хож / Ялагдал</th><th>Тоглолт</th><th>Бүртгүүлсэн</th><th>Төлөв</th><th></th>
             </tr></thead>
-            <tbody id="usersBody"><tr><td colspan="6" class="empty">Ачааллаж байна…</td></tr></tbody>
+            <tbody id="usersBody"><tr><td colspan="7" class="empty">Ачааллаж байна…</td></tr></tbody>
           </table>
         </div>
         <div class="pager">
@@ -179,6 +199,24 @@
         </div>
       </div>
     </main>
+  </div>
+
+  <!-- Edit user modal -->
+  <div id="editModal" class="modalBg hidden">
+    <div class="modal">
+      <div class="modalTitle">Хэрэглэгч засах</div>
+      <label>Нэр</label>
+      <input id="editUsername" type="text" maxlength="255">
+      <div class="row2">
+        <div><label>Хож</label><input id="editWins" type="number" min="0"></div>
+        <div><label>Ялагдал</label><input id="editLosses" type="number" min="0"></div>
+      </div>
+      <div id="editErr" class="err"></div>
+      <div class="modalBtns">
+        <button class="btn ghost" onclick="closeEdit()">Болих</button>
+        <button class="btn" onclick="saveUserEdit()">Хадгалах</button>
+      </div>
+    </div>
   </div>
 
 <script>
@@ -257,17 +295,20 @@
       : `<tr><td colspan="2" class="empty">Одоогоор онлайн хэрэглэгч алга</td></tr>`;
   }
 
+  const usersById = {};
+
   async function loadUsers() {
     const q = new URLSearchParams({ page: String(page), limit: '25' });
     if (searchTerm) q.set('search', searchTerm);
     const res = await api('/admin/api/users?' + q.toString());
     if (!res.ok) {
       if (res.status === 401 || res.status === 403) return handleAuth(res);
-      $('usersBody').innerHTML = `<tr><td colspan="6" class="empty">Ачаалж чадсангүй</td></tr>`;
+      $('usersBody').innerHTML = `<tr><td colspan="7" class="empty">Ачаалж чадсангүй</td></tr>`;
       return;
     }
     const data = await res.json();
     totalPages = Math.max(1, Math.ceil(data.total / data.limit));
+    for (const u of data.users) usersById[u.id] = u;
     $('usersBody').innerHTML = data.users.length
       ? data.users.map((u) => `<tr>
           <td>${userCell(u)}</td>
@@ -276,11 +317,58 @@
           <td>${u.games || 0}</td>
           <td>${fmtDate(u.created_at)}</td>
           <td>${statusBadge(u.status)}</td>
+          <td style="text-align:right;white-space:nowrap">
+            <button class="iconbtn" title="Засах" onclick="openEditUser(${u.id})">✏️</button>
+            <button class="iconbtn danger" title="Устгах" onclick="deleteUser(${u.id})">🗑</button>
+          </td>
         </tr>`).join('')
-      : `<tr><td colspan="6" class="empty">Хэрэглэгч олдсонгүй</td></tr>`;
+      : `<tr><td colspan="7" class="empty">Хэрэглэгч олдсонгүй</td></tr>`;
     $('pageInfo').textContent = `${page} / ${totalPages} — нийт ${data.total}`;
     $('prev').disabled = page <= 1;
     $('next').disabled = page >= totalPages;
+  }
+
+  // ── Хэрэглэгч засах / устгах ──
+  let editingUserId = null;
+
+  function openEditUser(id) {
+    const u = usersById[id];
+    if (!u) return;
+    editingUserId = id;
+    $('editUsername').value = u.username || '';
+    $('editWins').value = u.wins || 0;
+    $('editLosses').value = u.losses || 0;
+    $('editErr').textContent = '';
+    $('editModal').classList.remove('hidden');
+  }
+  function closeEdit() {
+    editingUserId = null;
+    $('editModal').classList.add('hidden');
+  }
+  async function saveUserEdit() {
+    if (editingUserId == null) return;
+    const body = {
+      username: $('editUsername').value.trim(),
+      wins: parseInt($('editWins').value, 10) || 0,
+      losses: parseInt($('editLosses').value, 10) || 0,
+    };
+    const res = await apiSend('PATCH', '/admin/api/users/' + editingUserId, body);
+    if (res.ok) { closeEdit(); loadUsers(); }
+    else {
+      const j = await res.json().catch(() => ({}));
+      $('editErr').textContent = j.error || 'Хадгалж чадсангүй';
+    }
+  }
+  async function deleteUser(id) {
+    const u = usersById[id];
+    const name = u ? u.username : id;
+    if (!confirm(`"${name}" хэрэглэгчийг бүрмөсөн устгах уу?\nТүүний өрөө, тоглолт, мессеж мөн устана.`)) return;
+    const res = await apiSend('DELETE', '/admin/api/users/' + id);
+    if (res.ok) loadUsers();
+    else {
+      const j = await res.json().catch(() => ({}));
+      alert(j.error || 'Устгаж чадсангүй');
+    }
   }
 
   function handleAuth(res) {

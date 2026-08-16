@@ -532,8 +532,72 @@ async function testWarkeyTracking() {
   }
 }
 
+async function testAdminUserEditDelete() {
+  const users = new Map([[1, { id: 1, username: 'Old', wins: 2, losses: 3 }]]);
+  const mockDb = {
+    query: async (sql, params = []) => {
+      const s = sql.replace(/\s+/g, ' ').trim();
+      if (s === 'SELECT 1') return { rows: [{ '?column?': 1 }] };
+      if (s.startsWith('UPDATE users SET')) {
+        const id = params[params.length - 1];
+        const u = users.get(id);
+        if (!u) return { rows: [] };
+        const setPart = s.substring('UPDATE users SET '.length, s.indexOf(' WHERE'));
+        for (const m of setPart.matchAll(/(\w+) = \$(\d+)/g)) u[m[1]] = params[parseInt(m[2], 10) - 1];
+        return { rows: [{ id: u.id, username: u.username, wins: u.wins, losses: u.losses }] };
+      }
+      if (s.startsWith('DELETE FROM users WHERE id')) {
+        const had = users.delete(params[0]);
+        return { rows: [], rowCount: had ? 1 : 0 };
+      }
+      return { rows: [], rowCount: 0 };
+    },
+  };
+
+  const server = await startServer({ ADMIN_DISCORD_IDS: '999' }, { mockDb });
+  const admin = makeAuthToken({ id: 1, username: 'Boss', discord_id: '999' });
+  const hdr = { Authorization: `Bearer ${admin}`, 'Content-Type': 'application/json' };
+  try {
+    // Edit name and stats.
+    let res = await fetch(`${server.baseUrl}/admin/api/users/1`, {
+      method: 'PATCH', headers: hdr, body: JSON.stringify({ username: 'New', wins: 10, losses: 1 }),
+    });
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.user.username, 'New');
+    assert.equal(body.user.wins, 10);
+    assert.equal(users.get(1).username, 'New');
+
+    // Negative stats are rejected.
+    res = await fetch(`${server.baseUrl}/admin/api/users/1`, {
+      method: 'PATCH', headers: hdr, body: JSON.stringify({ wins: -5 }),
+    });
+    assert.equal(res.status, 400);
+
+    // A non-admin cannot edit.
+    const nobody = makeAuthToken({ id: 9, username: 'No', discord_id: '111' });
+    res = await fetch(`${server.baseUrl}/admin/api/users/1`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${nobody}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: 'Hacked' }),
+    });
+    assert.equal(res.status, 403);
+    assert.equal(users.get(1).username, 'New');
+
+    // Delete, then deleting again is a 404.
+    res = await fetch(`${server.baseUrl}/admin/api/users/1`, { method: 'DELETE', headers: hdr });
+    assert.equal(res.status, 200);
+    assert.ok(!users.has(1));
+    res = await fetch(`${server.baseUrl}/admin/api/users/1`, { method: 'DELETE', headers: hdr });
+    assert.equal(res.status, 404);
+  } finally {
+    await server.stop();
+  }
+}
+
 (async () => {
   await runTest('server smoke flow supports register/login/me and guarded auth endpoints', testSmokeFlow);
+  await runTest('admin can edit and delete platform users', testAdminUserEditDelete);
   await runTest('admin dashboard gates its API behind a Discord ID whitelist', testAdminDashboardAccess);
   await runTest('admin whitelist that is empty denies everyone', testAdminEmptyWhitelistDeniesEveryone);
   await runTest('admins can be added and removed by Discord ID from the dashboard', testAdminManagement);

@@ -110,6 +110,65 @@ router.get('/api/users', adminMW, async (req, res) => {
   }
 });
 
+// Хэрэглэгчийн нэр / хож / хожигдлыг засах (өгөгдсөн талбаруудыг л шинэчилнэ).
+router.patch('/api/users/:id', adminMW, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isInteger(id))
+    return res.status(400).json({ error: 'Invalid id' });
+  if (!(await dbOk()))
+    return res.status(503).json({ error: 'Service temporarily unavailable' });
+
+  const sets = [];
+  const params = [];
+  if (typeof req.body?.username === 'string' && req.body.username.trim()) {
+    params.push(req.body.username.trim().slice(0, 255));
+    sets.push(`username = $${params.length}`);
+  }
+  for (const field of ['wins', 'losses']) {
+    if (req.body?.[field] === undefined) continue;
+    const n = parseInt(req.body[field], 10);
+    if (!Number.isInteger(n) || n < 0)
+      return res.status(400).json({ error: `Invalid ${field}` });
+    params.push(n);
+    sets.push(`${field} = $${params.length}`);
+  }
+  if (sets.length === 0)
+    return res.status(400).json({ error: 'Nothing to update' });
+
+  params.push(id);
+  try {
+    const r = await db.query(
+      `UPDATE users SET ${sets.join(', ')} WHERE id = $${params.length}
+       RETURNING id, username, wins, losses`,
+      params
+    );
+    if (r.rows.length === 0)
+      return res.status(404).json({ error: 'User not found' });
+    res.json({ ok: true, user: r.rows[0] });
+  } catch (e) {
+    console.error('[Admin] update user:', e.message);
+    res.status(500).json({ error: 'Failed to update user' });
+  }
+});
+
+// Хэрэглэгчийг устгах (өрөө/тоглолт/мессеж зэрэг нь ON DELETE CASCADE-аар цуг арилна).
+router.delete('/api/users/:id', adminMW, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isInteger(id))
+    return res.status(400).json({ error: 'Invalid id' });
+  if (!(await dbOk()))
+    return res.status(503).json({ error: 'Service temporarily unavailable' });
+  try {
+    const r = await db.query('DELETE FROM users WHERE id = $1', [id]);
+    if (r.rowCount === 0)
+      return res.status(404).json({ error: 'User not found' });
+    res.json({ ok: true, removed: r.rowCount });
+  } catch (e) {
+    console.error('[Admin] delete user:', e.message);
+    res.status(500).json({ error: 'Failed to delete user' });
+  }
+});
+
 // ── WarKey desktop апп-ын хэрэглэгчид ──────────────────────────────────────
 // Онлайн = сүүлийн 2 минутад heartbeat илгээсэн (апп нээлттэй).
 router.get('/api/warkey/summary', adminMW, async (req, res) => {
