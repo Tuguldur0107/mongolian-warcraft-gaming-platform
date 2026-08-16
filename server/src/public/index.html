@@ -3,28 +3,29 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="Монголын WC3 болон DotA тоглогчдод зориулсан desktop platform ба Lexus WarKey. Өрөө, чат, ranking, hotkey tool нэг дор.">
+<meta name="description" content="Монголын WC3 болон DotA community-д зориулсан lobby, chat, ranking platform болон Lexus WarKey hotkey tool нэг landing page дээр.">
 <meta property="og:type" content="website">
 <meta property="og:locale" content="mn_MN">
 <meta property="og:site_name" content="Mongolian Warcraft Gaming Platform">
-<meta property="og:title" content="Mongolian Warcraft Gaming Platform">
-<meta property="og:description" content="Монголын WC3 болон DotA тоглогчдод зориулсан desktop platform ба Lexus WarKey. Өрөө, чат, ranking, hotkey tool нэг дор.">
+<meta property="og:title" content="Gaming Platform + Lexus WarKey">
+<meta property="og:description" content="Монголын WC3/DotA community-д зориулсан lobby, chat, ranking platform болон Lexus WarKey hotkey tool нэг landing page дээр.">
 <meta property="og:url" content="https://mongolian-warcraft-gaming-platform-production.up.railway.app/">
-<meta property="og:image" content="https://mongolian-warcraft-gaming-platform-production.up.railway.app/assets/social-preview.png?v=20260816-2">
-<meta property="og:image:url" content="https://mongolian-warcraft-gaming-platform-production.up.railway.app/assets/social-preview.png?v=20260816-2">
-<meta property="og:image:secure_url" content="https://mongolian-warcraft-gaming-platform-production.up.railway.app/assets/social-preview.png?v=20260816-2">
+<meta property="og:image" content="https://mongolian-warcraft-gaming-platform-production.up.railway.app/assets/social-preview-warkey.png?v=20260816-3">
+<meta property="og:image:url" content="https://mongolian-warcraft-gaming-platform-production.up.railway.app/assets/social-preview-warkey.png?v=20260816-3">
+<meta property="og:image:secure_url" content="https://mongolian-warcraft-gaming-platform-production.up.railway.app/assets/social-preview-warkey.png?v=20260816-3">
 <meta property="og:image:type" content="image/png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="Mongolian Warcraft Gaming Platform preview">
+<meta property="og:image:alt" content="Gaming Platform and Lexus WarKey preview">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="Mongolian Warcraft Gaming Platform">
-<meta name="twitter:description" content="Монголын WC3 болон DotA тоглогчдод зориулсан desktop platform ба Lexus WarKey. Өрөө, чат, ranking, hotkey tool нэг дор.">
-<meta name="twitter:image" content="https://mongolian-warcraft-gaming-platform-production.up.railway.app/assets/social-preview.png?v=20260816-2">
-<meta name="twitter:image:alt" content="Mongolian Warcraft Gaming Platform preview">
+<meta name="twitter:title" content="Gaming Platform + Lexus WarKey">
+<meta name="twitter:description" content="Монголын WC3/DotA community-д зориулсан lobby, chat, ranking platform болон Lexus WarKey hotkey tool нэг landing page дээр.">
+<meta name="twitter:url" content="https://mongolian-warcraft-gaming-platform-production.up.railway.app/">
+<meta name="twitter:image" content="https://mongolian-warcraft-gaming-platform-production.up.railway.app/assets/social-preview-warkey.png?v=20260816-3">
+<meta name="twitter:image:alt" content="Gaming Platform and Lexus WarKey preview">
 <meta name="theme-color" content="#0b0d12">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23090a0d'/%3E%3Cpath d='M18 48 47 19M16 21l27 27M35 14l15 15M14 35l15 15' stroke='%23f0ba57' stroke-width='6' stroke-linecap='round'/%3E%3Cpath d='M18 48 47 19M16 21l27 27' stroke='%2353a4ff' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E">
-<title>Mongolian Warcraft Gaming Platform</title>
+<title>Gaming Platform + Lexus WarKey</title>
 <script>document.documentElement.classList.add("motion-ready");</script>
 <style>
   :root {
@@ -234,7 +235,7 @@
     gap: 12px;
     min-width: 0;
     font-weight: 900;
-    letter-spacing: .2px;
+    letter-spacing: 0;
   }
   .mark {
     width: 38px;
@@ -277,12 +278,46 @@
   }
 
   .hero {
+    position: relative;
     min-height: min(760px, calc(100vh - 28px));
     display: grid;
     align-items: center;
     padding: 76px 0 52px;
+    overflow: hidden;
+    isolation: isolate;
+  }
+  .hero::before,
+  .hero::after {
+    content: "";
+    position: absolute;
+    inset: -18% -12%;
+    z-index: 0;
+    pointer-events: none;
+    mix-blend-mode: screen;
+  }
+  .hero::before {
+    background:
+      linear-gradient(112deg, transparent 10%, rgba(83,164,255,.11) 34%, transparent 52%, rgba(240,186,87,.1) 68%, transparent 88%),
+      radial-gradient(ellipse at 70% 28%, rgba(83,164,255,.18), transparent 42%);
+    filter: blur(18px);
+    opacity: .68;
+    animation: hero-shimmer 10s ease-in-out infinite alternate;
+  }
+  .hero::after {
+    inset: auto -10% 0;
+    height: 42%;
+    background: linear-gradient(90deg, rgba(34,126,255,.18), transparent 38%, rgba(240,186,87,.16));
+    filter: blur(34px);
+    opacity: .54;
+    animation: hero-glow-pulse 5.8s ease-in-out infinite alternate;
+  }
+  .hero .wrap {
+    position: relative;
+    z-index: 1;
   }
   .hero-content {
+    position: relative;
+    z-index: 1;
     width: min(790px, 100%);
     animation: reveal-up .8s ease both;
   }
@@ -293,8 +328,9 @@
     color: var(--gold);
     font-size: 12px;
     font-weight: 900;
-    letter-spacing: 2.4px;
+    letter-spacing: 0;
     text-transform: uppercase;
+    text-shadow: 0 0 18px rgba(240,186,87,.42);
   }
   .kicker::before {
     content: "";
@@ -312,6 +348,7 @@
     letter-spacing: 0;
     text-wrap: balance;
     text-shadow: 0 5px 28px rgba(0, 0, 0, .72);
+    animation: title-glow 5.5s ease-in-out infinite alternate;
   }
   .lead {
     max-width: 680px;
@@ -339,6 +376,13 @@
     backdrop-filter: blur(10px);
     font-size: 13px;
     font-weight: 760;
+    box-shadow: 0 0 0 1px rgba(255,255,255,.02), 0 14px 32px rgba(0,0,0,.18);
+    transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
+  }
+  .chip:hover {
+    transform: translateY(-1px);
+    border-color: rgba(83,164,255,.34);
+    box-shadow: 0 0 24px rgba(83,164,255,.18), 0 14px 32px rgba(0,0,0,.18);
   }
   .chip i {
     width: 8px;
@@ -413,11 +457,13 @@
     color: #fff;
     background: linear-gradient(135deg, var(--blue), var(--blue-deep));
     box-shadow: 0 18px 44px rgba(31,101,200,.38);
+    animation: cta-blue-glow 4.6s ease-in-out infinite alternate;
   }
   .btn.gold {
     color: #221704;
     background: linear-gradient(135deg, #ffd37b, #d8912f);
     box-shadow: 0 18px 44px rgba(216,145,47,.32);
+    animation: cta-gold-glow 4.8s ease-in-out infinite alternate;
   }
   .btn.ghost {
     color: #f8f4ee;
@@ -476,7 +522,7 @@
   .eyebrow {
     color: var(--gold);
     text-transform: uppercase;
-    letter-spacing: 2px;
+    letter-spacing: 0;
     font-size: 11px;
     font-weight: 900;
   }
@@ -540,7 +586,7 @@
     gap: 10px;
     color: #fff;
     font-weight: 900;
-    letter-spacing: .2px;
+    letter-spacing: 0;
   }
   .visual-label i {
     width: 10px;
@@ -700,6 +746,26 @@
     from { background-position: center top; }
     to { background-position: 54% 2%; }
   }
+  @keyframes hero-shimmer {
+    from { transform: translate3d(-4%, -2%, 0) scale(1); opacity: .42; }
+    to { transform: translate3d(4%, 2%, 0) scale(1.04); opacity: .76; }
+  }
+  @keyframes hero-glow-pulse {
+    from { opacity: .34; transform: translateY(10px); }
+    to { opacity: .7; transform: translateY(-6px); }
+  }
+  @keyframes title-glow {
+    from { text-shadow: 0 5px 28px rgba(0,0,0,.72), 0 0 0 rgba(83,164,255,0); }
+    to { text-shadow: 0 5px 28px rgba(0,0,0,.72), 0 0 30px rgba(83,164,255,.24), 0 0 42px rgba(240,186,87,.12); }
+  }
+  @keyframes cta-blue-glow {
+    from { box-shadow: 0 18px 44px rgba(31,101,200,.34); }
+    to { box-shadow: 0 18px 44px rgba(31,101,200,.52), 0 0 28px rgba(83,164,255,.28); }
+  }
+  @keyframes cta-gold-glow {
+    from { box-shadow: 0 18px 44px rgba(216,145,47,.28); }
+    to { box-shadow: 0 18px 44px rgba(216,145,47,.5), 0 0 26px rgba(240,186,87,.26); }
+  }
   @keyframes sun-spin {
     from { transform: rotate(0deg); }
     to { transform: rotate(360deg); }
@@ -837,7 +903,7 @@
       <div class="wrap">
         <div class="hero-content">
           <div class="kicker">Монгол WC3 · DotA Community</div>
-          <h1>Mongolian Warcraft Gaming Platform</h1>
+          <h1>Mongolian Warcraft Platform + Lexus WarKey</h1>
           <p class="lead">Өрөө үүсгэх, найзуудтайгаа тоглох, чатлах, ranking харах, мөн Lexus WarKey-ээр hotkey-гээ тоглолтын хэв маягтаа тааруулах нэг ecosystem.</p>
           <div class="hero-points" aria-label="Гол боломжууд">
             <span class="chip"><i></i>Desktop client</span>
