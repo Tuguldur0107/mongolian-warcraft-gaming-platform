@@ -34,6 +34,7 @@ app.set('trust proxy', 1);
 // Middleware
 app.use(cors({ origin: process.env.CLIENT_URL || '*' }));
 app.use(express.json({ limit: '5mb' }));
+app.use(express.static(path.join(__dirname, 'public'), { index: false }));
 
 // Rate limiting — auth endpoint brute force хамгаалалт
 const authLimiter = rateLimit({
