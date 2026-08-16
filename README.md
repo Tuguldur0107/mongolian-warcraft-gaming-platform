@@ -1,30 +1,78 @@
-# Warcraft Platform
+# Mongolian Warcraft Gaming Platform
 
-Warcraft 3 / DotA community desktop app and backend server.
+A Warcraft III / DotA community platform for Mongolia: a desktop app to host and
+join games together over the internet, plus a Node backend that powers accounts,
+rooms, chat, stats, and a browser **admin dashboard**.
 
-This repository now has two clear usage paths:
+The repo is a monorepo with two apps and a companion project:
 
-## 1. End Users
+| Part | What it is |
+| --- | --- |
+| **`client/`** | Electron desktop app — Discord login, game rooms, friends, chat, ZeroTier peer connections, auto‑update |
+| **`server/`** | Express + Socket.IO backend (PostgreSQL) — auth, rooms, stats, social, admin dashboard, WarKey tracking |
+| **[`LexusWarKey/`](LexusWarKey/)** | Standalone WC3 hotkey remapper (its own repo) that signs in with the same Discord accounts and reports to this backend |
 
-If someone only wants to use the app, they should not clone the repo.
+Live server: **https://mongolian-warcraft-gaming-platform-production.up.railway.app**
 
-1. Open the project's GitHub Releases page.
-2. Download the latest Windows installer from `client/dist` release assets.
-3. Install and launch the app.
-4. Sign in and choose the Warcraft executable the first time.
+## Highlights
 
-The desktop app already points to the hosted production API by default, so end users do not need to run the backend locally.
+- **Play together online.** Create a room; players connect over a shared
+  ZeroTier network so a LAN game "just works" across the internet.
+- **Discord accounts.** Sign in with Discord (QR/deeplink for the desktop app),
+  add friends, DM, and chat in the lobby and rooms.
+- **Stats.** Wins/losses, game history, leaderboards.
+- **Admin dashboard** (`/admin`). A browser panel to monitor who's online, browse
+  and manage users, and see Lexus WarKey users — gated by Discord ID.
+- **Landing page** (`/`). Introduces both the platform and WarKey with live
+  download links pulled from each project's latest GitHub release.
 
-## 2. Local Development
+## Web endpoints (served by the backend)
+
+| Path | Description |
+| --- | --- |
+| `/` | Public landing page (platform + WarKey, downloads, admin link) |
+| `/admin` | Admin dashboard (Discord sign‑in, whitelisted IDs only) |
+| `/health` | JSON health check |
+| `/auth`, `/rooms`, `/stats`, `/social`, `/streamers`, `/warkey`, … | REST + Socket.IO APIs |
+
+### Admin dashboard
+
+- **Sign in** with Discord at `/admin`. Access is limited to Discord IDs listed
+  in `ADMIN_DISCORD_IDS` (the bootstrap super‑admins) plus any added from the
+  dashboard itself (stored in the `admin_whitelist` table).
+- **Monitor:** live online users, active rooms, and all registered users with
+  wins/losses and join date (search + pagination).
+- **Manage:** edit a user's name and stats, or delete a user (cascades).
+- **WarKey users:** who is running Lexus WarKey right now (heartbeat within
+  2 min), total registered, and app version — with a delete action.
+- **Admins:** add or remove admins by Discord ID live, without a redeploy.
+
+> First‑time setup: open `/admin`, click sign in — if you're not yet an admin the
+> page shows your own Discord ID so you can add it to `ADMIN_DISCORD_IDS`.
+
+---
+
+## For end users
+
+Don't clone the repo — download the app:
+
+1. Open the [landing page](https://mongolian-warcraft-gaming-platform-production.up.railway.app/)
+   or the GitHub **Releases** page.
+2. Download the latest Windows installer and launch it.
+3. Sign in with Discord and pick your Warcraft executable the first time.
+
+The desktop app targets the hosted production API by default, so users don't run
+the backend.
+
+## Local development
 
 ### Requirements
 
-- Node.js 20+
-- npm 10+
+- Node.js 20+, npm 10+
 - PostgreSQL
-- Windows, if you want to test the Electron + ZeroTier flow end-to-end
+- Windows (to test the Electron + ZeroTier flow end‑to‑end)
 
-### Quick Start
+### Quick start
 
 ```bash
 npm run setup
@@ -33,18 +81,12 @@ copy client\.env.example client\.env
 npm start
 ```
 
-What this does:
+This installs both apps, starts the backend on `http://127.0.0.1:3000`, and
+launches the Electron app pointed at it.
 
-- installs `server` dependencies
-- installs `client` dependencies
-- starts the backend on `http://127.0.0.1:3000`
-- starts the Electron app and points it at the local backend
+### Environment
 
-## Environment Files
-
-### `server/.env`
-
-Minimum local configuration:
+`server/.env` (minimum):
 
 ```env
 PORT=3000
@@ -55,39 +97,38 @@ JWT_SECRET=change-this-in-production
 
 Optional integrations:
 
-- `DISCORD_CLIENT_ID`
-- `DISCORD_CLIENT_SECRET`
-- `DISCORD_REDIRECT_URI`
-- `ZEROTIER_API_TOKEN`
-- `ZEROTIER_DEFAULT_NETWORK`
-- `RZR_BOT_URL`
-- `WEBHOOK_SECRET`
+- `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `DISCORD_REDIRECT_URI` — Discord login
+- `ADMIN_DISCORD_IDS` — comma‑separated Discord IDs allowed into `/admin`
+- `ZEROTIER_API_TOKEN`, `ZEROTIER_DEFAULT_NETWORK` — peer networking
+- `RZR_BOT_URL`, `WEBHOOK_SECRET`
 
-### `client/.env`
+`client/.env` (optional — production is the built‑in fallback):
 
 ```env
 SERVER_URL=http://127.0.0.1:3000
 ```
 
-The client also works without this file because production is the built-in fallback.
+## Root commands
 
-## Root Commands
+- `npm run setup` — install both apps
+- `npm start` — server + Electron for local dev
+- `npm run server` — backend only
+- `npm run client` — Electron only
+- `npm run test:server` — backend tests
+- `npm run build:client` — build the Windows installer
 
-Run these from the repository root:
+## Project structure
 
-- `npm run setup`: install both apps
-- `npm start`: start server + Electron for local development
-- `npm run server`: start only the backend
-- `npm run client`: start only the Electron app
-- `npm run test:server`: run backend tests
-- `npm run build:client`: build the Windows installer
+- `client/` — Electron desktop app
+- `server/` — Express API + Socket.IO backend (`src/routes`, `src/public` for the
+  landing + admin pages, `src/db/schema.sql` for the schema)
+- `LexusWarKey/` — the hotkey remapper (separate app)
+- `notes/` — local progress notes
 
-## Project Structure
+## Deployment
 
-- `client/`: Electron desktop app
-- `server/`: Express API + Socket.IO backend
-- `notes/`: local progress notes
-
-## Packaging Recommendation
-
-If the goal is to make installation easy for real users, distribute only the packaged Electron installer from GitHub Releases. Asking users to clone the repo, install Node.js, and run commands is still a developer workflow, not a user workflow.
+- The backend deploys to Railway from `main` (auto‑deploy on push). It serves the
+  API, the landing page, and the admin dashboard from one instance — the same
+  instance clients connect to, so "who's online" reflects real socket presence.
+- The desktop client is published to GitHub Releases (electron‑builder) and
+  auto‑updates via `electron-updater`.
