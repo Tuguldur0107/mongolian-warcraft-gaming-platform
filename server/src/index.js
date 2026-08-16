@@ -59,6 +59,12 @@ app.use('/warkey', warkeyRoutes);
 
 // Танилцуулга landing page (WarKey + Platform, татах товч, админ самбар руу орох).
 app.get('/', (req, res) => {
+  res.set({
+    'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+    Pragma: 'no-cache',
+    Expires: '0',
+    'Surrogate-Control': 'no-store',
+  });
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
