@@ -225,6 +225,24 @@ router.get('/api/warkey/users', adminMW, async (req, res) => {
   }
 });
 
+// WarKey хэрэглэгчийг хяналтаас устгах. (Апп-аа дахин нээвэл heartbeat-аар дахин бүртгэгдэнэ.)
+router.delete('/api/warkey/users/:discordId', adminMW, async (req, res) => {
+  const discordId = String(req.params.discordId || '').trim();
+  if (!discordId)
+    return res.status(400).json({ error: 'Invalid id' });
+  if (!(await dbOk()))
+    return res.status(503).json({ error: 'Service temporarily unavailable' });
+  try {
+    const r = await db.query('DELETE FROM warkey_users WHERE discord_id = $1', [discordId]);
+    if (r.rowCount === 0)
+      return res.status(404).json({ error: 'Not found' });
+    res.json({ ok: true, removed: r.rowCount });
+  } catch (e) {
+    console.error('[Admin] delete warkey user:', e.message);
+    res.status(500).json({ error: 'Failed to delete WarKey user' });
+  }
+});
+
 // ── Админ эрх удирдах ─────────────────────────────────────────────────────
 // env-ийн үндсэн админууд (locked) + DB-ийн динамик админуудыг нэгтгэж жагсаана.
 router.get('/api/admins', adminMW, async (req, res) => {

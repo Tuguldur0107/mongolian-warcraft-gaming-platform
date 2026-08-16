@@ -95,7 +95,7 @@ async function runTest(name, fn) {
 async function testSmokeFlow() {
   const server = await startServer();
   try {
-    const rootRes = await fetch(`${server.baseUrl}/`);
+    const rootRes = await fetch(`${server.baseUrl}/health`);
     assert.equal(rootRes.status, 200);
     const rootJson = await rootRes.json();
     assert.equal(rootJson.status, 'ok');

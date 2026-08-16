@@ -141,9 +141,9 @@
         <div class="panel">
           <table>
             <thead><tr>
-              <th>Хэрэглэгч</th><th>Discord ID</th><th>Хувилбар</th><th>Анх орсон</th><th>Сүүлд идэвхтэй</th><th>Төлөв</th>
+              <th>Хэрэглэгч</th><th>Discord ID</th><th>Хувилбар</th><th>Анх орсон</th><th>Сүүлд идэвхтэй</th><th>Төлөв</th><th></th>
             </tr></thead>
-            <tbody id="wkBody"><tr><td colspan="6" class="empty">Ачааллаж байна…</td></tr></tbody>
+            <tbody id="wkBody"><tr><td colspan="7" class="empty">Ачааллаж байна…</td></tr></tbody>
           </table>
         </div>
         <div class="pager">
@@ -412,11 +412,25 @@
           <td>${fmtDate(u.first_seen)}</td>
           <td>${fmtTime(u.last_seen)}</td>
           <td>${statusBadge(u.online ? 'online' : 'offline')}</td>
+          <td style="text-align:right">
+            <button class="iconbtn danger" title="Хяналтаас устгах"
+                    onclick="deleteWarkeyUser('${esc(u.discord_id)}','${esc(u.username || u.discord_id)}')">🗑</button>
+          </td>
         </tr>`).join('')
-      : `<tr><td colspan="6" class="empty">WarKey хэрэглэгч алга</td></tr>`;
+      : `<tr><td colspan="7" class="empty">WarKey хэрэглэгч алга</td></tr>`;
     $('wkPageInfo').textContent = `${wkPage} / ${wkTotalPages} — нийт ${data.total}`;
     $('wkPrev').disabled = wkPage <= 1;
     $('wkNext').disabled = wkPage >= wkTotalPages;
+  }
+
+  async function deleteWarkeyUser(discordId, name) {
+    if (!confirm(`"${name}" WarKey хэрэглэгчийг хяналтаас устгах уу?\n(Апп-аа дахин нээвэл дахин бүртгэгдэнэ.)`)) return;
+    const res = await apiSend('DELETE', '/admin/api/warkey/users/' + encodeURIComponent(discordId));
+    if (res.ok) loadWarkeyUsers();
+    else {
+      const j = await res.json().catch(() => ({}));
+      alert(j.error || 'Устгаж чадсангүй');
+    }
   }
 
   function changeWkPage(delta) {

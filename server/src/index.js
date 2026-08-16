@@ -1,5 +1,6 @@
 require('dotenv').config();
 const express = require('express');
+const path = require('path');
 const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
@@ -55,7 +56,13 @@ app.use('/streamers', streamerRoutes);
 app.use('/admin', adminRoutes);
 app.use('/warkey', warkeyRoutes);
 
+// Танилцуулга landing page (WarKey + Platform, татах товч, админ самбар руу орох).
 app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// Health check (өмнө нь / байсан) — deploy/monitoring-д хэрэглэнэ.
+app.get('/health', (req, res) => {
   res.json({ status: 'ok', message: 'Mongolian Warcraft Gaming Platform Server ажиллаж байна' });
 });
 

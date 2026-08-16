@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="mn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mongolian Warcraft Gaming Platform</title>
+<style>
+  :root {
+    --bg: #08080d; --card: #12131a; --card2: #171922; --border: #262a38;
+    --text: #eef0f6; --dim: #9aa0b4;
+    --gold: #e8b64c; --blue: #4a9eff; --red: #e23b3b; --green: #43b581;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    background:
+      radial-gradient(1200px 600px at 15% -10%, rgba(74,158,255,.12), transparent 60%),
+      radial-gradient(1000px 500px at 100% 0%, rgba(232,182,76,.10), transparent 55%),
+      radial-gradient(900px 700px at 50% 120%, rgba(226,59,59,.08), transparent 60%),
+      var(--bg);
+    color: var(--text);
+    font-family: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+    min-height: 100vh; line-height: 1.55;
+  }
+  a { color: inherit; text-decoration: none; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+
+  nav { display: flex; align-items: center; justify-content: space-between; padding: 22px 0; }
+  nav .brand { display: flex; align-items: center; gap: 12px; font-weight: 800; font-size: 18px; letter-spacing: .2px; }
+  nav .brand .mark { width: 34px; height: 34px; border-radius: 9px;
+    background: linear-gradient(135deg, var(--blue), var(--gold)); display: grid; place-items: center;
+    font-size: 18px; box-shadow: 0 6px 20px rgba(74,158,255,.35); }
+  .navlink { color: var(--dim); font-weight: 600; font-size: 14px; padding: 9px 16px; border-radius: 10px;
+    border: 1px solid var(--border); transition: .2s; }
+  .navlink:hover { color: var(--text); border-color: var(--blue); background: rgba(74,158,255,.08); }
+
+  .hero { text-align: center; padding: 70px 0 40px; }
+  .hero .kicker { color: var(--gold); font-weight: 700; letter-spacing: 3px; font-size: 12px; text-transform: uppercase; }
+  .hero h1 { font-size: clamp(34px, 6vw, 60px); font-weight: 900; line-height: 1.05; margin: 16px 0 0;
+    background: linear-gradient(120deg, #fff 20%, var(--blue) 60%, var(--gold)); -webkit-background-clip: text;
+    background-clip: text; -webkit-text-fill-color: transparent; }
+  .hero p { color: var(--dim); font-size: clamp(15px, 2.3vw, 19px); max-width: 640px; margin: 20px auto 0; }
+  .cta { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; margin-top: 34px; }
+  .btn { padding: 13px 24px; border-radius: 12px; font-weight: 700; font-size: 15px; border: 1px solid transparent;
+    cursor: pointer; transition: .2s; display: inline-flex; align-items: center; gap: 10px; }
+  .btn.primary { background: linear-gradient(135deg, var(--blue), #3b7fe0); color: #fff;
+    box-shadow: 0 10px 30px rgba(74,158,255,.35); }
+  .btn.gold { background: linear-gradient(135deg, var(--gold), #d49a2e); color: #201700;
+    box-shadow: 0 10px 30px rgba(232,182,76,.3); }
+  .btn.ghost { background: transparent; border-color: var(--border); color: var(--text); }
+  .btn:hover { transform: translateY(-2px); filter: brightness(1.05); }
+  .btn small { opacity: .8; font-weight: 600; font-size: 12px; }
+
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 30px 0 60px; }
+  @media (max-width: 760px) { .grid { grid-template-columns: 1fr; } }
+  .product { background: linear-gradient(180deg, var(--card), var(--card2)); border: 1px solid var(--border);
+    border-radius: 18px; padding: 28px; position: relative; overflow: hidden; }
+  .product::before { content: ''; position: absolute; inset: 0 0 auto 0; height: 3px; }
+  .product.plat::before { background: linear-gradient(90deg, var(--blue), transparent); }
+  .product.wk::before { background: linear-gradient(90deg, var(--red), var(--gold)); }
+  .product .icon { font-size: 32px; }
+  .product h2 { font-size: 22px; font-weight: 800; margin: 12px 0 4px; }
+  .product .tag { color: var(--dim); font-size: 14px; }
+  .product ul { list-style: none; margin: 18px 0 22px; display: grid; gap: 9px; }
+  .product li { color: var(--text); font-size: 14px; display: flex; gap: 10px; align-items: flex-start; }
+  .product li::before { content: '▸'; color: var(--blue); flex: none; }
+  .product.wk li::before { color: var(--gold); }
+  .product .foot { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .ver { color: var(--dim); font-size: 13px; font-family: 'Consolas', monospace; }
+
+  footer { border-top: 1px solid var(--border); padding: 26px 0 40px; color: var(--dim); font-size: 13px;
+    display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+  footer a { color: var(--blue); }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <nav>
+      <div class="brand"><span class="mark">⚔️</span> WC3 Platform</div>
+      <a class="navlink" href="/admin">🛡️ Админ самбар</a>
+    </nav>
+
+    <header class="hero">
+      <div class="kicker">Монгол Warcraft III · DotA</div>
+      <h1>Хамтдаа тогло. Хурдан тогло.</h1>
+      <p>Warcraft III / DotA-г онлайнаар хамтдаа тоглох платформ, тоглоомын
+         hotkey-г төгс болгох WarKey — нэг экосистем.</p>
+      <div class="cta">
+        <a class="btn primary" id="dlPlatform" href="https://github.com/Tuguldur0107/mongolian-warcraft-gaming-platform/releases/latest" target="_blank" rel="noopener">
+          ⬇ Платформ татах <small id="verPlatform"></small>
+        </a>
+        <a class="btn gold" id="dlWarkey" href="https://github.com/Tuguldur0107/LexusWarKey/releases/latest" target="_blank" rel="noopener">
+          ⬇ WarKey татах <small id="verWarkey"></small>
+        </a>
+        <a class="btn ghost" href="/admin">Админ самбар</a>
+      </div>
+    </header>
+
+    <section class="grid">
+      <div class="product plat">
+        <div class="icon">🎮</div>
+        <h2>Gaming Platform</h2>
+        <div class="tag">Desktop client — өрөө үүсгэ, найзуудтайгаа тогло</div>
+        <ul>
+          <li>Discord-оор нэвтрэх, найз нэмэх, чат</li>
+          <li>Тоглоомын өрөө + ZeroTier-ээр шууд холболт (LAN шиг)</li>
+          <li>Оноо, ялалт/ялагдал, streamers таб</li>
+          <li>Автомат шинэчлэлт</li>
+        </ul>
+        <div class="foot">
+          <a class="btn primary" id="dlPlatform2" href="https://github.com/Tuguldur0107/mongolian-warcraft-gaming-platform/releases/latest" target="_blank" rel="noopener">⬇ Татах</a>
+          <span class="ver" id="verPlatform2"></span>
+        </div>
+      </div>
+
+      <div class="product wk">
+        <div class="icon">⌨️</div>
+        <h2>Lexus WarKey</h2>
+        <div class="tag">WC3 1.26a / DotA LoD hotkey remapper</div>
+        <ul>
+          <li>Skill-ийн hotkey-г тоглолтын дундуур RAM-аас өөрчлөх</li>
+          <li>Inventory-г numpad дээр, нэг товч олон QuickChat</li>
+          <li>Ctrl+F6 тоглоом доторх тохиргооны overlay</li>
+          <li>Discord нэвтрэлт + автомат шинэчлэлт</li>
+        </ul>
+        <div class="foot">
+          <a class="btn gold" id="dlWarkey2" href="https://github.com/Tuguldur0107/LexusWarKey/releases/latest" target="_blank" rel="noopener">⬇ Татах</a>
+          <span class="ver" id="verWarkey2"></span>
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      <span>© Mongolian Warcraft Gaming Platform</span>
+      <span>
+        <a href="https://github.com/Tuguldur0107/mongolian-warcraft-gaming-platform" target="_blank" rel="noopener">Platform GitHub</a>
+        &nbsp;·&nbsp;
+        <a href="https://github.com/Tuguldur0107/LexusWarKey" target="_blank" rel="noopener">WarKey GitHub</a>
+      </span>
+    </footer>
+  </div>
+
+<script>
+  // Хамгийн сүүлийн release-ийн exe-г GitHub API-аас олж, товчийг тохируулна.
+  async function wireDownload(repo, matchName, ids) {
+    try {
+      const r = await fetch(`https://api.github.com/repos/${repo}/releases/latest`);
+      if (!r.ok) return;
+      const rel = await r.json();
+      const asset = (rel.assets || []).find(matchName);
+      const ver = rel.tag_name || '';
+      for (const id of ids.buttons) {
+        const el = document.getElementById(id);
+        if (el && asset) el.href = asset.browser_download_url;
+      }
+      for (const id of ids.versions) {
+        const el = document.getElementById(id);
+        if (el && ver) el.textContent = ver;
+      }
+    } catch { /* keep the fallback links to the releases page */ }
+  }
+
+  wireDownload('Tuguldur0107/LexusWarKey',
+    (a) => /^LexusWarKey\.exe$/i.test(a.name),
+    { buttons: ['dlWarkey', 'dlWarkey2'], versions: ['verWarkey', 'verWarkey2'] });
+
+  wireDownload('Tuguldur0107/mongolian-warcraft-gaming-platform',
+    (a) => /\.exe$/i.test(a.name) && /setup/i.test(a.name) || /\.exe$/i.test(a.name),
+    { buttons: ['dlPlatform', 'dlPlatform2'], versions: ['verPlatform', 'verPlatform2'] });
+</script>
+</body>
+</html>
