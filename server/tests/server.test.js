@@ -159,6 +159,79 @@ async function testSmokeFlow() {
   }
 }
 
+async function testDiscordLinkedUsernameIsReadOnly() {
+  let updateAttempted = false;
+  const mockDb = {
+    query: async (sql) => {
+      const s = sql.replace(/\s+/g, ' ').trim();
+      if (s === 'SELECT 1') return { rows: [{ '?column?': 1 }] };
+      if (s.startsWith('SELECT discord_id FROM users WHERE id')) {
+        return { rows: [{ discord_id: '777' }] };
+      }
+      if (s.startsWith('UPDATE users SET username')) {
+        updateAttempted = true;
+      }
+      return { rows: [], rowCount: 0 };
+    },
+  };
+
+  const server = await startServer({}, { mockDb });
+  try {
+    const token = makeAuthToken({ id: 7, username: 'DiscordName', discord_id: '777' });
+    const res = await fetch(`${server.baseUrl}/auth/username`, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: 'OtherName' }),
+    });
+
+    assert.equal(res.status, 400);
+    const body = await res.json();
+    assert.match(body.error, /Discord nickname/);
+    assert.equal(updateAttempted, false);
+  } finally {
+    await server.stop();
+  }
+}
+
+async function testAuthMeReturnsDiscordUsername() {
+  const mockDb = {
+    query: async (sql) => {
+      const s = sql.replace(/\s+/g, ' ').trim();
+      if (s === 'SELECT 1') return { rows: [{ '?column?': 1 }] };
+      if (s.startsWith('SELECT id, username, email, discord_id, discord_username')) {
+        return {
+          rows: [{
+            id: 7,
+            username: 'tuguldurkhas',
+            email: null,
+            discord_id: '777',
+            discord_username: 'Lil',
+            avatar_url: null,
+            wins: 0,
+            losses: 0,
+          }],
+        };
+      }
+      return { rows: [], rowCount: 0 };
+    },
+  };
+
+  const server = await startServer({}, { mockDb });
+  try {
+    const token = makeAuthToken({ id: 7, username: 'tuguldurkhas', discord_id: '777' });
+    const res = await fetch(`${server.baseUrl}/auth/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.username, 'tuguldurkhas');
+    assert.equal(body.discord_username, 'Lil');
+  } finally {
+    await server.stop();
+  }
+}
+
 async function testProductionRoomGuard() {
   const server = await startServer({ NODE_ENV: 'production' });
   try {
@@ -654,10 +727,91 @@ async function testWarkeyBanRestore() {
   }
 }
 
+async function testTierBotSyncImportsRankData() {
+  const users = new Map();
+  let nextId = 1;
+  const mockDb = {
+    query: async (sql, params = []) => {
+      const s = sql.replace(/\s+/g, ' ').trim();
+      if (s === 'SELECT 1') return { rows: [{ '?column?': 1 }] };
+      if (s.startsWith('ALTER TABLE users')) return { rows: [], rowCount: 0 };
+      if (s.startsWith('SELECT id FROM users WHERE discord_id')) {
+        const found = [...users.values()].find((u) => u.discord_id === params[0]);
+        return { rows: found ? [{ id: found.id }] : [] };
+      }
+      if (s.startsWith('SELECT id FROM users WHERE tierbot_id')) {
+        const found = [...users.values()].find((u) => u.tierbot_id === params[0]);
+        return { rows: found ? [{ id: found.id }] : [] };
+      }
+      if (s.startsWith('SELECT id FROM users WHERE LOWER(username)')) {
+        const found = [...users.values()].find((u) => u.username.toLowerCase() === String(params[0]).toLowerCase());
+        return { rows: found ? [{ id: found.id }] : [] };
+      }
+      if (s.startsWith('INSERT INTO users')) {
+        const user = {
+          id: nextId++,
+          username: params[0],
+          discord_id: params[1],
+          wins: params[2],
+          losses: params[3],
+          tierbot_id: params[4],
+          tierbot_rating: params[5],
+          tierbot_tier: params[6],
+          tierbot_rank: params[7],
+        };
+        users.set(user.id, user);
+        return { rows: [user], rowCount: 1 };
+      }
+      if (s.startsWith('UPDATE users SET username')) {
+        const user = users.get(params[8]);
+        if (user) {
+          user.username = params[0];
+          user.discord_id = params[1] || user.discord_id;
+          user.wins = params[2];
+          user.losses = params[3];
+          user.tierbot_id = params[4] || user.tierbot_id;
+          user.tierbot_rating = params[5];
+          user.tierbot_tier = params[6];
+          user.tierbot_rank = params[7];
+        }
+        return { rows: user ? [user] : [], rowCount: user ? 1 : 0 };
+      }
+      return { rows: [], rowCount: 0 };
+    },
+  };
+
+  const server = await startServer({ ADMIN_DISCORD_IDS: '999' }, { mockDb });
+  const admin = makeAuthToken({ id: 1, username: 'Boss', discord_id: '999' });
+  try {
+    const res = await fetch(`${server.baseUrl}/stats/tierbot/sync`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${admin}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        players: [
+          { username: 'Alpha', discord_id: '111', wins: 12, losses: 3, rating: 1840, tier: 'Gold', rank: 1 },
+          { name: 'Beta', playerId: 'tb-2', w: 4, l: 6, points: 990, division: 'Bronze' },
+        ],
+      }),
+    });
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.imported, 2);
+    assert.equal(body.created, 2);
+    assert.equal(users.size, 2);
+    assert.equal([...users.values()][0].tierbot_rating, 1840);
+    assert.equal([...users.values()][1].tierbot_tier, 'Bronze');
+  } finally {
+    await server.stop();
+  }
+}
+
 (async () => {
   await runTest('server smoke flow supports register/login/me and guarded auth endpoints', testSmokeFlow);
+  await runTest('Discord-linked usernames are read-only in-app', testDiscordLinkedUsernameIsReadOnly);
+  await runTest('auth/me returns the stored Discord nickname', testAuthMeReturnsDiscordUsername);
   await runTest('admin can edit and delete platform users', testAdminUserEditDelete);
   await runTest('warkey users can be banned, listed, blocked, and restored', testWarkeyBanRestore);
+  await runTest('TierBot sync imports rank data into users', testTierBotSyncImportsRankData);
   await runTest('admin dashboard gates its API behind a Discord ID whitelist', testAdminDashboardAccess);
   await runTest('admin whitelist that is empty denies everyone', testAdminEmptyWhitelistDeniesEveryone);
   await runTest('admins can be added and removed by Discord ID from the dashboard', testAdminManagement);

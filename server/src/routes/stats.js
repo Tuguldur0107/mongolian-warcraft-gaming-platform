@@ -1,6 +1,7 @@
 const express = require('express');
 const axios = require('axios');
 const auth = require('../middleware/auth');
+const admin = require('../middleware/admin');
 
 let db;
 try { db = require('../config/db'); } catch { db = null; }
@@ -11,6 +12,7 @@ async function dbAvailable() {
 }
 
 const router = express.Router();
+let tierBotColumnsReady = false;
 
 // RZR Bot-руу үр дүн илгээх
 async function notifyRZRBot(payload) {
@@ -27,6 +29,152 @@ async function notifyRZRBot(payload) {
   } catch (err) {
     console.error('RZR Bot мэдэгдэл алдаа:', err.message);
   }
+}
+
+async function ensureTierBotColumns() {
+  if (tierBotColumnsReady) return;
+  if (!db) return;
+  await db.query(`
+    ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS tierbot_id VARCHAR(255),
+      ADD COLUMN IF NOT EXISTS tierbot_rating INTEGER DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS tierbot_tier VARCHAR(100),
+      ADD COLUMN IF NOT EXISTS tierbot_rank INTEGER,
+      ADD COLUMN IF NOT EXISTS tierbot_synced_at TIMESTAMP;
+
+    CREATE INDEX IF NOT EXISTS idx_users_tierbot_id ON users(tierbot_id);
+    CREATE INDEX IF NOT EXISTS idx_users_tierbot_rating ON users(tierbot_rating DESC);
+  `);
+  tierBotColumnsReady = true;
+}
+
+function firstValue(source, keys) {
+  for (const key of keys) {
+    if (source?.[key] !== undefined && source?.[key] !== null && source?.[key] !== '') {
+      return source[key];
+    }
+  }
+  return null;
+}
+
+function toNonNegativeInt(value, fallback = 0) {
+  const n = Number.parseInt(value, 10);
+  return Number.isFinite(n) && n >= 0 ? n : fallback;
+}
+
+function cleanText(value, max = 255) {
+  if (value === undefined || value === null) return null;
+  const text = String(value).trim();
+  return text ? text.slice(0, max) : null;
+}
+
+function extractTierBotRows(payload) {
+  if (Array.isArray(payload)) return payload;
+  const candidates = [
+    payload?.players,
+    payload?.ranking,
+    payload?.leaderboard,
+    payload?.ranks,
+    payload?.data,
+    payload?.data?.players,
+    payload?.data?.ranking,
+    payload?.data?.leaderboard,
+    payload?.result,
+    payload?.result?.players,
+  ];
+  return candidates.find(Array.isArray) || [];
+}
+
+function normalizeTierBotPlayer(row, index) {
+  const username = cleanText(firstValue(row, [
+    'username', 'name', 'player', 'player_name', 'playerName', 'display_name', 'displayName',
+    'nickname', 'nick',
+  ]));
+  if (!username) return null;
+
+  return {
+    username,
+    discord_id: cleanText(firstValue(row, ['discord_id', 'discordId', 'discord', 'discord_user_id', 'discordUserId'])),
+    tierbot_id: cleanText(firstValue(row, ['tierbot_id', 'tierbotId', 'player_id', 'playerId', 'id'])),
+    wins: toNonNegativeInt(firstValue(row, ['wins', 'win', 'w']), 0),
+    losses: toNonNegativeInt(firstValue(row, ['losses', 'loss', 'loses', 'l']), 0),
+    rating: toNonNegativeInt(firstValue(row, ['rating', 'points', 'score', 'mmr', 'elo']), 0),
+    tier: cleanText(firstValue(row, ['tier', 'division', 'rank_name', 'rankName', 'league']), 100),
+    rank: toNonNegativeInt(firstValue(row, ['rank', 'position', 'place']), index + 1),
+  };
+}
+
+function tierBotSourceUrl(requestUrl) {
+  const raw = cleanText(requestUrl || process.env.TIERBOT_STATS_URL, 2048);
+  if (!raw) return null;
+  const parsed = new URL(raw);
+  if (!['http:', 'https:'].includes(parsed.protocol)) {
+    throw new Error('TierBot URL must be http(s)');
+  }
+  return parsed.toString();
+}
+
+function tierBotHeaders() {
+  const headers = {};
+  if (process.env.TIERBOT_API_TOKEN) headers.Authorization = `Bearer ${process.env.TIERBOT_API_TOKEN}`;
+  if (process.env.TIERBOT_API_KEY) headers['X-API-Key'] = process.env.TIERBOT_API_KEY;
+  return headers;
+}
+
+async function upsertTierBotPlayer(player) {
+  let existing = null;
+  if (player.discord_id) {
+    const byDiscord = await db.query('SELECT id FROM users WHERE discord_id = $1', [player.discord_id]);
+    existing = byDiscord.rows[0] || null;
+  }
+  if (!existing && player.tierbot_id) {
+    const byTierBot = await db.query('SELECT id FROM users WHERE tierbot_id = $1', [player.tierbot_id]);
+    existing = byTierBot.rows[0] || null;
+  }
+  if (!existing) {
+    const byName = await db.query(
+      'SELECT id FROM users WHERE LOWER(username) = LOWER($1) ORDER BY id ASC LIMIT 1',
+      [player.username]
+    );
+    existing = byName.rows[0] || null;
+  }
+
+  const params = [
+    player.username,
+    player.discord_id,
+    player.wins,
+    player.losses,
+    player.tierbot_id,
+    player.rating,
+    player.tier,
+    player.rank,
+  ];
+
+  if (existing) {
+    await db.query(
+      `UPDATE users
+       SET username = $1,
+           discord_id = COALESCE($2, discord_id),
+           wins = $3,
+           losses = $4,
+           tierbot_id = COALESCE($5, tierbot_id),
+           tierbot_rating = $6,
+           tierbot_tier = $7,
+           tierbot_rank = $8,
+           tierbot_synced_at = NOW()
+       WHERE id = $9`,
+      [...params, existing.id]
+    );
+    return 'updated';
+  }
+
+  await db.query(
+    `INSERT INTO users
+      (username, discord_id, wins, losses, tierbot_id, tierbot_rating, tierbot_tier, tierbot_rank, tierbot_synced_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())`,
+    params
+  );
+  return 'created';
 }
 
 // Тоглогчийн статистик — discord_id-гаар
@@ -119,25 +267,31 @@ router.get('/ranking', async (req, res) => {
     wins:        'wins DESC',
     winrate:     'CASE WHEN (wins+losses)>0 THEN wins::DECIMAL/(wins+losses) ELSE 0 END DESC',
     total_games: '(wins+losses) DESC',
+    rating:      'tierbot_rating DESC NULLS LAST, tierbot_rank ASC NULLS LAST, wins DESC',
   };
   const orderClause = allowedSorts[sortBy] || allowedSorts.wins;
 
   if (await dbAvailable()) {
     try {
+      await ensureTierBotColumns();
       const result = await db.query(`
         SELECT id, username, avatar_url, wins, losses,
+          COALESCE(tierbot_rating, 0) AS tierbot_rating,
+          tierbot_tier,
+          tierbot_rank,
+          tierbot_synced_at,
           CASE WHEN (wins+losses)>0
             THEN ROUND((wins::DECIMAL/(wins+losses))*100, 1)
             ELSE 0
           END AS winrate
         FROM users
-        WHERE (wins + losses) > 0
+        WHERE (wins + losses) > 0 OR COALESCE(tierbot_rating, 0) > 0 OR tierbot_rank IS NOT NULL
         ORDER BY ${orderClause}
         LIMIT $1 OFFSET $2
       `, [limit, offset]);
 
       const countResult = await db.query(
-        'SELECT COUNT(*) FROM users WHERE (wins+losses) > 0'
+        'SELECT COUNT(*) FROM users WHERE (wins + losses) > 0 OR COALESCE(tierbot_rating, 0) > 0 OR tierbot_rank IS NOT NULL'
       );
 
       return res.json({
@@ -149,6 +303,70 @@ router.get('/ranking', async (req, res) => {
     } catch (err) { console.error(err); }
   }
   res.json({ players: [], total: 0, page: 1, totalPages: 0 });
+});
+
+// TierBot rank export/API-аас тоглогчдын rank өгөгдөл татаж users хүснэгтэд оруулна.
+// Admin эрхтэй хэрэглэгч л ажиллуулна.
+router.post('/tierbot/sync', admin, async (req, res) => {
+  if (!await dbAvailable()) {
+    return res.status(503).json({ error: 'Service temporarily unavailable' });
+  }
+
+  try {
+    await ensureTierBotColumns();
+
+    let payload = null;
+    let source = 'request-body';
+    if (Array.isArray(req.body?.players)) {
+      payload = req.body.players;
+    } else {
+      let url = null;
+      try {
+        url = tierBotSourceUrl(req.body?.source_url);
+      } catch (err) {
+        return res.status(400).json({ error: err.message });
+      }
+      if (!url) {
+        return res.status(400).json({
+          error: 'TierBot source URL эсвэл players export JSON шаардлагатай',
+        });
+      }
+      const { data } = await axios.get(url, {
+        headers: tierBotHeaders(),
+        timeout: 15000,
+        maxContentLength: 5 * 1024 * 1024,
+      });
+      payload = data;
+      source = req.body?.source_url ? 'request-url' : 'server-env';
+    }
+
+    const rows = extractTierBotRows(payload);
+    if (!rows.length) {
+      return res.status(400).json({ error: 'TierBot дата дотор тоглогчийн жагсаалт олдсонгүй' });
+    }
+
+    const stats = { imported: 0, created: 0, updated: 0, skipped: 0 };
+    for (const [index, row] of rows.entries()) {
+      const player = normalizeTierBotPlayer(row, index);
+      if (!player) {
+        stats.skipped++;
+        continue;
+      }
+      const outcome = await upsertTierBotPlayer(player);
+      stats.imported++;
+      stats[outcome]++;
+    }
+
+    res.json({
+      ok: true,
+      source,
+      totalRows: rows.length,
+      ...stats,
+    });
+  } catch (err) {
+    console.error('[TierBot Sync]', err.message);
+    res.status(500).json({ error: `TierBot sync алдаа: ${err.message}` });
+  }
 });
 
 // Replay parse хийсний дараа үр дүн хадгалах (өрөөний гишүүн)

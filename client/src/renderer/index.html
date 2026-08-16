@@ -8,7 +8,7 @@
   <title>Mongolian Warcraft Gaming Platform</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -48,21 +48,25 @@
         <line x1="18" y1="6" x2="6" y2="18"/>
         <line x1="6" y1="6" x2="18" y2="18"/>
       </symbol>
-      <!-- Нар (light mode) -->
-      <symbol id="ico-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="12" cy="12" r="5"/>
-        <line x1="12" y1="1" x2="12" y2="3"/>
-        <line x1="12" y1="21" x2="12" y2="23"/>
-        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
-        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
-        <line x1="1" y1="12" x2="3" y2="12"/>
-        <line x1="21" y1="12" x2="23" y2="12"/>
-        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
-        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+      <!-- Устгах (trash) -->
+      <symbol id="ico-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 6h18"/>
+        <path d="M8 6V4h8v2"/>
+        <path d="M19 6l-1 14H6L5 6"/>
+        <path d="M10 11v5"/>
+        <path d="M14 11v5"/>
       </symbol>
-      <!-- Сар (dark mode) -->
-      <symbol id="ico-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+      <!-- Зураг солих -->
+      <symbol id="ico-camera" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 8h3l1.5-2h7L17 8h3a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2Z"/>
+        <circle cx="12" cy="14" r="3.2"/>
+      </symbol>
+      <!-- Sidebar collapse / expand -->
+      <symbol id="ico-sidebar-collapse" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="15 18 9 12 15 6"/>
+      </symbol>
+      <symbol id="ico-sidebar-expand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="9 18 15 12 9 6"/>
       </symbol>
       <!-- + Нэмэх -->
       <symbol id="ico-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
@@ -75,13 +79,90 @@
         <polyline points="14 17 9 12 14 7"/>
         <line x1="9" y1="12" x2="21" y2="12"/>
       </symbol>
+      <!-- Sidebar / settings icons -->
+      <symbol id="ico-nav-rooms" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 10.5 12 4l8 6.5"/>
+        <path d="M6.5 9.5V20h11V9.5"/>
+        <path d="M10 20v-5h4v5"/>
+      </symbol>
+      <symbol id="ico-nav-chat" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 12a8 8 0 0 1-8 8H7l-4 3 1.4-5A8 8 0 1 1 21 12Z"/>
+        <path d="M8 11h8"/>
+        <path d="M8 15h5"/>
+      </symbol>
+      <symbol id="ico-nav-rank" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M8 21h8"/>
+        <path d="M12 17v4"/>
+        <path d="M7 4h10v5a5 5 0 0 1-10 0V4Z"/>
+        <path d="M7 6H4a3 3 0 0 0 3 3"/>
+        <path d="M17 6h3a3 3 0 0 1-3 3"/>
+      </symbol>
+      <symbol id="ico-nav-discord" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M7.5 8.5A13 13 0 0 1 12 7.7a13 13 0 0 1 4.5.8"/>
+        <path d="M8 17.5c1.2.7 2.5 1 4 1s2.8-.3 4-1"/>
+        <path d="M6.5 5.5c-1.8 2.8-2.5 6.3-2 10.4 2.1 1.6 4.2 2.5 6.2 2.8l1.3-2.1 1.3 2.1c2-.3 4.1-1.2 6.2-2.8.5-4.1-.2-7.6-2-10.4a17 17 0 0 0-3.8-1.1l-.7 1.3a14 14 0 0 0-2 0l-.7-1.3a17 17 0 0 0-3.8 1.1Z"/>
+        <path d="M9.5 13h.01"/>
+        <path d="M14.5 13h.01"/>
+      </symbol>
+      <symbol id="ico-nav-streamers" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="5" width="18" height="12" rx="2"/>
+        <path d="m10 9 5 2.5-5 2.5V9Z" fill="currentColor" stroke="none"/>
+        <path d="M8 21h8"/>
+        <path d="M12 17v4"/>
+      </symbol>
+      <symbol id="ico-nav-profile" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="8" r="4"/>
+        <path d="M5 21a7 7 0 0 1 14 0"/>
+      </symbol>
+      <symbol id="ico-nav-settings" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 7h10"/>
+        <path d="M18 7h2"/>
+        <circle cx="16" cy="7" r="2"/>
+        <path d="M4 17h2"/>
+        <path d="M10 17h10"/>
+        <circle cx="8" cy="17" r="2"/>
+      </symbol>
+      <symbol id="ico-settings-game" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M7 8h10a4 4 0 0 1 3.8 5.2l-1.1 3.4a2.2 2.2 0 0 1-3.7.8l-2-2.4h-4l-2 2.4a2.2 2.2 0 0 1-3.7-.8l-1.1-3.4A4 4 0 0 1 7 8Z"/>
+        <path d="M8 12h4"/>
+        <path d="M10 10v4"/>
+        <path d="M16.5 11.5h.01"/>
+        <path d="M18.5 13.5h.01"/>
+      </symbol>
+      <symbol id="ico-settings-network" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="9"/>
+        <path d="M3 12h18"/>
+        <path d="M12 3a14 14 0 0 1 0 18"/>
+        <path d="M12 3a14 14 0 0 0 0 18"/>
+      </symbol>
+      <symbol id="ico-settings-app" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="5" y="5" width="14" height="14" rx="3"/>
+        <path d="M9 9h6v6H9z"/>
+        <path d="M9 1v4"/>
+        <path d="M15 1v4"/>
+        <path d="M9 19v4"/>
+        <path d="M15 19v4"/>
+        <path d="M1 9h4"/>
+        <path d="M1 15h4"/>
+        <path d="M19 9h4"/>
+        <path d="M19 15h4"/>
+      </symbol>
+      <symbol id="ico-settings-bell" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/>
+        <path d="M10 21h4"/>
+      </symbol>
+      <symbol id="ico-settings-guide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v16H7a3 3 0 0 0-3 3V5.5Z"/>
+        <path d="M8 7h8"/>
+        <path d="M8 11h6"/>
+      </symbol>
     </defs>
   </svg>
 
   <!-- ① Нэвтрэх / Бүртгэл -->
   <div id="page-login" class="page active">
     <div class="login-box">
-      <div class="login-logo">⚔️</div>
+      <img class="login-logo" src="logo.gif" alt="" />
       <h1>Mongolian Warcraft Gaming Platform</h1>
       <p class="subtitle">Монголын WC3 &amp; DotA 1 тоглогчдын платформ</p>
 
@@ -158,26 +239,54 @@
 
   <!-- ② Үндсэн хуудас -->
   <div id="page-main" class="page">
-    <header>
-      <nav>
-        <button type="button" class="nav-btn active" data-tab="lobby">Lobby</button>
+    <aside class="app-sidebar">
+      <div class="sidebar-brand">
+        <img src="logo.gif" alt="" />
+        <div>
+          <strong>Warcraft Platform</strong>
+          <span>Mongolian community</span>
+        </div>
+      </div>
+      <nav class="app-nav" aria-label="Үндсэн цэс">
+        <button type="button" class="nav-btn active" data-tab="lobby">
+          <span class="nav-icon"><svg class="btn-icon-svg"><use href="#ico-nav-rooms"/></svg></span>
+          <span class="nav-label">Өрөөнүүд</span>
+        </button>
         <button type="button" class="nav-btn" data-tab="chat">
-          Чат
+          <span class="nav-icon"><svg class="btn-icon-svg"><use href="#ico-nav-chat"/></svg></span>
+          <span class="nav-label">Чат</span>
           <span id="chat-badge" class="nav-badge hidden">0</span>
         </button>
-        <button type="button" class="nav-btn" data-tab="ranking">Ranking</button>
-        <button type="button" class="nav-btn" data-tab="discord">Discord</button>
-        <button type="button" class="nav-btn" data-tab="streamers">Streamers</button>
-        <button type="button" class="nav-btn" data-tab="profile">Профайл</button>
-        <button type="button" class="nav-btn" data-tab="settings">Тохиргоо</button>
-      </nav>
-      <div class="header-right">
-        <span id="connection-status" class="connection-status online">🟢 Холбогдсон</span>
-        <!-- Light / Dark toggle -->
-        <button type="button" id="btn-theme" class="btn btn-icon-only" title="Харааны горим солих">
-          <svg class="btn-icon-svg" id="icon-sun"><use href="#ico-sun"/></svg>
-          <svg class="btn-icon-svg" id="icon-moon"><use href="#ico-moon"/></svg>
+        <button type="button" class="nav-btn" data-tab="ranking">
+          <span class="nav-icon"><svg class="btn-icon-svg"><use href="#ico-nav-rank"/></svg></span>
+          <span class="nav-label">Rank</span>
         </button>
+        <button type="button" class="nav-btn" data-tab="discord">
+          <span class="nav-icon"><svg class="btn-icon-svg"><use href="#ico-nav-discord"/></svg></span>
+          <span class="nav-label">Discord</span>
+        </button>
+        <button type="button" class="nav-btn" data-tab="streamers">
+          <span class="nav-icon"><svg class="btn-icon-svg"><use href="#ico-nav-streamers"/></svg></span>
+          <span class="nav-label">Стримерүүд</span>
+        </button>
+        <button type="button" class="nav-btn" data-tab="profile">
+          <span class="nav-icon"><svg class="btn-icon-svg"><use href="#ico-nav-profile"/></svg></span>
+          <span class="nav-label">Профайл</span>
+        </button>
+        <button type="button" class="nav-btn" data-tab="settings">
+          <span class="nav-icon"><svg class="btn-icon-svg"><use href="#ico-nav-settings"/></svg></span>
+          <span class="nav-label">Тохиргоо</span>
+        </button>
+      </nav>
+      <div class="sidebar-footer">
+        <div class="sidebar-status-row">
+          <span id="connection-status" class="connection-status online" title="Холбогдсон" aria-label="Холбогдсон">
+            <span class="connection-status-dot" aria-hidden="true"></span>
+          </span>
+          <button type="button" id="btn-sidebar-toggle" class="btn btn-icon-only sidebar-toggle" title="Sidebar хаах" aria-label="Sidebar хаах" aria-expanded="true">
+            <svg class="btn-icon-svg"><use id="sidebar-toggle-icon" href="#ico-sidebar-collapse"/></svg>
+          </button>
+        </div>
         <div class="user-info">
           <img id="user-avatar" src="" alt="" class="hidden" />
           <span id="user-name"></span>
@@ -186,15 +295,38 @@
           </button>
         </div>
       </div>
-    </header>
+    </aside>
+    <div class="fire-sparks" aria-hidden="true">
+      <span style="--x:6%;--s:3px;--d:8s;--delay:-1s;--drift:34px;--o:.55"></span>
+      <span style="--x:14%;--s:2px;--d:10s;--delay:-7s;--drift:-26px;--o:.45"></span>
+      <span style="--x:23%;--s:4px;--d:9s;--delay:-3s;--drift:42px;--o:.62"></span>
+      <span style="--x:32%;--s:2px;--d:11s;--delay:-5s;--drift:-38px;--o:.5"></span>
+      <span style="--x:43%;--s:3px;--d:7s;--delay:-2s;--drift:24px;--o:.7"></span>
+      <span style="--x:55%;--s:2px;--d:12s;--delay:-9s;--drift:-44px;--o:.42"></span>
+      <span style="--x:64%;--s:4px;--d:8.5s;--delay:-4s;--drift:30px;--o:.6"></span>
+      <span style="--x:72%;--s:2px;--d:10.5s;--delay:-6s;--drift:-22px;--o:.5"></span>
+      <span style="--x:81%;--s:3px;--d:9.5s;--delay:-8s;--drift:48px;--o:.58"></span>
+      <span style="--x:90%;--s:2px;--d:12.5s;--delay:-4.5s;--drift:-36px;--o:.44"></span>
+      <span style="--x:96%;--s:4px;--d:7.5s;--delay:-2.5s;--drift:18px;--o:.64"></span>
+    </div>
+    <div class="bg-lightning" aria-hidden="true">
+      <span class="lightning-bolt"></span>
+      <span class="lightning-branch branch-a"></span>
+      <span class="lightning-branch branch-b"></span>
+      <span class="lightning-branch branch-c"></span>
+      <span class="lightning-ground"></span>
+      <span class="lightning-impact"></span>
+    </div>
 
     <!-- Lobby tab -->
     <div id="tab-lobby" class="tab active">
-      <div class="tab-header">
-        <h2>Нээлттэй өрөөнүүд</h2>
-        <div class="online-bar">
-          <span class="online-dot"></span>
-          <span id="online-count">0</span> тоглогч онлайн
+      <div class="tab-header lobby-header">
+        <div class="lobby-title-group">
+          <h2>Нээлттэй өрөөнүүд</h2>
+          <div class="online-bar">
+            <span class="online-dot"></span>
+            <span id="online-count">0</span> тоглогч онлайн
+          </div>
         </div>
         <div class="tab-actions">
           <button type="button" id="btn-refresh" class="btn btn-icon-only" title="Шинэчлэх">
@@ -210,7 +342,7 @@
         </div>
       </div>
 
-      <div class="lobby-filters">
+      <div class="lobby-filters lobby-control-bar">
         <input id="room-search" type="text" placeholder="🔍 Өрөө хайх..." class="input input-sm" />
         <select id="room-filter-type" class="input input-sm">
           <option value="">Бүх төрөл</option>
@@ -253,16 +385,32 @@
         </div>
       </div>
 
-      <div class="rooms-section">
-        <h3 class="section-title">🟢 Нэгдэж болно</h3>
-        <div id="rooms-waiting" class="rooms-grid">
-          <p class="empty-text">Ачааллаж байна...</p>
+      <div class="room-board-layout no-selection">
+        <div class="room-board-main">
+          <section class="rooms-section room-grid-panel">
+            <div class="room-section-head">
+              <h3 class="section-title"><span class="room-state-dot waiting"></span>Нэгдэж болно</h3>
+              <span id="rooms-waiting-count" class="lobby-filters-count">0 өрөө</span>
+            </div>
+            <div id="rooms-waiting" class="rooms-grid">
+              <p class="empty-text">Ачааллаж байна...</p>
+            </div>
+          </section>
+          <section class="rooms-section room-grid-panel">
+            <div class="room-section-head">
+              <h3 class="section-title"><span class="room-state-dot playing"></span>Тоглолт явагдаж байна</h3>
+              <span id="rooms-playing-count" class="lobby-filters-count">0 өрөө</span>
+            </div>
+            <div id="rooms-playing" class="rooms-grid">
+              <p class="empty-text">Одоогоор тоглолт явагдахгүй байна</p>
+            </div>
+          </section>
         </div>
-      </div>
-      <div class="rooms-section">
-        <h3 class="section-title">🔴 Тоглолт явагдаж байна</h3>
-        <div id="rooms-playing" class="rooms-grid">
-          <p class="empty-text">Одоогоор тоглолт явагдахгүй байна</p>
+        <div id="room-detail-panel" class="room-detail-panel">
+          <div class="room-detail-empty">
+            <div class="room-detail-icon">i</div>
+            <p>Өрөө сонгоход дэлгэрэнгүй мэдээлэл энд гарна.</p>
+          </div>
         </div>
       </div>
     </div>
@@ -331,19 +479,27 @@
 
     <!-- Ranking tab -->
     <div id="tab-ranking" class="tab">
-      <div class="ranking-header">
-        <h2>🏆 Шилдэг тоглогчид</h2>
+      <div class="tab-header section-header ranking-header">
+        <div class="section-title-group">
+          <h2>Rank</h2>
+          <span class="section-subtitle">TierBot rating, хожил, win rate, нийт тоглолтоор тоглогчдыг жагсаана</span>
+        </div>
         <div class="ranking-controls">
           <select id="ranking-sort" class="input input-sm" title="Эрэмблэх">
+            <option value="rating">TierBot rating</option>
             <option value="wins">Хожлоор</option>
             <option value="winrate">Win%-ээр</option>
             <option value="total_games">Нийт тоглолтоор</option>
           </select>
+          <button type="button" id="btn-rank-tierbot-sync" class="btn btn-secondary btn-with-icon" title="TierBot дата татах">
+            <svg class="btn-icon-svg"><use href="#ico-refresh"/></svg>
+            TierBot sync
+          </button>
         </div>
       </div>
       <table id="ranking-table">
         <thead>
-          <tr><th>#</th><th>Тоглогч</th><th>Хожил</th><th>Хожигдол</th><th>Win%</th></tr>
+          <tr><th>#</th><th>Тоглогч</th><th>Tier</th><th>Rating</th><th>Хожил</th><th>Хожигдол</th><th>Win%</th></tr>
         </thead>
         <tbody id="ranking-body"></tbody>
       </table>
@@ -352,166 +508,254 @@
 
     <!-- Profile tab -->
     <div id="tab-profile" class="tab">
-      <div class="card profile-card">
-        <div class="profile-avatar-wrap">
-          <img id="profile-avatar" src="" alt="" />
-          <button type="button" id="btn-upload-avatar" class="avatar-upload-btn" title="Зураг солих">📷</button>
+      <div class="tab-header section-header">
+        <div class="section-title-group">
+          <h2>Профайл</h2>
+          <span class="section-subtitle">Тоглогчийн мэдээлэл, статистик, бүртгэлийн хамгаалалт</span>
         </div>
-        <div class="username-edit-row">
-          <h2 id="profile-name"></h2>
-          <button type="button" id="btn-edit-username" class="btn btn-sm" title="Username өөрчлөх">✏️</button>
-        </div>
-        <div id="username-edit-form" class="hidden username-edit-form">
-          <input id="username-input" type="text" placeholder="Шинэ нэр (2-20 тэмдэгт)" class="input input-sm" maxlength="20" />
-          <button type="button" id="btn-username-save" class="btn btn-sm btn-primary">Хадгалах</button>
-          <button type="button" id="btn-username-cancel" class="btn btn-sm">Цуцлах</button>
-        </div>
-        <p id="username-edit-error" class="form-error"></p>
-        <p id="profile-email" class="hint"></p>
-        <div id="profile-rank" class="rank-badge"></div>
-        <div class="stats-row">
-          <div class="stat stat-wins"><span class="stat-icon">🏆</span><span id="stat-wins">0</span><label>Хожил</label></div>
-          <div class="stat stat-losses"><span class="stat-icon">💀</span><span id="stat-losses">0</span><label>Хожигдол</label></div>
-          <div class="stat stat-winrate"><span class="stat-icon">📊</span><span id="stat-winrate">0%</span><label>Win rate</label></div>
-        </div>
-        <div id="discord-link-section" class="mt-16">
-          <div id="discord-linked" class="discord-badge hidden">
-            <span>✓ Discord холбогдсон</span>
-            <span id="discord-username" class="hint"></span>
-            <button type="button" id="btn-unlink-discord" class="btn btn-sm btn-danger-soft" title="Discord салгах">✕</button>
+      </div>
+
+      <div class="profile-layout">
+        <section class="card profile-card profile-summary-card">
+          <div class="profile-identity">
+            <div class="profile-avatar-wrap">
+              <img id="profile-avatar" src="" alt="" />
+              <button type="button" id="btn-upload-avatar" class="avatar-upload-btn" title="Зураг солих" aria-label="Зураг солих">
+                <svg class="btn-icon-svg"><use href="#ico-camera"/></svg>
+              </button>
+            </div>
+            <div class="profile-main">
+              <div class="username-display-row">
+                <h2 id="profile-name"></h2>
+                <span id="profile-name-source" class="profile-name-source hidden">Discord</span>
+              </div>
+              <div class="profile-meta-row">
+                <div id="profile-rank" class="rank-badge"></div>
+                <div id="discord-link-section" class="profile-discord-meta">
+                  <div id="discord-linked" class="discord-badge hidden">
+                    <span class="discord-status-dot"></span>
+                    <span>Холбогдсон</span>
+                    <span id="discord-username" class="discord-handle"></span>
+                    <button type="button" id="btn-unlink-discord" class="btn btn-sm btn-danger-soft profile-hidden-action" title="Discord салгах">✕</button>
+                  </div>
+                  <button type="button" id="btn-link-discord" class="btn btn-discord btn-sm hidden">Discord холбох</button>
+                </div>
+              </div>
+              <p id="profile-name-note" class="hint profile-name-note hidden"></p>
+              <p id="profile-email" class="hint profile-email hidden"></p>
+            </div>
           </div>
-          <button type="button" id="btn-link-discord" class="btn btn-discord hidden">Discord холбох</button>
-        </div>
-      </div>
+          <div class="stats-row profile-stats-row">
+            <div class="stat stat-wins"><span id="stat-wins">0</span><label>Хожил</label></div>
+            <div class="stat stat-losses"><span id="stat-losses">0</span><label>Хожигдол</label></div>
+            <div class="stat stat-winrate"><span id="stat-winrate">0%</span><label>Win rate</label></div>
+          </div>
+        </section>
 
-      <div class="card mt-16">
-        <h3>📋 Тоглоомын түүх</h3>
-        <table id="game-history-table">
-          <thead>
-            <tr><th>Огноо</th><th>Төрөл</th><th>Өрөө</th><th>Баг</th><th>Үр дүн</th><th>Хугацаа</th></tr>
-          </thead>
-          <tbody id="game-history-body">
-            <tr><td colspan="6" class="empty-text">Ачааллаж байна...</td></tr>
-          </tbody>
-        </table>
-        <div id="game-history-pagination" class="pagination hidden"></div>
-      </div>
+        <section class="card profile-history-card">
+          <h3>Тоглоомын түүх</h3>
+          <table id="game-history-table">
+            <thead>
+              <tr><th>Огноо</th><th>Төрөл</th><th>Өрөө</th><th>Баг</th><th>Үр дүн</th><th>Хугацаа</th></tr>
+            </thead>
+            <tbody id="game-history-body">
+              <tr><td colspan="6" class="empty-text">Ачааллаж байна...</td></tr>
+            </tbody>
+          </table>
+          <div id="game-history-pagination" class="pagination hidden"></div>
+        </section>
 
-      <div class="card mt-16">
-        <h3>🔑 Нууц үг солих</h3>
-        <div class="input-pw-wrap">
-          <input id="old-password" type="password" placeholder="Хуучин нууц үг" class="input" />
-          <button type="button" class="btn-eye" data-target="old-password" title="Нууц үг харах">👁</button>
-        </div>
-        <div class="input-pw-wrap">
-          <input id="new-password" type="password" placeholder="Шинэ нууц үг (6+ тэмдэгт)" class="input" />
-          <button type="button" class="btn-eye" data-target="new-password" title="Нууц үг харах">👁</button>
-        </div>
-        <div class="input-pw-wrap">
-          <input id="new-password-confirm" type="password" placeholder="Шинэ нууц үг давтах" class="input" />
-          <button type="button" class="btn-eye" data-target="new-password-confirm" title="Нууц үг харах">👁</button>
-        </div>
-        <p id="pw-change-error" class="form-error"></p>
-        <p id="pw-change-success" class="form-success"></p>
-        <button type="button" id="btn-change-password" class="btn btn-primary mt-8">Солих</button>
+        <section class="card profile-security-card">
+          <h3>Нэвтрэх хамгаалалт</h3>
+          <div class="input-pw-wrap">
+            <input id="old-password" type="password" placeholder="Хуучин нууц үг" class="input" />
+            <button type="button" class="btn-eye" data-target="old-password" title="Нууц үг харах">👁</button>
+          </div>
+          <div class="input-pw-wrap">
+            <input id="new-password" type="password" placeholder="Шинэ нууц үг (6+ тэмдэгт)" class="input" />
+            <button type="button" class="btn-eye" data-target="new-password" title="Нууц үг харах">👁</button>
+          </div>
+          <div class="input-pw-wrap">
+            <input id="new-password-confirm" type="password" placeholder="Шинэ нууц үг давтах" class="input" />
+            <button type="button" class="btn-eye" data-target="new-password-confirm" title="Нууц үг харах">👁</button>
+          </div>
+          <p id="pw-change-error" class="form-error"></p>
+          <p id="pw-change-success" class="form-success"></p>
+          <button type="button" id="btn-change-password" class="btn btn-primary mt-8">Солих</button>
+        </section>
       </div>
     </div>
 
     <!-- Settings tab -->
     <div id="tab-settings" class="tab">
-      <h2>⚙️ Тохируулга</h2>
-      <div class="card settings-card">
-        <h3>🎮 Тоглоомууд</h3>
-        <p class="hint">Тоглоомын exe файлуудаа нэмнэ үү. Өрөө үүсгэхдээ аль тоглоомоор тоглохоо сонгоно.</p>
-
-        <!-- Тоглоомуудын жагсаалт -->
-        <ul id="games-list" class="games-list"></ul>
-
-        <button type="button" id="btn-add-game" class="btn btn-primary btn-with-icon mt-8">
-          <svg class="btn-icon-svg"><use href="#ico-plus"/></svg>
-          Тоглоом нэмэх
-        </button>
-      </div>
-
-      <div class="card settings-card mt-8">
-        <h3>🌐 ZeroTier сүлжээ</h3>
-        <div class="zt-settings-row">
-          <span class="hint hint-no-margin">IP хаяг: <strong id="settings-zt-ip">---</strong></span>
-          <span class="hint hint-no-margin" id="settings-zt-status"></span>
+      <div class="tab-header section-header">
+        <div class="section-title-group">
+          <h2>Тохиргоо</h2>
+          <span class="section-subtitle">Тоглоом, сүлжээ, мэдэгдэл, апп арчилгааны тохиргоо</span>
         </div>
-        <p class="hint mt-8" id="zt-refresh-msg" style="font-family:monospace;font-size:0.78rem"></p>
-        <button type="button" id="btn-zt-refresh" class="btn btn-primary btn-with-icon mt-8">
-          <svg class="btn-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-          Холболт шалгах
-        </button>
-        <button type="button" id="btn-zt-download" class="btn btn-secondary btn-with-icon mt-8">
-          <svg class="btn-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-          ZeroTier татах
-        </button>
-        <p class="hint mt-4" style="font-size:0.75rem;color:var(--text2)">Апп өөрөө далдуур VPN драйвер суулгахгүй. Эндээс ZeroTier-г албан ёсны сайтаас суулгаад дараа нь холболтоо шалгана.</p>
       </div>
-
-      <div class="card settings-card mt-8">
-        <h3>🛡️ Сүлжээ / Firewall тохиргоо</h3>
-        <p class="hint">Зөвхөн тоглоом LAN-д харагдахгүй үед энэ тохиргоог ажиллуулна уу. Windows UAC зөвшөөрөл асууж магадгүй.</p>
-        <div id="firewall-status" class="hint mt-4" style="font-family:monospace;font-size:0.78rem"></div>
-        <button type="button" id="btn-setup-firewall" class="btn btn-primary btn-with-icon mt-8">
-          <svg class="btn-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-          LAN зөвшөөрөл тохируулах
-        </button>
-      </div>
-
-      <div class="card settings-card mt-8">
-        <h3>🔄 Програмын шинэчлэл</h3>
-        <div class="update-header-row">
-          <span class="hint hint-no-margin">Одоогийн хувилбар: <strong id="app-version">...</strong></span>
-          <button type="button" id="btn-check-update" class="btn btn-primary btn-with-icon">
-            <svg class="btn-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-            Шинэчлэл шалгах
+      <div class="settings-shell">
+        <nav class="settings-menu" role="tablist" aria-label="Тохиргооны цэс">
+          <button type="button" class="settings-menu-item active" role="tab" aria-selected="true" aria-controls="settings-panel-games" data-settings-section="games">
+            <span class="settings-menu-icon icon-games"><svg class="btn-icon-svg"><use href="#ico-settings-game"/></svg></span>
+            <span class="settings-menu-text"><strong>Тоглоом</strong><small>Exe, жагсаалт</small></span>
           </button>
+          <button type="button" class="settings-menu-item" role="tab" aria-selected="false" aria-controls="settings-panel-network" data-settings-section="network">
+            <span class="settings-menu-icon icon-network"><svg class="btn-icon-svg"><use href="#ico-settings-network"/></svg></span>
+            <span class="settings-menu-text"><strong>Сүлжээ</strong><small>ZeroTier, LAN</small></span>
+          </button>
+          <button type="button" class="settings-menu-item" role="tab" aria-selected="false" aria-controls="settings-panel-app" data-settings-section="app">
+            <span class="settings-menu-icon icon-app"><svg class="btn-icon-svg"><use href="#ico-settings-app"/></svg></span>
+            <span class="settings-menu-text"><strong>Апп</strong><small>Update, cache</small></span>
+          </button>
+          <button type="button" class="settings-menu-item" role="tab" aria-selected="false" aria-controls="settings-panel-tierbot" data-settings-section="tierbot">
+            <span class="settings-menu-icon icon-tierbot"><svg class="btn-icon-svg"><use href="#ico-nav-rank"/></svg></span>
+            <span class="settings-menu-text"><strong>TierBot</strong><small>Rank import</small></span>
+          </button>
+          <button type="button" class="settings-menu-item" role="tab" aria-selected="false" aria-controls="settings-panel-notifications" data-settings-section="notifications">
+            <span class="settings-menu-icon icon-notifications"><svg class="btn-icon-svg"><use href="#ico-settings-bell"/></svg></span>
+            <span class="settings-menu-text"><strong>Мэдэгдэл</strong><small>Дуу, desktop</small></span>
+          </button>
+          <button type="button" class="settings-menu-item" role="tab" aria-selected="false" aria-controls="settings-panel-guide" data-settings-section="guide">
+            <span class="settings-menu-icon icon-guide"><svg class="btn-icon-svg"><use href="#ico-settings-guide"/></svg></span>
+            <span class="settings-menu-text"><strong>Сургалт</strong><small>Заавар</small></span>
+          </button>
+        </nav>
+
+        <div class="settings-content">
+          <section id="settings-panel-games" class="settings-panel active" role="tabpanel" data-settings-panel="games">
+            <div class="card settings-card settings-card-wide">
+              <h3>Тоглоомууд</h3>
+              <p class="hint">Өрөө үүсгэхэд ашиглах Warcraft exe файлуудаа энд бүртгэнэ.</p>
+              <ul id="games-list" class="games-list"></ul>
+              <div class="settings-actions">
+                <button type="button" id="btn-add-game" class="btn btn-primary btn-with-icon">
+                  <svg class="btn-icon-svg"><use href="#ico-plus"/></svg>
+                  Тоглоом нэмэх
+                </button>
+              </div>
+            </div>
+          </section>
+
+          <section id="settings-panel-network" class="settings-panel" role="tabpanel" data-settings-panel="network" aria-hidden="true">
+            <div class="card settings-card">
+              <h3>ZeroTier сүлжээ</h3>
+              <div class="zt-settings-row">
+                <span class="hint hint-no-margin">IP хаяг: <strong id="settings-zt-ip">---</strong></span>
+                <span class="hint hint-no-margin" id="settings-zt-status"></span>
+              </div>
+              <p class="hint mt-8" id="zt-refresh-msg" style="font-family:monospace;font-size:0.78rem"></p>
+              <div class="settings-actions">
+                <button type="button" id="btn-zt-refresh" class="btn btn-primary btn-with-icon">
+                  <svg class="btn-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                  Холболт шалгах
+                </button>
+                <button type="button" id="btn-zt-download" class="btn btn-secondary btn-with-icon">
+                  <svg class="btn-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  ZeroTier татах
+                </button>
+              </div>
+              <p class="hint mt-4" style="font-size:0.75rem;color:var(--text2)">Апп VPN драйвер суулгахгүй. ZeroTier-г албан ёсны сайтаас суулгаад холболтоо шалгана.</p>
+            </div>
+
+            <div class="card settings-card">
+              <h3>LAN / Firewall</h3>
+              <p class="hint">Тоглоом LAN-д харагдахгүй үед Windows firewall-ийн зөвшөөрлийг тохируулна.</p>
+              <div id="firewall-status" class="hint mt-4" style="font-family:monospace;font-size:0.78rem"></div>
+              <div class="settings-actions">
+                <button type="button" id="btn-setup-firewall" class="btn btn-primary btn-with-icon">
+                  <svg class="btn-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                  LAN зөвшөөрөл тохируулах
+                </button>
+              </div>
+            </div>
+          </section>
+
+          <section id="settings-panel-app" class="settings-panel" role="tabpanel" data-settings-panel="app" aria-hidden="true">
+            <div class="card settings-card">
+              <h3>Програмын шинэчлэл</h3>
+              <div class="update-header-row">
+                <span class="hint hint-no-margin">Одоогийн хувилбар: <strong id="app-version">...</strong></span>
+                <button type="button" id="btn-check-update" class="btn btn-primary btn-with-icon">
+                  <svg class="btn-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                  Шинэчлэл шалгах
+                </button>
+              </div>
+              <p id="update-check-msg" class="hint mt-8"></p>
+            </div>
+
+            <div class="card settings-card">
+              <h3>Cache цэвэрлэх</h3>
+              <p class="hint">Апп удааширсан эсвэл алдаатай ажиллаж байвал cache цэвэрлэнэ.</p>
+              <div id="cache-size-info" class="hint mt-4" style="font-family:monospace;font-size:0.78rem"></div>
+              <div class="settings-actions">
+                <button type="button" id="btn-clear-cache" class="btn btn-primary btn-with-icon">
+                  <svg class="btn-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                  Cache цэвэрлэх
+                </button>
+              </div>
+            </div>
+          </section>
+
+          <section id="settings-panel-tierbot" class="settings-panel settings-panel-single" role="tabpanel" data-settings-panel="tierbot" aria-hidden="true">
+            <div class="card settings-card">
+              <h3>TierBot rank import</h3>
+              <p class="hint">TierBot-ийн JSON export/API URL-г оруулж Rank өгөгдлийг платформын хэрэглэгчидтэй нэр, Discord ID эсвэл TierBot ID-аар тааруулж оруулна.</p>
+              <input id="tierbot-source-url" type="url" class="input" placeholder="https://.../tierbot/ranking.json" />
+              <div class="settings-actions">
+                <button type="button" id="btn-tierbot-save-url" class="btn btn-secondary">URL хадгалах</button>
+                <button type="button" id="btn-tierbot-sync" class="btn btn-primary btn-with-icon">
+                  <svg class="btn-icon-svg"><use href="#ico-refresh"/></svg>
+                  Дата татах
+                </button>
+              </div>
+              <p id="tierbot-sync-status" class="hint mt-8"></p>
+            </div>
+          </section>
+
+          <section id="settings-panel-notifications" class="settings-panel settings-panel-single" role="tabpanel" data-settings-panel="notifications" aria-hidden="true">
+            <div class="card settings-card">
+              <h3>Мэдэгдэл</h3>
+              <label class="checkbox-label">
+                <input id="setting-sound" type="checkbox" checked />
+                <span>Дуут мэдэгдэл</span>
+              </label>
+              <label class="checkbox-label mt-4">
+                <input id="setting-desktop-notif" type="checkbox" checked />
+                <span>Desktop мэдэгдэл (апп minimize үед)</span>
+              </label>
+              <div class="settings-actions">
+                <button type="button" id="btn-test-sound" class="btn btn-sm">Дуу шалгах</button>
+              </div>
+            </div>
+          </section>
+
+          <section id="settings-panel-guide" class="settings-panel settings-panel-single" role="tabpanel" data-settings-panel="guide" aria-hidden="true">
+            <div class="card settings-card">
+              <h3>Сургалт</h3>
+              <p class="hint">Платформын үндсэн урсгалыг алхам алхмаар дахин харуулна.</p>
+              <div class="settings-actions">
+                <button type="button" id="btn-restart-tour" class="btn btn-primary btn-with-icon">
+                  <svg class="btn-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 0 0-9-9M3 12a9 9 0 0 0 9 9"/><path d="M12 3l3 3-3 3"/><path d="M12 21l-3-3 3-3"/></svg>
+                  Сургалт эхлүүлэх
+                </button>
+              </div>
+              <p class="hint mt-4" style="font-size:0.72rem">15 алхам — Өмнөх / Дараах товчоор удирдана</p>
+            </div>
+          </section>
         </div>
-        <p id="update-check-msg" class="hint mt-8"></p>
-      </div>
-
-      <div class="card settings-card mt-8">
-        <h3>🔔 Мэдэгдэл</h3>
-        <label class="checkbox-label">
-          <input id="setting-sound" type="checkbox" checked />
-          <span>Дуут мэдэгдэл</span>
-        </label>
-        <label class="checkbox-label mt-4">
-          <input id="setting-desktop-notif" type="checkbox" checked />
-          <span>Desktop мэдэгдэл (апп minimize үед)</span>
-        </label>
-        <button type="button" id="btn-test-sound" class="btn btn-sm mt-8">🔊 Дуу шалгах</button>
-      </div>
-
-      <div class="card settings-card mt-8">
-        <h3>🗑️ Cache цэвэрлэх</h3>
-        <p class="hint">Апп удааширсан эсвэл алдаатай ажиллаж байвал cache цэвэрлэнэ үү.</p>
-        <div id="cache-size-info" class="hint mt-4" style="font-family:monospace;font-size:0.78rem"></div>
-        <button type="button" id="btn-clear-cache" class="btn btn-primary btn-with-icon mt-8">
-          <svg class="btn-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-          Cache цэвэрлэх
-        </button>
-      </div>
-
-      <div class="card settings-card mt-8">
-        <h3>📖 Сургалт</h3>
-        <p class="hint">Платформыг хэрхэн ашиглахыг алхам алхмаар зааварлана. Сургалтын явцад Esc товч эсвэл ✕ товч дарж хүссэн үедээ зогсоож болно.</p>
-        <button type="button" id="btn-restart-tour" class="btn btn-primary btn-with-icon mt-8">
-          <svg class="btn-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 0 0-9-9M3 12a9 9 0 0 0 9 9"/><path d="M12 3l3 3-3 3"/><path d="M12 21l-3-3 3-3"/></svg>
-          Сургалт эхлүүлэх
-        </button>
-        <p class="hint mt-4" style="font-size:0.72rem">15 алхам — ← Өмнөх / Дараах → товчоор удирдана</p>
       </div>
     </div>
     <!-- Discord Servers tab -->
     <div id="tab-discord" class="tab">
-      <h2>Discord Серверүүд</h2>
-      <p class="hint mb-8">Өөрийн Discord серверийн урилга холбоосыг нэмж нийтэлнэ үү</p>
+      <div class="tab-header section-header">
+        <div class="section-title-group">
+          <h2>Discord серверүүд</h2>
+          <span class="section-subtitle">Монгол Warcraft community серверүүдийн урилга холбоос</span>
+        </div>
+      </div>
       <!-- Сервер нэмэх форм -->
-      <div id="discord-server-form" class="card hidden mb-16">
+      <div id="discord-server-form" class="card community-form hidden mb-16">
         <h3 class="mb-8">Шинэ Discord сервер нэмэх</h3>
         <input id="ds-name"        type="text" placeholder="Серверийн нэр"           class="input" />
         <input id="ds-invite-url"  type="url"  placeholder="https://discord.gg/..."  class="input" />
@@ -530,10 +774,14 @@
     </div>
     <!-- Streamers tab -->
     <div id="tab-streamers" class="tab">
-      <h2>Streamers</h2>
-      <p class="hint mb-8">Warcraft стримерүүдийн суваг, хуудсыг нэмж хуваалцаарай</p>
+      <div class="tab-header section-header">
+        <div class="section-title-group">
+          <h2>Стримерүүд</h2>
+          <span class="section-subtitle">Warcraft стримерүүдийн Twitch, YouTube болон бусад сувгууд</span>
+        </div>
+      </div>
       <!-- Стример нэмэх форм -->
-      <div id="streamer-form" class="card hidden mb-16">
+      <div id="streamer-form" class="card community-form hidden mb-16">
         <h3 class="mb-8">Шинэ стример нэмэх</h3>
         <input id="str-name"        type="text" placeholder="Стримерийн нэр"                  class="input" />
         <input id="str-channel-url" type="url"  placeholder="https://twitch.tv/... эсвэл бусад" class="input" />
@@ -556,12 +804,21 @@
     <div class="room-layout">
       <div class="chat-panel">
         <div class="room-header">
-          <button type="button" id="btn-leave-room" class="btn btn-sm btn-danger">
-            <svg class="btn-icon-svg icon-sm"><use href="#ico-leave"/></svg>
-            Гарах
-          </button>
-          <h2 id="room-title">Өрөө</h2>
-          <span id="room-badge" class="badge"></span>
+          <div class="room-title-stack">
+            <span class="room-eyebrow">Warcraft room</span>
+            <h2 id="room-title">Өрөө</h2>
+            <div class="room-meta-row">
+              <span id="room-role-text" class="room-meta-pill">Оролцогч</span>
+              <span id="room-capacity-chip" class="room-meta-pill">0 / 10</span>
+            </div>
+          </div>
+          <div class="room-header-actions">
+            <span id="room-badge" class="badge"></span>
+            <button type="button" id="btn-leave-room" class="btn btn-sm btn-danger-soft btn-with-icon">
+              <svg class="btn-icon-svg icon-sm"><use href="#ico-leave"/></svg>
+              Гарах
+            </button>
+          </div>
         </div>
         <div id="chat-messages" class="chat-messages"></div>
         <div class="chat-input-row">
@@ -573,18 +830,41 @@
       </div>
 
       <div class="side-panel">
-        <div class="card">
-          <h3>👥 Тоглогчид <span id="members-count" class="hint"></span></h3>
+        <div class="card room-side-card room-players-card">
+          <div class="room-card-head">
+            <div>
+              <h3>Тоглогчид</h3>
+              <p id="room-capacity-text" class="hint">0 / 10 тоглогч</p>
+            </div>
+            <span id="members-count" class="room-count-badge">0</span>
+          </div>
+          <div class="room-capacity-meter" aria-hidden="true">
+            <span id="room-player-meter"></span>
+          </div>
           <div id="max-players-row" class="max-players-row hidden">
             <label class="hint">Дээд хязгаар:</label>
-            <select id="select-max-players" class="select-sm">
-              <option value="2">2</option>
-              <option value="4">4</option>
-              <option value="6">6</option>
-              <option value="8">8</option>
-              <option value="10" selected>10</option>
-              <option value="12">12</option>
-            </select>
+            <div id="max-players-picker" class="room-select">
+              <select id="select-max-players" class="select-sm native-select-hidden" aria-hidden="true" tabindex="-1">
+                <option value="2">2</option>
+                <option value="4">4</option>
+                <option value="6">6</option>
+                <option value="8">8</option>
+                <option value="10" selected>10</option>
+                <option value="12">12</option>
+              </select>
+              <button type="button" id="max-players-trigger" class="room-select-trigger" aria-haspopup="listbox" aria-expanded="false" aria-label="Дээд хязгаар 10">
+                <span id="max-players-value">10</span>
+                <svg class="btn-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+              </button>
+              <div id="max-players-options" class="room-select-options hidden" role="listbox" aria-label="Дээд хязгаар">
+                <button type="button" role="option" data-value="2" aria-selected="false">2</button>
+                <button type="button" role="option" data-value="4" aria-selected="false">4</button>
+                <button type="button" role="option" data-value="6" aria-selected="false">6</button>
+                <button type="button" role="option" data-value="8" aria-selected="false">8</button>
+                <button type="button" role="option" data-value="10" class="active" aria-selected="true">10</button>
+                <button type="button" role="option" data-value="12" aria-selected="false">12</button>
+              </div>
+            </div>
           </div>
           <ul id="members-list" class="members-list"></ul>
           <button type="button" id="btn-invite-friends" class="btn btn-sm btn-block mt-8" style="display:none">📨 Найз урих</button>
@@ -594,17 +874,34 @@
             <div id="invite-no-friends" class="hint" style="display:none;padding:8px;text-align:center">Онлайн найз байхгүй</div>
           </div>
         </div>
-        <div class="card">
-          <h3>🎮 Тоглоом</h3>
+        <div class="card room-side-card room-game-card">
+          <div class="room-card-head">
+            <div>
+              <h3>Тоглоом</h3>
+              <p id="room-status-text" class="hint">Хүлээлгийн өрөө</p>
+            </div>
+          </div>
+          <div class="room-game-summary">
+            <div>
+              <span>Game</span>
+              <strong id="room-game-name">-</strong>
+            </div>
+            <div>
+              <span>Room</span>
+              <strong id="room-short-name">-</strong>
+            </div>
+          </div>
           <p class="hint" id="room-info-text"></p>
-          <button type="button" id="btn-launch-wc3" class="btn btn-primary btn-block btn-with-icon mt-8">
-            <svg class="btn-icon-svg"><use href="#ico-play"/></svg>
-            <span>Тоглоом эхлүүлэх</span>
-          </button>
-          <button type="button" id="btn-close-room" class="btn btn-danger btn-block btn-with-icon mt-8">
-            <svg class="btn-icon-svg"><use href="#ico-close"/></svg>
-            Өрөөг хаах
-          </button>
+          <div class="room-action-row">
+            <button type="button" id="btn-launch-wc3" class="btn btn-primary btn-block btn-with-icon" title="Тоглолт эхлүүлэх">
+              <svg class="btn-icon-svg"><use href="#ico-play"/></svg>
+              <span>Эхлүүлэх</span>
+            </button>
+            <button type="button" id="btn-close-room" class="btn btn-danger btn-block btn-with-icon" title="Өрөөг хаах">
+              <svg class="btn-icon-svg"><use href="#ico-close"/></svg>
+              <span>Хаах</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -638,8 +935,8 @@
     <div class="modal-box shortcuts-content">
       <h3>Товчлол</h3>
       <div class="shortcuts-list">
-        <span class="shortcut-key">Alt + 1</span><span class="shortcut-desc">Lobby таб</span>
-        <span class="shortcut-key">Alt + 2</span><span class="shortcut-desc">Ranking таб</span>
+        <span class="shortcut-key">Alt + 1</span><span class="shortcut-desc">Өрөөнүүд таб</span>
+        <span class="shortcut-key">Alt + 2</span><span class="shortcut-desc">Rank таб</span>
         <span class="shortcut-key">Alt + 3</span><span class="shortcut-desc">Settings таб</span>
         <span class="shortcut-key">Ctrl + K</span><span class="shortcut-desc">Өрөө хайх</span>
         <span class="shortcut-key">Alt + N</span><span class="shortcut-desc">Шинэ өрөө</span>
@@ -699,7 +996,7 @@
   </div>
 
   <!-- Confirm modal -->
-  <div id="confirm-modal" class="confirm-overlay">
+  <div id="confirm-modal" class="confirm-overlay hidden">
     <div class="confirm-box">
       <h3 id="confirm-title">Баталгаажуулах</h3>
       <p id="confirm-message"></p>

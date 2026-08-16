@@ -50,7 +50,12 @@ function memFindById(id) {
 
 function makeJWT(user) {
   return jwt.sign(
-    { id: user.id, discord_id: user.discord_id || null, username: user.username },
+    {
+      id: user.id,
+      discord_id: user.discord_id || null,
+      discord_username: user.discord_username || null,
+      username: user.username,
+    },
     process.env.JWT_SECRET,
     { expiresIn: '7d' }
   );
@@ -117,6 +122,7 @@ router.post('/register', async (req, res) => {
     email,
     password_hash: hash,
     discord_id: null,
+    discord_username: null,
     avatar_url: null,
     wins: 0,
     losses: 0,
@@ -231,7 +237,13 @@ router.get('/discord/callback', async (req, res) => {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
 
-    const { id: discordId, username, avatar } = userRes.data;
+    const {
+      id: discordId,
+      username,
+      global_name: globalName,
+      avatar,
+    } = userRes.data;
+    const discordName = String(globalName || username || `Discord-${discordId}`).trim();
     const avatarUrl = avatar
       ? `https://cdn.discordapp.com/avatars/${discordId}/${avatar}.png`
       : null;
@@ -252,18 +264,18 @@ router.get('/discord/callback', async (req, res) => {
           }
 
           await db.query(
-            'UPDATE users SET discord_id = $1, avatar_url = COALESCE(avatar_url, $2) WHERE id = $3',
-            [discordId, avatarUrl, linkUserId]
+            'UPDATE users SET discord_id = $1, discord_username = $2, username = $2, avatar_url = COALESCE(avatar_url, $3) WHERE id = $4',
+            [discordId, discordName, avatarUrl, linkUserId]
           );
           const result = await db.query('SELECT * FROM users WHERE id = $1', [linkUserId]);
           userRow = result.rows[0];
         } else {
           const result = await db.query(
-            `INSERT INTO users (discord_id, username, avatar_url)
-             VALUES ($1, $2, $3)
-             ON CONFLICT (discord_id) DO UPDATE SET username = $2, avatar_url = $3
+            `INSERT INTO users (discord_id, username, discord_username, avatar_url)
+             VALUES ($1, $2, $2, $3)
+             ON CONFLICT (discord_id) DO UPDATE SET username = $2, discord_username = $2, avatar_url = $3
              RETURNING *`,
-            [discordId, username, avatarUrl]
+            [discordId, discordName, avatarUrl]
           );
           userRow = result.rows[0];
         }
@@ -282,6 +294,8 @@ router.get('/discord/callback', async (req, res) => {
         user = memFindById(Number(linkUserId));
         if (user) {
           user.discord_id = discordId;
+          user.discord_username = discordName;
+          user.username = discordName;
           user.avatar_url = user.avatar_url || avatarUrl;
         }
       } else {
@@ -289,7 +303,8 @@ router.get('/discord/callback', async (req, res) => {
         if (!user) {
           user = {
             id: memNextId++,
-            username,
+            username: discordName,
+            discord_username: discordName,
             email: null,
             password_hash: null,
             discord_id: discordId,
@@ -299,12 +314,13 @@ router.get('/discord/callback', async (req, res) => {
           };
           memUsers.set(user.id, user);
         } else {
-          user.username = username;
+          user.discord_username = discordName;
+          user.username = discordName;
           user.avatar_url = avatarUrl;
         }
       }
 
-      jwtToken = makeJWT(user || { id: discordId, discord_id: discordId, username });
+      jwtToken = makeJWT(user || { id: discordId, discord_id: discordId, discord_username: discordName, username: discordName });
     }
 
     // Админ dashboard руу токеныг URL fragment-аар буцаана. Fragment сервер рүү
@@ -472,6 +488,11 @@ router.put('/username', authMW, async (req, res) => {
   const clean = username.trim();
   if (await dbOk()) {
     try {
+      const current = await db.query('SELECT discord_id FROM users WHERE id = $1', [req.user.id]);
+      if (current.rows[0]?.discord_id) {
+        return res.status(400).json({ error: 'Discord nickname-ийг апп дотор засах боломжгүй' });
+      }
+
       await db.query('UPDATE users SET username = $1 WHERE id = $2', [clean, req.user.id]);
       return res.json({ ok: true, token: makeJWT({ ...req.user, username: clean }), username: clean });
     } catch (e) {
@@ -481,6 +502,9 @@ router.put('/username', authMW, async (req, res) => {
 
   if (!allowInMemoryFallback) return requireOperationalDb(res);
   const user = memFindById(req.user.id);
+  if (user?.discord_id) {
+    return res.status(400).json({ error: 'Discord nickname-ийг апп дотор засах боломжгүй' });
+  }
   if (user) user.username = clean;
   return res.json({ ok: true, token: makeJWT({ ...req.user, username: clean }), username: clean });
 });
@@ -494,7 +518,7 @@ router.put('/unlink-discord', authMW, async (req, res) => {
       return res.status(400).json({ error: 'Set a password before unlinking Discord' });
     }
 
-    await db.query('UPDATE users SET discord_id = NULL WHERE id = $1', [req.user.id]);
+    await db.query('UPDATE users SET discord_id = NULL, discord_username = NULL WHERE id = $1', [req.user.id]);
     return res.json({ ok: true });
   } catch (e) {
     console.error(e);
@@ -506,7 +530,7 @@ router.get('/me', authMW, async (req, res) => {
   if (await dbOk()) {
     try {
       const result = await db.query(
-        'SELECT id, username, email, discord_id, avatar_url, wins, losses FROM users WHERE id = $1',
+        'SELECT id, username, email, discord_id, discord_username, avatar_url, wins, losses FROM users WHERE id = $1',
         [req.user.id]
       );
       if (result.rows[0]) return res.json(result.rows[0]);
@@ -523,6 +547,7 @@ router.get('/me', authMW, async (req, res) => {
         username: user.username,
         email: user.email,
         discord_id: user.discord_id,
+        discord_username: user.discord_username,
         avatar_url: user.avatar_url,
         wins: user.wins || 0,
         losses: user.losses || 0,

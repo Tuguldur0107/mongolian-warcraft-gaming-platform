@@ -6,12 +6,18 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE TABLE IF NOT EXISTS users (
   id            SERIAL PRIMARY KEY,
   discord_id    VARCHAR(255) UNIQUE,
+  discord_username VARCHAR(255),
   username      VARCHAR(255) NOT NULL,
   email         VARCHAR(255) UNIQUE,
   password_hash TEXT,
   avatar_url    TEXT,
   wins          INTEGER DEFAULT 0,
   losses        INTEGER DEFAULT 0,
+  tierbot_id    VARCHAR(255),
+  tierbot_rating INTEGER DEFAULT 0,
+  tierbot_tier  VARCHAR(100),
+  tierbot_rank  INTEGER,
+  tierbot_synced_at TIMESTAMP,
   created_at    TIMESTAMP DEFAULT NOW()
 );
 
@@ -77,6 +83,8 @@ CREATE INDEX IF NOT EXISTS idx_room_players_user    ON room_players(user_id);
 CREATE INDEX IF NOT EXISTS idx_room_players_room    ON room_players(room_id);
 CREATE INDEX IF NOT EXISTS idx_users_discord_id     ON users(discord_id);
 CREATE INDEX IF NOT EXISTS idx_users_wins           ON users(wins DESC);
+CREATE INDEX IF NOT EXISTS idx_users_tierbot_id     ON users(tierbot_id);
+CREATE INDEX IF NOT EXISTS idx_users_tierbot_rating ON users(tierbot_rating DESC);
 CREATE INDEX IF NOT EXISTS idx_messages_conversation
   ON messages(LEAST(sender_id, receiver_id), GREATEST(sender_id, receiver_id), created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_messages_unread

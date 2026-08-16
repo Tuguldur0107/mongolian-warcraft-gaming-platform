@@ -13,6 +13,10 @@ const ZT_PATHS = [
 let _ztCmd = null;
 let currentNetworkId = null;
 
+function isValidNetworkId(networkId) {
+  return /^[0-9a-f]{16}$/i.test(String(networkId || '').trim());
+}
+
 function getZtCmd() {
   if (_ztCmd) return _ztCmd;
   for (const p of ZT_PATHS) {
@@ -39,6 +43,9 @@ function isInstalled() {
 async function connectExistingInstall(networkId) {
   if (!networkId) {
     return { ok: false, error: 'no-network-id', installed: false, running: false, ip: null };
+  }
+  if (!isValidNetworkId(networkId)) {
+    return { ok: false, error: 'invalid-network-id', installed: isInstalled(), running: false, ip: null };
   }
 
   const installed = isInstalled();
@@ -201,6 +208,7 @@ async function ensureRunning() {
 
 async function autoSetup(networkId, gamePaths) {
   if (!networkId) return { ok: false, error: 'no-network-id' };
+  if (!isValidNetworkId(networkId)) return { ok: false, error: 'invalid-network-id' };
 
   // 1. Суулгалт шалгах / суулгах
   const alreadyInstalled = isInstalled();
@@ -248,6 +256,7 @@ async function autoSetup(networkId, gamePaths) {
 
 async function joinNetwork(networkId) {
   if (!networkId) return false;
+  if (!isValidNetworkId(networkId)) throw new Error('invalid-network-id');
 
   const cmd = getZtCmd();
   if (!cmd) {
@@ -312,6 +321,23 @@ function isFirewallReady() {
   } catch { return false; }
 }
 
+function isFirewallRuleReady(ruleName) {
+  try {
+    const out = execSync(`netsh advfirewall firewall show rule name="${ruleName}"`,
+      { stdio: 'pipe', encoding: 'utf8', timeout: 5000 });
+    return out.includes(ruleName);
+  } catch { return false; }
+}
+
+function isGameFirewallReady(gamePaths) {
+  const paths = (gamePaths || []).filter((gamePath) => gamePath && fs.existsSync(gamePath));
+  if (!paths.length) return true;
+  return paths.every((gamePath) => {
+    const gameName = path.basename(gamePath, path.extname(gamePath));
+    return isFirewallRuleReady(`MongolWC3 Game - ${gameName}`);
+  });
+}
+
 // ZeroTier adapter metric шалгах (admin шаардлагагүй)
 function isMetricReady() {
   try {
@@ -329,13 +355,14 @@ function isMetricReady() {
 function elevatedNetworkSetup(gamePaths, force) {
   const firewallOk = !force && isFirewallReady();
   const metricOk = !force && isMetricReady();
+  const gameRulesOk = !force && isGameFirewallReady(gamePaths);
 
-  if (firewallOk && metricOk && (!gamePaths || gamePaths.length === 0)) {
+  if (firewallOk && metricOk && gameRulesOk) {
     console.log('[ZeroTier] Network setup аль хэдийн хийгдсэн (UAC шаардлагагүй)');
     return { metric: true, firewall: true };
   }
 
-  console.log(`[ZeroTier] Setup шаардлагатай: metric=${metricOk ? 'OK' : 'NEED'}, firewall=${firewallOk ? 'OK' : 'NEED'}, games=${(gamePaths || []).length}`);
+  console.log(`[ZeroTier] Setup шаардлагатай: metric=${metricOk ? 'OK' : 'NEED'}, firewall=${firewallOk ? 'OK' : 'NEED'}, games=${gameRulesOk ? 'OK' : 'NEED'}`);
 
   try {
     const scriptDir = path.join(os.tmpdir(), 'wc3-zt-setup');
@@ -396,9 +423,9 @@ function elevatedNetworkSetup(gamePaths, force) {
     }
 
     // Game exe firewall rules
-    if (gamePaths && gamePaths.length > 0) {
+    if (force || !gameRulesOk) {
       lines.push('# Firewall: Тоглоомын exe файлууд');
-      for (const gamePath of gamePaths) {
+      for (const gamePath of gamePaths || []) {
         if (fs.existsSync(gamePath)) {
           const safePath = gamePath.replace(/'/g, "''");
           const gameName = path.basename(gamePath, path.extname(gamePath));

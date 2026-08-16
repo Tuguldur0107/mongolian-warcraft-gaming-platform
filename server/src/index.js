@@ -75,9 +75,32 @@ app.get('/health', (req, res) => {
 
 // ── Глобал ZeroTier сүлжээ автомат үүсгэх ────────────────
 let _globalZtNetwork = process.env.ZEROTIER_DEFAULT_NETWORK || null;
+let _globalZtNetworkHardened = false;
+
+async function hardenGlobalZtNetwork(networkId) {
+  if (_globalZtNetworkHardened || !networkId) return;
+  const token = process.env.ZEROTIER_API_TOKEN;
+  if (!token) return;
+  try {
+    const axios = require('axios');
+    await axios.post(`https://api.zerotier.com/api/v1/network/${networkId}`, {
+      config: {
+        private: true,
+        enableBroadcast: true,
+      },
+    }, { headers: { Authorization: `token ${token}` } });
+    _globalZtNetworkHardened = true;
+    console.log(`[ZeroTier] Глобал network private болгож баталгаажууллаа: ${networkId}`);
+  } catch (e) {
+    console.error('[ZeroTier] Глобал network private болгоход алдаа:', e.message);
+  }
+}
 
 async function ensureGlobalZtNetwork() {
-  if (_globalZtNetwork) return _globalZtNetwork;
+  if (_globalZtNetwork) {
+    await hardenGlobalZtNetwork(_globalZtNetwork);
+    return _globalZtNetwork;
+  }
   const token = process.env.ZEROTIER_API_TOKEN;
   if (!token) return null;
   try {
@@ -85,7 +108,7 @@ async function ensureGlobalZtNetwork() {
     const { data } = await axios.post('https://api.zerotier.com/api/v1/network', {
       config: {
         name: 'WC3-Platform-Global',
-        private: false,
+        private: true,
         enableBroadcast: true,
         v4AssignMode: { zt: true },
         ipAssignmentPools: [{ ipRangeStart: '10.147.20.1', ipRangeEnd: '10.147.20.254' }],
@@ -94,6 +117,7 @@ async function ensureGlobalZtNetwork() {
     }, { headers: { Authorization: `token ${token}` } });
     _globalZtNetwork = data.id;
     process.env.ZEROTIER_DEFAULT_NETWORK = data.id; // rooms.js-д ашиглагдана
+    _globalZtNetworkHardened = true;
     console.log(`[ZeroTier] Глобал network үүслээ: ${data.id}`);
     console.log(`[ZeroTier] ⚠ Railway-д ZEROTIER_DEFAULT_NETWORK=${data.id} тохируулна уу!`);
     return data.id;
@@ -271,6 +295,30 @@ async function ensureRoomMembership(socket, roomId) {
   return true;
 }
 
+async function ensureSocketRoomState(socket, roomId) {
+  if (!roomId || !socket.user?.id) return false;
+  const roomKey = String(roomId);
+  const activeRoomId = socket.data.roomId ? String(socket.data.roomId) : '';
+  if (activeRoomId === roomKey) return true;
+  if (activeRoomId) return false;
+  if (!await ensureRoomMembership(socket, roomKey)) return false;
+
+  const username = socket.user.username;
+  const userId   = String(socket.user.id);
+
+  socket.join(roomKey);
+  socket.data.roomId   = roomKey;
+  socket.data.username = username;
+
+  if (!roomMembers[roomKey]) roomMembers[roomKey] = new Map();
+  if (!roomMembers[roomKey].has(username)) {
+    roomMembers[roomKey].set(username, userId);
+    io.to(roomKey).emit('room:members', membersArray(roomKey));
+  }
+
+  return true;
+}
+
 io.on('connection', (socket) => {
   console.log(`[Socket] холбогдлоо: ${socket.id} (${socket.user?.username})`);
 
@@ -412,7 +460,7 @@ io.on('connection', (socket) => {
   socket.on('chat:message', async ({ roomId, text }) => {
     if (!text?.trim() || !roomId) return;
     if (checkRateLimit(socket)) return;
-    if (String(socket.data.roomId) !== String(roomId)) return;
+    if (!await ensureSocketRoomState(socket, roomId)) return;
     if (!await ensureRoomMembership(socket, roomId)) return;
     const msg = {
       userId: socket.user.id,
@@ -428,28 +476,46 @@ io.on('connection', (socket) => {
   });
 
   // Өрөөний чат мессеж устгах (зөвхөн өөрийн)
-  socket.on('chat:delete', ({ roomId, time }) => {
-    if (!roomId || !time) return;
-    if (String(socket.data.roomId) !== String(roomId)) return;
-    const userId = socket.user.id;
-    if (roomMessages[roomId]) {
-      const idx = roomMessages[roomId].findIndex(m => m.time === time && m.userId === userId);
-      if (idx !== -1) {
-        roomMessages[roomId][idx].text = '[Устгагдсан мессеж]';
-        io.to(String(roomId)).emit('chat:deleted', { time });
-      }
+  socket.on('chat:delete', async ({ roomId, time }, ack) => {
+    const reply = (payload) => {
+      if (typeof ack === 'function') ack(payload);
+    };
+    if (!roomId || !time) { reply({ ok: false, error: 'missing-data' }); return; }
+    const roomKey = String(roomId);
+    if (!await ensureSocketRoomState(socket, roomKey)) {
+      reply({ ok: false, error: 'room-not-joined' });
+      return;
     }
+
+    const userId = String(socket.user.id);
+    const messages = roomMessages[roomKey] || [];
+    const idx = messages.findIndex(m => m.time === time && String(m.userId) === userId);
+    if (idx === -1) {
+      reply({ ok: false, error: 'message-not-found' });
+      return;
+    }
+
+    messages[idx].text = '[Устгагдсан мессеж]';
+    io.to(roomKey).emit('chat:deleted', { time });
+    reply({ ok: true });
   });
 
   // Лобби чат мессеж устгах (зөвхөн өөрийн)
-  socket.on('lobby:delete', ({ time }) => {
-    if (!time) return;
-    const userId = socket.user.id;
-    const idx = lobbyHistory.findIndex(m => m.time === time && m.userId === userId);
-    if (idx !== -1) {
-      lobbyHistory[idx].text = '[Устгагдсан мессеж]';
-      io.emit('lobby:deleted', { time });
+  socket.on('lobby:delete', ({ time }, ack) => {
+    const reply = (payload) => {
+      if (typeof ack === 'function') ack(payload);
+    };
+    if (!time) { reply({ ok: false, error: 'missing-data' }); return; }
+    const userId = String(socket.user.id);
+    const idx = lobbyHistory.findIndex(m => m.time === time && String(m.userId) === userId);
+    if (idx === -1) {
+      reply({ ok: false, error: 'message-not-found' });
+      return;
     }
+
+    lobbyHistory[idx].text = '[Устгагдсан мессеж]';
+    io.emit('lobby:deleted', { time });
+    reply({ ok: true });
   });
 
   // Host-ын IP хаягийг өрөөний тоглогчдод дамжуулах
@@ -469,10 +535,19 @@ io.on('connection', (socket) => {
   // ZeroTier node-г автоматаар authorize хийх
   socket.on('zt:authorize', async ({ nodeId, networkId, roomId }) => {
     if (!nodeId || !networkId) return;
+    if (!/^[0-9a-f]{10}$/i.test(String(nodeId)) || !/^[0-9a-f]{16}$/i.test(String(networkId))) {
+      socket.emit('zt:authorize_result', { ok: false, error: 'invalid-id' });
+      return;
+    }
     if (!roomId) { socket.emit('zt:authorize_result', { ok: false, error: 'room-required' }); return; }
     if (String(socket.data.roomId) !== String(roomId)) { socket.emit('zt:authorize_result', { ok: false, error: 'room-mismatch' }); return; }
     if (!await ensureRoomMembership(socket, roomId)) {
       socket.emit('zt:authorize_result', { ok: false, error: 'room-access-denied' });
+      return;
+    }
+    const expectedNetworkId = await roomRoutes.getRoomNetworkId(roomId);
+    if (!expectedNetworkId || String(expectedNetworkId) !== String(networkId)) {
+      socket.emit('zt:authorize_result', { ok: false, error: 'network-mismatch' });
       return;
     }
     const token = process.env.ZEROTIER_API_TOKEN;

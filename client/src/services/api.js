@@ -100,6 +100,14 @@ async function getRanking({ sort = 'wins', page = 1 } = {}) {
   return data;
 }
 
+async function syncTierBot({ source_url, players } = {}) {
+  const payload = {};
+  if (source_url) payload.source_url = source_url;
+  if (Array.isArray(players)) payload.players = players;
+  const { data } = await getClient().post('/stats/tierbot/sync', payload);
+  return data;
+}
+
 async function getGameHistory(userId, page = 1) {
   const { data } = await getClient().get(`/stats/history/${userId}`, { params: { page } });
   return data;
@@ -188,11 +196,6 @@ async function resetPassword(token, newPassword) {
   return data;
 }
 
-async function changeUsername(username) {
-  const { data } = await getClient().put('/auth/username', { username });
-  return data;
-}
-
 async function unlinkDiscord() {
   const { data } = await getClient().put('/auth/unlink-discord');
   return data;
@@ -257,6 +260,7 @@ module.exports = {
   getPlayerStats,
   getPlayerStatsById,
   getRanking,
+  syncTierBot,
   getGameHistory,
   postGameResult,
   getFriends,
@@ -271,7 +275,6 @@ module.exports = {
   updateAvatar,
   forgotPassword,
   resetPassword,
-  changeUsername,
   unlinkDiscord,
   getDiscordServers,
   addDiscordServer,

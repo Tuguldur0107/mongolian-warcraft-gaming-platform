@@ -35,6 +35,7 @@ autoUpdater.on('error', (err) => {
 let mainWindow;
 let roomWindow = null;
 const dmWindows = new Map(); // userId -> BrowserWindow
+let _ztSetupPromise = null;
 
 // Event-ийг бүх цонх руу илгээх — өрөөний цонх тусдаа BrowserWindow тул
 // зөвхөн mainWindow руу илгээвэл өрөөний logic (currentRoom) хүлээж авдаггүй
@@ -51,13 +52,14 @@ function createWindow() {
     minWidth: 800,
     minHeight: 600,
     title: 'Mongolian Warcraft Gaming Platform',
-    icon: path.join(__dirname, 'src/renderer/icon.png'),
+    icon: path.join(__dirname, 'src/renderer/icon.ico'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
     },
     frame: true,
+    autoHideMenuBar: true,
     backgroundColor: '#1a1a2e',
   });
 
@@ -92,11 +94,11 @@ async function initZeroTier() {
       return;
     }
 
-    // 2. Апп эхлэхэд зөвхөн одоо байгаа ZeroTier-ийг ашиглаж холбохыг оролдоно.
-    // Hidden install / hidden elevation хийхгүй.
-    console.log('[ZT] Existing ZeroTier шалгаж байна... Network:', networkId);
-    const result = await zerotierService.connectExistingInstall(networkId);
-    console.log('[ZT] Existing ZeroTier result:', result);
+    // 2. Апп эхлэхэд ZeroTier-г суулгах/асаах/join хийх/Firewall тохируулах.
+    // Windows өөрөө UAC prompt харуулна; зөвшөөрвөл дараагийн launch-ууд promptгүй өнгөрнө.
+    console.log('[ZT] Auto setup шалгаж байна... Network:', networkId);
+    const result = await setupZerotierNetwork(networkId);
+    console.log('[ZT] Auto setup result:', result);
 
     // 3. Settings-д хадгалах
     writeSettings({ zerotierNetworkId: networkId });
@@ -191,64 +193,54 @@ function handleDeepLink(url) {
 
 // ── IPC handlers ──────────────────────────────────────────
 
-// Нэвтрэх — Electron popup цонхонд нээж redirect барина
-ipcMain.handle('auth:login', () => {
-  const authWin = new BrowserWindow({
-    width: 520,
-    height: 700,
-    title: 'Discord-ээр нэвтрэх',
-    parent: mainWindow,
-    modal: true,
-    webPreferences: { nodeIntegration: false, contextIsolation: true },
-  });
+// Нэвтрэх — Discord-г системийн browser дээр нээгээд state polling-оор токен авна.
+// Embedded Electron popup нь OAuth дээр хаагдах/redirect барихгүй байх эрсдэлтэй.
+ipcMain.handle('auth:login', async () => {
+  const sessionId = require('crypto').randomBytes(16).toString('hex');
+  const url = `${apiService.SERVER_URL}/auth/discord?state=${sessionId}`;
 
-  authWin.loadURL(`${apiService.SERVER_URL}/auth/discord`);
+  console.log('[Discord Login] Browser нээж байна:', url);
+  startAuthPoll(sessionId, 'Discord Login');
+  await shell.openExternal(url);
 
-  // Redirect-ийг барих (wc3platform:// эсвэл callback html-ийн token)
-  const handleRedirect = (url) => {
-    if (url.startsWith('wc3platform://')) {
-      authWin.close();
-      handleDeepLink(url);
-      return true;
-    }
-    // Callback html хуудаснаас token авах
-    if (url.includes('/auth/complete?token=')) {
-      const token = new URL(url).searchParams.get('token');
-      if (token) {
-        authWin.close();
-        authService.saveToken(token);
-        fetchAndSaveUser().then(() => {
-          mainWindow?.webContents.send('auth:success', authService.getUser());
-        });
-      }
-      return true;
-    }
-    return false;
-  };
-
-  authWin.webContents.on('will-redirect', (event, url) => {
-    if (handleRedirect(url)) event.preventDefault();
-  });
-
-  authWin.webContents.on('will-navigate', (event, url) => {
-    if (handleRedirect(url)) event.preventDefault();
-  });
-
-  // Callback html дотрх script-ийн redirect-ийг барих
-  authWin.webContents.on('did-navigate', (_, url) => {
-    if (url.includes('auth/discord/callback') || url.includes('token=')) {
-      authWin.webContents.executeJavaScript(`
-        (function() {
-          const m = document.body?.innerText?.match(/token=([\\w.-]+)/);
-          if (m) window.location.href = 'wc3platform://auth?token=' + m[1];
-        })();
-      `).catch(() => {});
-    }
-  });
+  return { ok: true, sessionId };
 });
 
 // QR кодны data URL үүсгэх + polling эхлүүлэх
 let _qrPollInterval = null;
+function startAuthPoll(sessionId, label = 'Auth') {
+  if (_qrPollInterval) {
+    clearInterval(_qrPollInterval);
+    _qrPollInterval = null;
+  }
+
+  const axios = require('axios');
+  let attempts = 0;
+  _qrPollInterval = setInterval(async () => {
+    attempts++;
+    if (attempts > 200) {
+      clearInterval(_qrPollInterval);
+      _qrPollInterval = null;
+      return;
+    }
+    try {
+      const { data } = await axios.get(
+        `${apiService.SERVER_URL}/auth/poll/${sessionId}`,
+        { timeout: 2000 }
+      );
+      if (data.token) {
+        clearInterval(_qrPollInterval);
+        _qrPollInterval = null;
+        authService.saveToken(data.token);
+        fetchAndSaveUser().then(() => {
+          mainWindow?.webContents.send('auth:success', authService.getUser());
+        });
+        console.log(`[${label}] Нэвтэрлээ!`);
+      }
+    } catch {}
+  }, 3000);
+}
+
 ipcMain.handle('auth:qr', async () => {
   try {
     // Таамаглагдахгүй session ID (token хулгайлахаас хамгаална)
@@ -267,31 +259,8 @@ ipcMain.handle('auth:qr', async () => {
 
     console.log('[QR] Амжилттай үүсгэлээ');
 
-    // Өмнөх polling давхардахгүй — QR шинэчлэх бүрд хуучныг зогсооно
-    if (_qrPollInterval) { clearInterval(_qrPollInterval); _qrPollInterval = null; }
-
     // QR скан хийгдэх хүртэл polling хийнэ (10 минут — серверийн token TTL-тэй ижил)
-    const axios = require('axios');
-    let attempts = 0;
-    _qrPollInterval = setInterval(async () => {
-      attempts++;
-      if (attempts > 200) { clearInterval(_qrPollInterval); _qrPollInterval = null; return; }
-      try {
-        const { data } = await axios.get(
-          `${apiService.SERVER_URL}/auth/poll/${sessionId}`,
-          { timeout: 2000 }
-        );
-        if (data.token) {
-          clearInterval(_qrPollInterval);
-          _qrPollInterval = null;
-          authService.saveToken(data.token);
-          fetchAndSaveUser().then(() => {
-            mainWindow?.webContents.send('auth:success', authService.getUser());
-          });
-          console.log('[QR] Нэвтэрлээ!');
-        }
-      } catch {}
-    }, 3000);
+    startAuthPoll(sessionId, 'QR');
 
     return { dataUrl, sessionId };
   } catch (err) {
@@ -348,6 +317,7 @@ ipcMain.handle('auth:linkDiscord', () => {
   const authWin = new BrowserWindow({
     width: 520, height: 700, title: 'Discord холбох',
     parent: mainWindow, modal: true,
+    autoHideMenuBar: true,
     webPreferences: { nodeIntegration: false, contextIsolation: true },
   });
   authWin.loadURL(`${apiService.SERVER_URL}/auth/discord?link=1&token=${encodeURIComponent(token)}`);
@@ -443,15 +413,15 @@ ipcMain.handle('rooms:mine', async () => {
   try { return await apiService.getMyRoom(); } catch { return null; }
 });
 
-ipcMain.handle('rooms:create', async (event, { name, max_players, game_type, password }) => {
+ipcMain.handle('rooms:create', async (event, { name, max_players, game_type, password, description, game_mode }) => {
   let room;
   try {
-    room = await apiService.createRoom({ name, max_players, game_type, password });
+    room = await apiService.createRoom({ name, max_players, game_type, password, description, game_mode });
   } catch (err) { throw apiError(err); }
   // ZeroTier — server-аас автоматаар үүссэн network ID ашиглана
   try {
     if (room?.zerotier_network_id) {
-      await zerotierService.joinNetwork(room.zerotier_network_id);
+      await setupZerotierNetwork(room.zerotier_network_id);
     }
   } catch {}
   try { replayService.startWatcher(room.id); } catch {}
@@ -464,8 +434,8 @@ ipcMain.handle('rooms:join', async (event, roomId, password) => {
     let ztJoined = false;
     if (result?.room?.zerotier_network_id) {
       try {
-        await zerotierService.joinNetwork(result.room.zerotier_network_id);
-        ztJoined = true;
+        const setup = await setupZerotierNetwork(result.room.zerotier_network_id);
+        ztJoined = !!setup?.ok;
       } catch (e) {
         console.warn('[ZT] join failed:', e.message);
       }
@@ -515,7 +485,10 @@ ipcMain.handle('stats:history', async (_, userId, page) => {
   return apiService.getGameHistory(userId, page);
 });
 ipcMain.handle('stats:ranking', async (_, { sort, page } = {}) => {
-  return apiService.getRanking({ sort, page });
+  try { return await apiService.getRanking({ sort, page }); } catch (err) { throw apiError(err); }
+});
+ipcMain.handle('stats:tierbotSync', async (_, payload = {}) => {
+  try { return await apiService.syncTierBot(payload); } catch (err) { throw apiError(err); }
 });
 
 // Auth utilities
@@ -524,20 +497,6 @@ ipcMain.handle('auth:forgotPassword', async (_, email) => {
 });
 ipcMain.handle('auth:resetPassword', async (_, token, newPassword) => {
   try { return await apiService.resetPassword(token, newPassword); } catch (err) { throw apiError(err); }
-});
-ipcMain.handle('auth:changeUsername', async (_, username) => {
-  const axios = require('axios');
-  const token = authService.getToken();
-  if (!token) throw new Error('Нэвтэрх хугацаа дууссан');
-  try {
-    const { data } = await axios.put(
-      `${apiService.SERVER_URL}/auth/username`,
-      { username },
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
-    if (data.token) authService.saveToken(data.token);
-    return data;
-  } catch (err) { throw apiError(err); }
 });
 ipcMain.handle('auth:unlinkDiscord', async () => {
   try { return await apiService.unlinkDiscord(); } catch (err) { throw apiError(err); }
@@ -620,6 +579,22 @@ function migrateSettings(s) {
   return s;
 }
 
+function configuredGamePaths() {
+  const s = migrateSettings(readSettings());
+  return (s.games || [])
+    .map((g) => g.path)
+    .filter((p) => typeof p === 'string' && p.trim());
+}
+
+async function setupZerotierNetwork(networkId) {
+  if (!networkId) return { ok: false, error: 'no-network-id' };
+  if (_ztSetupPromise) return _ztSetupPromise;
+  _ztSetupPromise = zerotierService
+    .autoSetup(networkId, configuredGamePaths())
+    .finally(() => { _ztSetupPromise = null; });
+  return _ztSetupPromise;
+}
+
 ipcMain.handle('settings:get', () => {
   const s = readSettings();
   return migrateSettings(s);
@@ -683,6 +658,7 @@ ipcMain.handle('room:openWindow', (event, roomData) => {
       contextIsolation: true,
       nodeIntegration: false,
     },
+    autoHideMenuBar: true,
     backgroundColor: '#0d0d1a',
   });
   roomWindow.loadFile('src/renderer/index.html', {
@@ -695,6 +671,7 @@ ipcMain.handle('room:openWindow', (event, roomData) => {
       hostId:  String(roomData.hostId || ''),
       status:  roomData.status || '',
       ztNetId: roomData.zerotierNetworkId || '',
+      maxPlayers: String(roomData.maxPlayers || roomData.max_players || ''),
     },
   });
   // Тоглолт явагдаж байхад санамсаргүй хаахаас сэргийлнэ — цонх хаагдвал
@@ -739,6 +716,7 @@ ipcMain.handle('dm:openWindow', (event, { userId, username }) => {
       contextIsolation: true,
       nodeIntegration: false,
     },
+    autoHideMenuBar: true,
     backgroundColor: '#0d0d1a',
   });
   dmWin.loadFile('src/renderer/index.html', {
@@ -759,12 +737,13 @@ ipcMain.handle('friends:openWindow', () => {
     width: 420, height: 600,
     minWidth: 360, minHeight: 450,
     title: 'Найзууд — Mongolian Warcraft Gaming Platform',
-    icon: path.join(__dirname, 'src/renderer/icon.png'),
+    icon: path.join(__dirname, 'src/renderer/icon.ico'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
     },
+    autoHideMenuBar: true,
     backgroundColor: '#0d0d1a',
   });
   friendsWindow.loadFile('src/renderer/index.html', { query: { mode: 'friends' } });
@@ -907,7 +886,7 @@ ipcMain.handle('zt:refresh', async () => {
     } catch {}
   }
   if (!networkId) return { ok: false, error: 'no-network-id', installed: false, running: false, ip: null, nodeId: null };
-  const result = await zerotierService.connectExistingInstall(networkId);
+  const result = await setupZerotierNetwork(networkId);
   const nodeId = zerotierService.getNodeId();
   return { ...result, nodeId, networkId };
 });

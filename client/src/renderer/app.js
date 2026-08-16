@@ -7,8 +7,9 @@ let currentUser = null;
 // WC3 энэ цонхноос нээгдэж одоо ажиллаж байгаа эсэх —
 // reconnect үед in_game статусыг серверт сэргээхэд ашиглана
 let _gameRunning = false;
-// Өрөөний мэдээлэл кэш (roomCard onclick-д ашиглана)
+// Өрөөний мэдээлэл кэш (grid/detail action-д ашиглана)
 let roomsCache = {}; // id → room object
+let selectedRoomId = null;
 
 // ── ZeroTier IP хадгалалт ────────────────────────────────
 let roomZtIps = {}; // userId → ip
@@ -94,22 +95,73 @@ let onlineUserIds    = new Set(); // онлайн хэрэглэгчийн userI
 // Чат хэсгийн идэвхтэй tab
 let activeDmTab = 'friends';
 
-// ── Light / Dark горим ───────────────────────────────────
-function applyTheme(theme) {
-  document.body.classList.toggle('light', theme === 'light');
+// ── Sidebar нээх / хаах ──────────────────────────────────
+localStorage.removeItem('theme');
+
+function setSidebarCollapsed(collapsed) {
+  const pageMain = document.getElementById('page-main');
+  const toggleBtn = document.getElementById('btn-sidebar-toggle');
+  const toggleIcon = document.getElementById('sidebar-toggle-icon');
+  pageMain?.classList.toggle('sidebar-collapsed', collapsed);
+  localStorage.setItem('sidebar_collapsed', collapsed ? '1' : '0');
+  if (toggleBtn) {
+    toggleBtn.title = collapsed ? 'Sidebar нээх' : 'Sidebar хаах';
+    toggleBtn.setAttribute('aria-label', toggleBtn.title);
+    toggleBtn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+  }
+  toggleIcon?.setAttribute('href', collapsed ? '#ico-sidebar-expand' : '#ico-sidebar-collapse');
 }
 
-function toggleTheme() {
-  const isLight = document.body.classList.contains('light');
-  const next = isLight ? 'dark' : 'light';
-  applyTheme(next);
-  localStorage.setItem('theme', next);
+setSidebarCollapsed(localStorage.getItem('sidebar_collapsed') === '1');
+
+document.getElementById('btn-sidebar-toggle')?.addEventListener('click', () => {
+  const pageMain = document.getElementById('page-main');
+  setSidebarCollapsed(!pageMain?.classList.contains('sidebar-collapsed'));
+});
+
+function initBackgroundLightning() {
+  const lightningEl = document.querySelector('.bg-lightning');
+  if (!lightningEl) return;
+  const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  if (reduceMotion) return;
+
+  const schedule = () => {
+    const delay = 3800 + Math.random() * 7200;
+    window.setTimeout(() => {
+      const x = 18 + Math.random() * 74;
+      const y = 86 + Math.random() * 10;
+      const rotate = -7 + Math.random() * 14;
+      const duration = 650 + Math.random() * 300;
+      const strength = 0.92 + Math.random() * 0.08;
+      const branchA = -64 + Math.random() * 16;
+      const branchB = 38 + Math.random() * 22;
+      const branchC = -48 + Math.random() * 18;
+
+      lightningEl.style.setProperty('--strike-x', `${x}%`);
+      lightningEl.style.setProperty('--strike-y', `${y}vh`);
+      lightningEl.style.setProperty('--strike-angle', `${rotate}deg`);
+      lightningEl.style.setProperty('--flash-duration', `${duration}ms`);
+      lightningEl.style.setProperty('--flash-strength', strength.toFixed(2));
+      lightningEl.style.setProperty('--branch-a-top', `${17 + Math.random() * 9}vh`);
+      lightningEl.style.setProperty('--branch-a-height', `${24 + Math.random() * 12}vh`);
+      lightningEl.style.setProperty('--branch-a-rotate', `${branchA}deg`);
+      lightningEl.style.setProperty('--branch-b-top', `${31 + Math.random() * 12}vh`);
+      lightningEl.style.setProperty('--branch-b-height', `${22 + Math.random() * 12}vh`);
+      lightningEl.style.setProperty('--branch-b-rotate', `${branchB}deg`);
+      lightningEl.style.setProperty('--branch-c-top', `${50 + Math.random() * 12}vh`);
+      lightningEl.style.setProperty('--branch-c-height', `${18 + Math.random() * 10}vh`);
+      lightningEl.style.setProperty('--branch-c-rotate', `${branchC}deg`);
+      lightningEl.classList.remove('flash');
+      void lightningEl.offsetWidth;
+      lightningEl.classList.add('flash');
+      schedule();
+    }, delay);
+  };
+
+  schedule();
 }
 
-// Хадгалагдсан горим ачааллах
-applyTheme(localStorage.getItem('theme') || 'dark');
-
-document.getElementById('btn-theme').onclick = toggleTheme;
+initBackgroundLightning();
 
 // ── Цонх горимууд ────────────────────────────────────────
 function isRoomMode() {
@@ -177,6 +229,12 @@ async function connectSocket() {
     showRoomInvite(fromUsername, roomId, roomName);
   });
 
+  socket.on('zt:authorize_result', (result) => {
+    if (!result?.ok && currentRoom) {
+      appendSysMsg(`⚠ ZeroTier authorization алдаа: ${result.error || 'unknown'}`);
+    }
+  });
+
   socket.on('disconnect', (reason) => {
     console.log('Socket салгагдлаа:', reason);
     updateConnectionStatus('offline');
@@ -221,12 +279,19 @@ async function connectSocket() {
   // Өрөөний тохиргоо шинэчлэгдсэн
   socket.on('room:updated', (room) => {
     if (currentRoom) {
-      if (room.name) document.getElementById('room-title').textContent = room.name;
+      if (room.name) {
+        currentRoom.name = room.name;
+        document.getElementById('room-title').textContent = room.name;
+      }
       if (room.max_players) {
         currentRoom.maxPlayers = room.max_players;
         const sel = document.getElementById('select-max-players');
-        if (sel) sel.value = String(room.max_players);
+        if (sel) {
+          sel.value = String(room.max_players);
+          syncMaxPlayersPicker(sel.value);
+        }
       }
+      updateRoomChrome(currentRoom.members?.length || 0);
       appendSysMsg(`⚙ Өрөөний тохиргоо шинэчлэгдлээ`);
     }
   });
@@ -478,6 +543,8 @@ async function connectSocket() {
     if (launchBtn) launchBtn.style.display = 'none';
     appendSysMsg('⏳ Host дахин тоглоом эхлүүлэхийг хүлээж байна...');
   });
+
+  return socket;
 }
 
 // ── Хуудас шилжилт ────────────────────────────────────────
@@ -531,7 +598,7 @@ async function init() {
     const user = await window.api.getUser();
     if (!user) { window.close(); return; }
     currentUser = user;
-    connectSocket();
+    await connectSocket();
     document.getElementById('friends-fullpage').classList.add('active');
     initFriendsWindowMode();
     return;
@@ -544,7 +611,7 @@ async function init() {
     const user = await window.api.getUser();
     if (!user) { window.close(); return; }
     currentUser = user;
-    connectSocket();
+    await connectSocket();
     const p = new URLSearchParams(window.location.search);
     document.getElementById('dm-fullpage').classList.add('active');
     initDMWindowMode(p.get('dmUserId'), p.get('dmUsername'));
@@ -561,7 +628,7 @@ async function init() {
     const user = await window.api.getUser();
     if (!user) { window.close(); return; }
     currentUser = user;
-    connectSocket();
+    await connectSocket();
 
     // Тоглолтын үр дүн (replay watcher) — өрөөний цонхонд харуулна
     window.api.onGameResult((data) => showGameResult(data));
@@ -574,8 +641,9 @@ async function init() {
     const hostId  = p.get('hostId') || '';
     const status  = p.get('status') || '';
     const ztNetId = p.get('ztNetId') || '';
+    const maxPlayers = Number(p.get('maxPlayers') || 10);
 
-    _enterRoomUI(id, name, gameType, isHost, hostId, status, ztNetId);
+    _enterRoomUI(id, name, gameType, isHost, hostId, status, ztNetId, maxPlayers);
 
     // Цонх хаагдахад өрөөнөөс гарах + relay зогсоох
     window.addEventListener('beforeunload', () => {
@@ -650,15 +718,7 @@ async function init() {
   window.api.onZtSetupComplete?.(async (result) => {
     _ztSetupInProgress = false;
     if (result.ok) {
-      console.log('[ZT] Existing ZeroTier connected. IP:', result.ip || 'pending');
-
-      try {
-        const nodeId = await window.api.getZerotierNodeId();
-        const cfg = await fetch(SERVER + '/config').then(r => r.json());
-        if (nodeId && cfg.zerotierNetworkId && socket) {
-          socket.emit('zt:authorize', { nodeId, networkId: cfg.zerotierNetworkId });
-        }
-      } catch (e) { console.warn('[ZT] Authorize request failed:', e.message); }
+      console.log('[ZT] ZeroTier setup complete. IP:', result.ip || 'pending');
     } else {
       const msgs = {
         'not-installed': 'ZeroTier is not installed. Open Settings and use the official installer link.',
@@ -706,8 +766,18 @@ function setUpdateMsg(msg, type) {
   el.style.color = colors[type] || '';
 }
 
+function userDisplayName(user) {
+  return String(
+    user?.discord_username ||
+    user?.discord_display_name ||
+    user?.discord_global_name ||
+    user?.username ||
+    ''
+  ).trim();
+}
+
 function setUserUI(user) {
-  document.getElementById('user-name').textContent = user.username;
+  document.getElementById('user-name').textContent = userDisplayName(user) || user.username;
   const av = document.getElementById('user-avatar');
   if (user.avatar_url) { av.src = user.avatar_url; av.style.display = 'block'; }
 }
@@ -843,8 +913,14 @@ document.getElementById('btn-register').onclick = async (e) => {
   }
 };
 
-document.getElementById('btn-login').onclick       = () => window.api.login();
-document.getElementById('btn-discord-reg').onclick = () => window.api.login();
+function startDiscordLogin() {
+  window.api.login().catch((err) => {
+    showToast(`Discord нэвтрэлт эхлүүлэхэд алдаа: ${err.message}`, 'error');
+  });
+}
+
+document.getElementById('btn-login').onclick       = startDiscordLogin;
+document.getElementById('btn-discord-reg').onclick = startDiscordLogin;
 
 // QR код үүсгэх
 async function loadQR() {
@@ -930,6 +1006,8 @@ function populateGameTypeFilter(rooms) {
 function renderFilteredRooms() {
   const waiting = document.getElementById('rooms-waiting');
   const playing = document.getElementById('rooms-playing');
+  const detail = document.getElementById('room-detail-panel');
+  const board = document.querySelector('.room-board-layout');
   if (!waiting || !playing) return;
 
   const allRooms = Object.values(roomsCache);
@@ -944,12 +1022,23 @@ function renderFilteredRooms() {
     ? '<p class="empty-text">Хайлтад тохирох өрөө олдсонгүй</p>'
     : '';
 
-  waiting.innerHTML = waitRooms.length
-    ? waitRooms.map((r, i) => roomCard(r, false, i)).join('')
-    : (noResultMsg || '<p class="empty-text">Одоогоор нээлттэй өрөө байхгүй</p>');
-  playing.innerHTML = playRooms.length
-    ? playRooms.map((r, i) => roomCard(r, true, i)).join('')
-    : (noResultMsg || '<p class="empty-text">Одоогоор тоглолт явагдахгүй байна</p>');
+  const selectedExists = filtered.some(r => String(r.id) === String(selectedRoomId));
+  if (!selectedExists) {
+    selectedRoomId = waitRooms[0]?.id ?? playRooms[0]?.id ?? null;
+  }
+
+  waiting.innerHTML = renderRoomGrid(waitRooms, false, noResultMsg || '<p class="empty-text">Одоогоор нээлттэй өрөө байхгүй</p>');
+  playing.innerHTML = renderRoomGrid(playRooms, true, noResultMsg || '<p class="empty-text">Одоогоор тоглолт явагдахгүй байна</p>');
+
+  const waitingCount = document.getElementById('rooms-waiting-count');
+  const playingCount = document.getElementById('rooms-playing-count');
+  if (waitingCount) waitingCount.textContent = `${waitRooms.length} өрөө`;
+  if (playingCount) playingCount.textContent = `${playRooms.length} өрөө`;
+  const selectedRoom = filtered.find(r => String(r.id) === String(selectedRoomId));
+  if (board) board.classList.toggle('no-selection', !selectedRoom);
+  if (detail) {
+    detail.innerHTML = renderRoomDetail(selectedRoom);
+  }
 }
 
 // Rooms жагсаалтыг шүүж, эрэмбэлэх
@@ -1000,50 +1089,131 @@ document.getElementById('room-search')?.addEventListener('input', () => {
 document.getElementById('room-filter-type')?.addEventListener('change', () => renderFilteredRooms());
 document.getElementById('room-sort')?.addEventListener('change', () => renderFilteredRooms());
 
-function roomCard(r, inProgress, idx = 0) {
-  const myId     = String(currentUser?.id);
-  const isMyRoom = String(r.host_id) === myId ||
-                   (r.members || []).some(m => String(m.id) === myId);
-  const memberSpans = (r.members || []).map(m => {
+function roomActionButton(r, inProgress, isMyRoom, myId) {
+  if (isMyRoom) {
+    return `<button class="btn btn-sm btn-primary room-action-btn" data-action="rejoin" data-id="${r.id}" data-host="${r.host_id}" data-ishost="${String(r.host_id) === myId}">Буцах</button>`;
+  }
+  if (inProgress) {
+    return `<button class="btn btn-sm btn-primary btn-with-icon room-action-btn" data-action="join-playing" data-id="${r.id}" data-host="${r.host_id}"><svg class="btn-icon-svg" style="width:13px;height:13px"><use href="#ico-join"/></svg> Нэгдэх</button>`;
+  }
+  return `<button class="btn btn-primary btn-sm room-action-btn" data-action="join" data-id="${r.id}" data-host="${r.host_id}" data-pass="${r.has_password}">Нэгдэх</button>`;
+}
+
+function roomMemberLinks(r) {
+  return (r.members || []).map(m => {
     const mid = m.id ? String(m.id) : '';
     const mname = m.name || m;
     return `<span class="clickable-name" data-user-id="${mid}">${escHtml(mname)}</span>`;
   }).join(', ');
+}
 
-  const lockIcon = r.has_password ? '<span class="room-lock">🔒</span>' : '';
-  const modeBadge = r.game_mode ? `<span class="badge mode-badge">${escHtml(r.game_mode)}</span>` : '';
+function roomStatusMeta(r, inProgress, isMyRoom) {
+  if (isMyRoom) return { label: 'Миний', className: 'mine' };
+  if (inProgress) return { label: 'Live', className: 'playing' };
+  if ((r.player_count || 0) >= (r.max_players || 0)) return { label: 'Дүүрсэн', className: 'full' };
+  return { label: 'Open', className: 'waiting' };
+}
+
+function renderRoomGrid(rooms, inProgress, emptyHtml) {
+  if (!rooms.length) return `<div class="room-grid-empty">${emptyHtml}</div>`;
+  return `
+    <div class="room-data-grid" role="table">
+      <div class="room-grid-header" role="row">
+        <div>STA</div>
+        <div>Өрөө</div>
+        <div>Game</div>
+        <div>Mode</div>
+        <div>Host</div>
+        <div>Players</div>
+        <div>Net</div>
+        <div></div>
+      </div>
+      ${rooms.map((r, i) => roomGridRow(r, inProgress, i)).join('')}
+    </div>
+  `;
+}
+
+function roomGridRow(r, inProgress, idx = 0) {
+  const myId     = String(currentUser?.id);
+  const isMyRoom = String(r.host_id) === myId ||
+                   (r.members || []).some(m => String(m.id) === myId);
+  const selected = String(r.id) === String(selectedRoomId);
+  const status = roomStatusMeta(r, inProgress, isMyRoom);
   const desc = (r.description || '').trim();
-  const descHtml = desc ? `<div class="room-desc">${escHtml(desc)}</div>` : '';
-
-  let joinBtn;
-  if (isMyRoom) {
-    joinBtn = `<button class="btn btn-sm btn-primary room-action-btn" data-action="rejoin" data-id="${r.id}" data-host="${r.host_id}" data-ishost="${String(r.host_id) === myId}">↩ Буцах</button>`;
-  } else if (inProgress) {
-    joinBtn = `<button class="btn btn-sm btn-primary btn-with-icon room-action-btn" data-action="join-playing" data-id="${r.id}" data-host="${r.host_id}"><svg class="btn-icon-svg" style="width:13px;height:13px"><use href="#ico-join"/></svg> Нэгдэх</button>`;
-  } else {
-    joinBtn = `<button class="btn btn-primary btn-sm room-action-btn" data-action="join" data-id="${r.id}" data-host="${r.host_id}" data-pass="${r.has_password}">Нэгдэх</button>`;
-  }
+  const memberCount = (r.members || []).length;
+  const networkLabel = r.zerotier_network_id ? 'ZT' : 'LAN';
+  const roomFlags = [
+    r.has_password ? '<span class="room-lock">Lock</span>' : '',
+    isMyRoom ? '<span class="my-room-tag">Миний өрөө</span>' : '',
+  ].filter(Boolean).join('');
 
   return `
-    <div class="room-card ${inProgress ? 'room-playing' : ''} ${isMyRoom ? 'room-mine' : ''}" style="animation-delay:${idx * 0.05}s">
-      <div class="room-card-header">
-        <span class="badge game-badge" style="background:${gameTypeColor(r.game_type)}">${escHtml(r.game_type)}</span>
-        ${modeBadge}
-        ${lockIcon}
+    <div class="room-grid-row ${inProgress ? 'room-playing' : ''} ${isMyRoom ? 'room-mine' : ''} ${selected ? 'selected' : ''}" role="row" tabindex="0" data-room-id="${r.id}" style="animation-delay:${idx * 0.025}s">
+      <div class="room-cell room-cell-status" role="cell">
+        <span class="room-status-pill ${status.className}"><span class="room-state-dot"></span>${status.label}</span>
       </div>
-      <div class="room-card-title">
-        <span class="room-name">${escHtml(r.name)}</span>
+      <div class="room-cell room-cell-room" role="cell">
+        <div class="room-grid-name-row">
+          <span class="room-name">${escHtml(r.name)}</span>
+          ${roomFlags}
+        </div>
+        <div class="room-grid-subline">${desc ? escHtml(desc) : `${memberCount} тоглогчийн мэдээлэл`}</div>
+      </div>
+      <div class="room-cell" role="cell"><span class="badge game-badge" style="background:${gameTypeColor(r.game_type)}">${escHtml(r.game_type || '-')}</span></div>
+      <div class="room-cell muted" role="cell">${r.game_mode ? escHtml(r.game_mode) : '-'}</div>
+      <div class="room-cell" role="cell">${escHtml(r.host_name || '-')}</div>
+      <div class="room-cell room-cell-players" role="cell">
+        <span>${r.player_count || 0}/${r.max_players || '-'}</span>
+        <span class="room-fill-bar"><span style="width:${Math.min(100, Math.round(((r.player_count || 0) / (r.max_players || 1)) * 100))}%"></span></span>
+      </div>
+      <div class="room-cell muted" role="cell">${networkLabel}</div>
+      <div class="room-cell room-cell-action" role="cell">${roomActionButton(r, inProgress, isMyRoom, myId)}</div>
+    </div>
+  `;
+}
+
+function renderRoomDetail(r) {
+  if (!r) {
+    return `
+      <div class="room-detail-empty">
+        <div class="room-detail-icon">i</div>
+        <p>Өрөө сонгоход дэлгэрэнгүй мэдээлэл энд гарна.</p>
+      </div>
+    `;
+  }
+
+  const myId = String(currentUser?.id);
+  const inProgress = r.status === 'playing';
+  const isMyRoom = String(r.host_id) === myId ||
+                   (r.members || []).some(m => String(m.id) === myId);
+  const status = roomStatusMeta(r, inProgress, isMyRoom);
+  const members = roomMemberLinks(r);
+  const networkLabel = r.zerotier_network_id ? 'ZeroTier ready' : 'LAN bridge';
+
+  return `
+    <div class="room-detail-card ${inProgress ? 'room-playing' : ''} ${isMyRoom ? 'room-mine' : ''}">
+      <div class="room-detail-top">
+        <span class="room-status-pill ${status.className}"><span class="room-state-dot"></span>${status.label}</span>
+        ${r.has_password ? '<span class="room-lock">Lock</span>' : ''}
+      </div>
+      <h3>${escHtml(r.name)}</h3>
+      <div class="room-detail-badges">
+        <span class="badge game-badge" style="background:${gameTypeColor(r.game_type)}">${escHtml(r.game_type || '-')}</span>
+        ${r.game_mode ? `<span class="badge mode-badge">${escHtml(r.game_mode)}</span>` : ''}
         ${isMyRoom ? '<span class="my-room-tag">Миний өрөө</span>' : ''}
       </div>
-      ${descHtml}
-      <div class="room-card-info">
-        <span>👤 ${escHtml(r.host_name)}</span>
-        <span>👥 ${r.player_count}/${r.max_players}</span>
+      <p class="room-detail-desc">${escHtml((r.description || '').trim() || 'Тайлбар оруулаагүй байна.')}</p>
+      <div class="room-detail-stats">
+        <div><span>Host</span><strong>${escHtml(r.host_name || '-')}</strong></div>
+        <div><span>Players</span><strong>${r.player_count || 0}/${r.max_players || '-'}</strong></div>
+        <div><span>Network</span><strong>${networkLabel}</strong></div>
       </div>
-      ${memberSpans ? `<div class="room-members">${memberSpans}</div>` : ''}
-      <div class="room-card-footer">
-        <div></div>
-        ${joinBtn}
+      <div class="room-members room-detail-members">
+        <span class="room-detail-label">Гишүүд</span>
+        <div>${members || '<span class="muted">Одоогоор гишүүн харагдахгүй байна</span>'}</div>
+      </div>
+      <div class="room-detail-actions">
+        ${roomActionButton(r, inProgress, isMyRoom, myId)}
       </div>
     </div>
   `;
@@ -1075,6 +1245,23 @@ document.addEventListener('click', e => {
   }
 });
 
+document.addEventListener('click', e => {
+  if (e.target.closest('.room-action-btn')) return;
+  const row = e.target.closest('.room-grid-row');
+  if (!row || !row.dataset.roomId) return;
+  selectedRoomId = row.dataset.roomId;
+  renderFilteredRooms();
+});
+
+document.addEventListener('keydown', e => {
+  const row = e.target.closest?.('.room-grid-row');
+  if (!row || !row.dataset.roomId) return;
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  e.preventDefault();
+  selectedRoomId = row.dataset.roomId;
+  renderFilteredRooms();
+});
+
 // Өрөөний товч event delegation (data-attribute ашиглан)
 document.addEventListener('click', e => {
   const btn = e.target.closest('.room-action-btn');
@@ -1103,6 +1290,7 @@ document.getElementById('btn-quickmatch').onclick = async () => {
   try {
     const result = await window.api.quickMatch(gameType);
     const room = result.room;
+    roomsCache[String(room.id)] = room;
     const isHost = !result.joined && String(room.host_id) === String(currentUser?.id);
     enterRoom(String(room.id), room.name, room.game_type, isHost, String(room.host_id), room.status, room.zerotier_network_id);
   } catch (err) {
@@ -1220,27 +1408,189 @@ document.getElementById('join-password').addEventListener('keydown', e => {
 // Үндсэн цонхноос дуудагдана → шинэ цонх нээнэ
 function enterRoom(id, name, gameType, isHost, hostId, status, ztNetId) {
   const resolvedHostId = hostId ? String(hostId) : String(currentUser?.id);
-  window.api.openRoomWindow({ id, name, gameType, isHost, hostId: resolvedHostId, status: status || '', zerotierNetworkId: ztNetId || '' });
+  const cached = roomsCache[id] || {};
+  window.api.openRoomWindow({
+    id,
+    name,
+    gameType,
+    isHost,
+    hostId: resolvedHostId,
+    status: status || '',
+    zerotierNetworkId: ztNetId || '',
+    maxPlayers: cached.max_players || cached.maxPlayers || 10,
+  });
 }
 
+function setRoomText(id, value) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = value;
+}
+
+function updateRoomChrome(memberCount = currentRoom?.members?.length || 0) {
+  if (!currentRoom) return;
+  const maxPlayers = Math.max(1, Number(currentRoom.maxPlayers || 10));
+  const pct = Math.min(100, Math.round((memberCount / maxPlayers) * 100));
+  const statusLabel = currentRoom.status === 'playing' ? 'Тоглолт явагдаж байна' : 'Хүлээлгийн өрөө';
+  const roleLabel = currentRoom.isHost ? 'Та host' : 'Оролцогч';
+
+  setRoomText('members-count', String(memberCount));
+  setRoomText('room-capacity-text', `${memberCount} / ${maxPlayers} тоглогч`);
+  setRoomText('room-capacity-chip', `${memberCount} / ${maxPlayers}`);
+  setRoomText('room-role-text', roleLabel);
+  setRoomText('room-status-text', statusLabel);
+  setRoomText('room-game-name', currentRoom.gameType || '-');
+  setRoomText('room-short-name', currentRoom.name || '-');
+  setRoomText('room-info-text', `Room #${currentRoom.id} · ${roleLabel}`);
+
+  const meter = document.getElementById('room-player-meter');
+  if (meter) meter.style.width = `${pct}%`;
+}
+
+const MAX_PLAYERS_OPTIONS = ['2', '4', '6', '8', '10', '12'];
+
+function getMaxPlayerOptionButtons() {
+  return Array.from(document.querySelectorAll('#max-players-options button[data-value]'));
+}
+
+function setMaxPlayersPickerOpen(open, restoreFocus = false) {
+  const picker = document.getElementById('max-players-picker');
+  const trigger = document.getElementById('max-players-trigger');
+  const options = document.getElementById('max-players-options');
+  if (!picker || !trigger || !options) return;
+
+  picker.classList.toggle('open', open);
+  options.classList.toggle('hidden', !open);
+  trigger.setAttribute('aria-expanded', open ? 'true' : 'false');
+
+  if (open) {
+    const active = options.querySelector('button.active') || options.querySelector('button[data-value]');
+    active?.focus({ preventScroll: true });
+  } else if (restoreFocus && options.contains(document.activeElement)) {
+    trigger.focus({ preventScroll: true });
+  }
+}
+
+function syncMaxPlayersPicker(value) {
+  const cleanValue = MAX_PLAYERS_OPTIONS.includes(String(value)) ? String(value) : '10';
+  const valueEl = document.getElementById('max-players-value');
+  const trigger = document.getElementById('max-players-trigger');
+  if (valueEl) valueEl.textContent = cleanValue;
+  if (trigger) trigger.setAttribute('aria-label', `Дээд хязгаар ${cleanValue} тоглогч`);
+
+  getMaxPlayerOptionButtons().forEach(btn => {
+    const active = btn.dataset.value === cleanValue;
+    btn.classList.toggle('active', active);
+    btn.setAttribute('aria-selected', active ? 'true' : 'false');
+  });
+
+  setMaxPlayersPickerOpen(false);
+}
+
+function chooseMaxPlayers(value) {
+  const sel = document.getElementById('select-max-players');
+  if (!sel) return;
+  const cleanValue = MAX_PLAYERS_OPTIONS.includes(String(value)) ? String(value) : '10';
+  if (sel.value === cleanValue) {
+    syncMaxPlayersPicker(cleanValue);
+    return;
+  }
+  sel.value = cleanValue;
+  syncMaxPlayersPicker(cleanValue);
+  sel.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
+function focusMaxPlayerOption(delta) {
+  const buttons = getMaxPlayerOptionButtons();
+  if (!buttons.length) return;
+  const activeIndex = buttons.findIndex(btn => btn === document.activeElement);
+  const fallbackIndex = Math.max(0, buttons.findIndex(btn => btn.classList.contains('active')));
+  const currentIndex = activeIndex >= 0 ? activeIndex : fallbackIndex;
+  const nextIndex = (currentIndex + delta + buttons.length) % buttons.length;
+  buttons[nextIndex].focus({ preventScroll: true });
+}
+
+document.getElementById('max-players-trigger')?.addEventListener('click', e => {
+  e.stopPropagation();
+  const picker = document.getElementById('max-players-picker');
+  setMaxPlayersPickerOpen(!picker?.classList.contains('open'));
+});
+
+document.getElementById('max-players-trigger')?.addEventListener('keydown', e => {
+  if (['Enter', ' ', 'ArrowDown', 'ArrowUp'].includes(e.key)) {
+    e.preventDefault();
+    setMaxPlayersPickerOpen(true);
+  }
+});
+
+document.getElementById('max-players-options')?.addEventListener('click', e => {
+  const btn = e.target.closest?.('button[data-value]');
+  if (!btn) return;
+  e.stopPropagation();
+  chooseMaxPlayers(btn.dataset.value);
+});
+
+document.getElementById('max-players-options')?.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    e.preventDefault();
+    setMaxPlayersPickerOpen(false, true);
+    return;
+  }
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    focusMaxPlayerOption(1);
+    return;
+  }
+  if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    focusMaxPlayerOption(-1);
+    return;
+  }
+  if (e.key === 'Home' || e.key === 'End') {
+    e.preventDefault();
+    const buttons = getMaxPlayerOptionButtons();
+    const target = e.key === 'Home' ? buttons[0] : buttons[buttons.length - 1];
+    target?.focus({ preventScroll: true });
+    return;
+  }
+  if (e.key === 'Enter' || e.key === ' ') {
+    const btn = e.target.closest?.('button[data-value]');
+    if (!btn) return;
+    e.preventDefault();
+    chooseMaxPlayers(btn.dataset.value);
+  }
+});
+
+document.addEventListener('click', e => {
+  if (!e.target.closest?.('#max-players-picker')) setMaxPlayersPickerOpen(false);
+});
+
 // Өрөөний цонхны UI тохируулга (room цонхноос шууд дуудагдана)
-function _enterRoomUI(id, name, gameType, isHost, hostId, status, ztNetId) {
+function _enterRoomUI(id, name, gameType, isHost, hostId, status, ztNetId, maxPlayers = 10) {
   // Хуучин relay зогсоож, state reset хийх
   _hostRelayStarted = false;
   _launchInProgress = false;
   try { window.api.stopRelay(); } catch {}
   const cached = roomsCache[id] || {};
-  currentRoom = { id, name, gameType, isHost, hostId: hostId || String(currentUser?.id), maxPlayers: cached.max_players || 10 };
+  currentRoom = {
+    id,
+    name,
+    gameType,
+    isHost,
+    hostId: hostId || String(currentUser?.id),
+    maxPlayers: Number(cached.max_players || maxPlayers || 10),
+    status: status || 'waiting',
+    ztNetId,
+  };
 
   document.getElementById('room-title').textContent = name;
   document.getElementById('room-badge').textContent = gameType;
   document.getElementById('room-badge').className   = 'badge game-badge';
   document.getElementById('room-badge').style.background = gameTypeColor(gameType);
-  document.getElementById('room-info-text').textContent = `${name} | ${gameType}`;
+  updateRoomChrome(0);
   document.getElementById('chat-messages').innerHTML  = '';
   document.getElementById('members-list').innerHTML   = '';
   // Хост: "Өрөөг хаах" харуулж "Гарах" нуух — хост гарахад room устдаг учир хоёулаа байх хэрэггүй
-  document.getElementById('btn-close-room').style.display = isHost ? 'block' : 'none';
+  document.getElementById('btn-close-room').style.display = isHost ? 'grid' : 'none';
   document.getElementById('btn-leave-room').style.display = isHost ? 'none' : 'block';
   document.getElementById('btn-close-room').classList.remove('hidden');
 
@@ -1250,16 +1600,22 @@ function _enterRoomUI(id, name, gameType, isHost, hostId, status, ztNetId) {
     if (isHost) {
       maxRow.classList.remove('hidden');
       const sel = document.getElementById('select-max-players');
-      sel.value = String(currentRoom.maxPlayers || 10);
-      sel.onchange = async () => {
-        try {
-          await window.api.updateRoom(currentRoom.id, { max_players: Number(sel.value) });
-          currentRoom.maxPlayers = Number(sel.value);
-          appendSysMsg(`⚙ Дээд хязгаар: ${sel.value} тоглогч`);
-        } catch {}
-      };
+      if (sel) {
+        sel.value = String(currentRoom.maxPlayers || 10);
+        syncMaxPlayersPicker(sel.value);
+        sel.onchange = async () => {
+          syncMaxPlayersPicker(sel.value);
+          try {
+            await window.api.updateRoom(currentRoom.id, { max_players: Number(sel.value) });
+            currentRoom.maxPlayers = Number(sel.value);
+            updateRoomChrome(currentRoom.members?.length || 0);
+            appendSysMsg(`⚙ Дээд хязгаар: ${sel.value} тоглогч`);
+          } catch {}
+        };
+      }
     } else {
       maxRow.classList.add('hidden');
+      setMaxPlayersPickerOpen(false);
     }
   }
 
@@ -1291,10 +1647,22 @@ function _enterRoomUI(id, name, gameType, isHost, hostId, status, ztNetId) {
     socket.emit('room:get_zt_ips', { roomId: id });
     // ZeroTier IP-г серверт мэдэгдэх (relay-д хэрэгтэй) — retry логиктой
     (async () => {
-      for (let attempt = 0; attempt < 5; attempt++) {
+      if (ztNetId) {
+        try {
+          const nodeId = await window.api.getZerotierNodeId();
+          if (nodeId && socket) {
+            socket.emit('zt:authorize', { roomId: id, nodeId, networkId: ztNetId });
+            await new Promise(r => setTimeout(r, 2500));
+          }
+        } catch (e) {
+          console.warn('[ZT] Authorize request failed:', e.message);
+        }
+      }
+
+      for (let attempt = 0; attempt < 10; attempt++) {
         await new Promise(r => setTimeout(r, 2000));
         try {
-          const myIp = await window.api.getZerotierIp();
+          const myIp = await window.api.getZerotierIp(ztNetId);
           if (myIp && socket) {
             socket.emit('room:zt_ip', { roomId: id, ip: myIp });
             console.log('[ZT] IP бүртгэгдлээ:', myIp);
@@ -1302,7 +1670,7 @@ function _enterRoomUI(id, name, gameType, isHost, hostId, status, ztNetId) {
           }
         } catch {}
       }
-      console.warn('[ZT] IP бүртгэж чадсангүй (5 оролдлого)');
+      console.warn('[ZT] IP бүртгэж чадсангүй (10 оролдлого)');
     })();
   }
   appendSysMsg(`"${name}" өрөөнд нэгдлээ.`);
@@ -1323,19 +1691,31 @@ document.getElementById('btn-leave-room').onclick = async () => {
   else { showPage('page-main'); loadRooms(); }
 };
 
-document.getElementById('btn-close-room').onclick = async () => {
+document.getElementById('btn-close-room').onclick = async (e) => {
   if (!currentRoom) return;
-  if (!await showConfirm('Өрөө хаах', `"${currentRoom.name}" өрөөг хаах уу? Бүх тоглогчид гарна.`)) return;
+  const btn = e.currentTarget;
+  if (btn.disabled) return;
+  const room = { ...currentRoom };
+  if (!await showConfirm('Өрөө хаах', `"${room.name}" өрөөг хаах уу? Бүх тоглогчид гарна.`)) return;
+  if (!currentRoom || String(currentRoom.id) !== String(room.id)) return;
+
+  btn.disabled = true;
+  btn.classList.add('is-loading');
   _hostRelayStarted = false;
   roomZtIps = {};
   try { await window.api.stopRelay(); } catch {}
   try {
-    await window.api.closeRoom(currentRoom.id);
+    appendSysMsg('Өрөө хааж байна...');
+    await window.api.closeRoom(room.id);
     currentRoom = null;
     if (isRoomMode()) { window.close(); }
     else { showPage('page-main'); loadRooms(); }
   } catch (err) {
-    appendSysMsg(`⚠️ ${err.message}`);
+    appendSysMsg(`⚠ Өрөө хаахад алдаа: ${err.message}`);
+    showToast(`Өрөө хаахад алдаа: ${err.message}`, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.classList.remove('is-loading');
   }
 };
 
@@ -1343,7 +1723,8 @@ document.getElementById('btn-close-room').onclick = async () => {
 function setLaunchBtnRejoin() {
   const btn = document.getElementById('btn-launch-wc3');
   if (!btn) return;
-  btn.querySelector('span').textContent = '↩ Дахин нэвтрэх';
+  btn.querySelector('span').textContent = 'Дахин';
+  btn.title = 'Дахин нэвтрэх';
   btn.classList.remove('btn-primary');
   btn.classList.add('btn-success');
 }
@@ -1352,7 +1733,8 @@ function setLaunchBtnRejoin() {
 function resetLaunchBtn(isHost) {
   const btn = document.getElementById('btn-launch-wc3');
   if (!btn) return;
-  btn.querySelector('span').textContent = isHost ? 'Тоглолт эхлүүлэх' : 'Тоглоом эхлүүлэх';
+  btn.querySelector('span').textContent = isHost ? 'Эхлүүлэх' : 'Нээх';
+  btn.title = isHost ? 'Тоглолт эхлүүлэх' : 'Тоглоом эхлүүлэх';
   btn.classList.remove('btn-success');
   btn.classList.add('btn-primary');
 }
@@ -1375,9 +1757,18 @@ let _hostRelayStarted = false;
 let _launchInProgress = false;
 document.getElementById('btn-launch-wc3').onclick = async () => {
   if (_launchInProgress) return; // Double-click хамгаалалт
+  if (!currentRoom) {
+    appendSysMsg('⚠ Өрөөний мэдээлэл олдсонгүй.');
+    return;
+  }
   _launchInProgress = true;
+  const launchBtn = document.getElementById('btn-launch-wc3');
+  if (launchBtn) {
+    launchBtn.disabled = true;
+    launchBtn.classList.add('is-loading');
+  }
   const gameType = currentRoom?.gameType || '';
-  const isRejoin = document.getElementById('btn-launch-wc3').querySelector('span')?.textContent?.includes('Дахин');
+  const isRejoin = launchBtn?.querySelector('span')?.textContent?.includes('Дахин');
   appendSysMsg(isRejoin ? '↩ WC3 дахин нээж байна...' : `"${gameType}" тоглоом эхлүүлж байна...`);
 
   // HOST: Relay-г WC3 нээхээс ӨМНӨ эхлүүлэх (port 6112-г relay эхлээд bind хийнэ,
@@ -1406,6 +1797,8 @@ document.getElementById('btn-launch-wc3').onclick = async () => {
     if (!isRejoin && currentRoom?.isHost) {
       try {
         await window.api.startRoom(currentRoom.id);
+        currentRoom.status = 'playing';
+        updateRoomChrome(currentRoom.members?.length || 0);
         appendSysMsg('▶ Тоглолт эхэллээ!');
         setLaunchBtnRejoin();
         try {
@@ -1418,37 +1811,57 @@ document.getElementById('btn-launch-wc3').onclick = async () => {
             socket.emit('room:get_zt_ips', { roomId: currentRoom.id });
           }
         } catch {}
-      } catch {}
+      } catch (err) {
+        appendSysMsg(`⚠ Тоглолтын төлөв эхлүүлэхэд алдаа: ${err.message}`);
+        showToast(`Тоглолт эхлүүлэхэд алдаа: ${err.message}`, 'error');
+        resetLaunchBtn(true);
+      }
     }
   } catch (err) {
     appendSysMsg(`⚠️ ${err.message}`);
+    showToast(`WC3 нээхэд алдаа: ${err.message}`, 'error');
   } finally {
     _launchInProgress = false;
+    if (launchBtn) {
+      launchBtn.disabled = false;
+      launchBtn.classList.remove('is-loading');
+    }
   }
 };
 
 // ── Өрөөний чат ──────────────────────────────────────────
+function formatChatTime(time) {
+  const date = new Date(time);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleTimeString('mn-MN', { hour: '2-digit', minute: '2-digit', hour12: false });
+}
+
 function appendMessage({ userId, username, text, time }) {
   const box  = document.getElementById('chat-messages');
   const isMe = username === currentUser?.username;
-  const t    = new Date(time).toLocaleTimeString('mn-MN', { hour: '2-digit', minute: '2-digit' });
+  const t    = formatChatTime(time);
   const div  = document.createElement('div');
   div.className = `msg ${isMe ? 'me' : 'other'}`;
   div.dataset.time = time;
   div.dataset.userId = userId || '';
   const nameEl = isMe ? 'Та' : `<span class="clickable-name" data-user-id="${userId}">${escHtml(username)}</span>`;
-  const deleteBtn = isMe ? `<button class="msg-delete" title="Устгах">🗑️</button>` : '';
+  const deleteBtn = isMe ? '<button type="button" class="msg-delete" title="Мессеж устгах" aria-label="Мессеж устгах"><svg class="btn-icon-svg"><use href="#ico-trash"/></svg></button>' : '';
   div.innerHTML = `
-    <div class="msg-header">${nameEl}${deleteBtn}</div>
+    <div class="msg-header"><span class="msg-author">${nameEl}</span><span class="msg-dot">·</span><span class="msg-time">${t}</span>${deleteBtn}</div>
     <div class="msg-bubble">${parseMentions(escHtml(text), !isMe)}</div>
-    <div class="msg-time">${t}</div>
   `;
   if (!isMe && userId) {
     div.querySelector('.clickable-name')?.addEventListener('click', () => openUserProfile(userId));
   }
   if (isMe) {
     div.querySelector('.msg-delete')?.addEventListener('click', () => {
-      if (socket && currentRoom) socket.emit('chat:delete', { roomId: currentRoom.id, time });
+      if (!socket?.connected || !currentRoom) {
+        appendSysMsg('⚠ Chat холболт бэлэн биш байна.');
+        return;
+      }
+      socket.emit('chat:delete', { roomId: currentRoom.id, time }, (res) => {
+        if (res?.ok === false) appendSysMsg(`⚠ Мессеж устгаж чадсангүй: ${res.error || 'алдаа'}`);
+      });
     });
   }
   box.appendChild(div);
@@ -1467,8 +1880,13 @@ function appendSysMsg(text) {
 
 function sendMessage() {
   const input = document.getElementById('chat-input');
+  if (!input || !currentRoom) return;
   const text  = input.value.trim();
-  if (!text || !currentRoom || !socket) return;
+  if (!text) return;
+  if (!socket || !socket.connected) {
+    appendSysMsg('⚠ Chat холбогдож байна. Түр хүлээгээд дахин илгээнэ үү.');
+    return;
+  }
   socket.emit('chat:message', { roomId: currentRoom.id, text });
   input.value = '';
 }
@@ -1486,7 +1904,8 @@ function renderMembers(members) {
   const myId    = String(currentUser?.id);
   const hostId  = currentRoom?.hostId;
 
-  if (countEl) countEl.textContent = `(${members.length})`;
+  if (countEl) countEl.textContent = String(members.length);
+  updateRoomChrome(members.length);
 
   ul.innerHTML = members.map(m => {
     const id   = m.id   !== undefined ? String(m.id) : null;
@@ -1608,24 +2027,26 @@ function appendLobbyMessage({ userId, username, text, time }, isHistory = false)
 
 function _appendLobbyMsgDOM(box, { userId, username, text, time }) {
   const isMe = username === currentUser?.username;
-  const t    = new Date(time).toLocaleTimeString('mn-MN', { hour: '2-digit', minute: '2-digit' });
+  const t    = formatChatTime(time);
   const div  = document.createElement('div');
   div.className = `msg ${isMe ? 'me' : 'other'}`;
   div.dataset.time = time;
   div.dataset.userId = userId || '';
   const nameEl = isMe ? 'Та' : `<span class="clickable-name" data-user-id="${userId}">${escHtml(username)}</span>`;
-  const deleteBtn = isMe ? `<button class="msg-delete" title="Устгах">🗑️</button>` : '';
+  const deleteBtn = isMe ? '<button type="button" class="msg-delete" title="Мессеж устгах" aria-label="Мессеж устгах"><svg class="btn-icon-svg"><use href="#ico-trash"/></svg></button>' : '';
   div.innerHTML = `
-    <div class="msg-header">${nameEl}${deleteBtn}</div>
+    <div class="msg-header"><span class="msg-author">${nameEl}</span><span class="msg-dot">·</span><span class="msg-time">${t}</span>${deleteBtn}</div>
     <div class="msg-bubble">${parseMentions(escHtml(text), !isMe)}</div>
-    <div class="msg-time">${t}</div>
   `;
   if (!isMe && userId) {
     div.querySelector('.clickable-name')?.addEventListener('click', () => openUserProfile(userId));
   }
   if (isMe) {
     div.querySelector('.msg-delete')?.addEventListener('click', () => {
-      if (socket) socket.emit('lobby:delete', { time });
+      if (!socket?.connected) return;
+      socket.emit('lobby:delete', { time }, (res) => {
+        if (res?.ok === false) showToast(`Мессеж устгаж чадсангүй: ${res.error || 'алдаа'}`, 'error');
+      });
     });
   }
   box.appendChild(div);
@@ -1877,7 +2298,7 @@ function renderPopupMessages(uid) {
 
   conv.messages.forEach(msg => {
     const isMe = msg.fromUsername === currentUser?.username;
-    const t = new Date(msg.time).toLocaleTimeString('mn-MN', { hour: '2-digit', minute: '2-digit' });
+    const t = formatChatTime(msg.time);
     const div = document.createElement('div');
     div.className = `msg ${isMe ? 'me' : 'other'}`;
     div.innerHTML = `
@@ -2046,7 +2467,7 @@ function renderDMWindowMessages() {
   }
   conv.messages.forEach(msg => {
     const isMe = msg.fromUsername === currentUser?.username;
-    const t = new Date(msg.time).toLocaleTimeString('mn-MN', { hour: '2-digit', minute: '2-digit' });
+    const t = formatChatTime(msg.time);
     const div = document.createElement('div');
     div.className = `msg ${isMe ? 'me' : 'other'}`;
     div.innerHTML = `
@@ -2575,7 +2996,7 @@ function renderOnlineTab(others) {
 
 // ── Ranking ───────────────────────────────────────────────
 let rankingPage = 1;
-let rankingSort = 'wins';
+let rankingSort = 'rating';
 
 async function loadRanking(page = rankingPage, sort = rankingSort) {
   rankingPage = page;
@@ -2584,7 +3005,7 @@ async function loadRanking(page = rankingPage, sort = rankingSort) {
   const pagDiv   = document.getElementById('ranking-pagination');
   const sortSel  = document.getElementById('ranking-sort');
   if (sortSel) sortSel.value = sort;
-  tbody.innerHTML = Array(5).fill('<tr><td colspan="5"><div class="skeleton" style="height:32px;border-radius:6px;margin:4px 0"></div></td></tr>').join('');
+  tbody.innerHTML = Array(5).fill('<tr><td colspan="7"><div class="skeleton" style="height:32px;border-radius:6px;margin:4px 0"></div></td></tr>').join('');
   try {
     const currentUser = await window.api.getUser();
     const data = await window.api.getRanking({ sort, page });
@@ -2593,7 +3014,7 @@ async function loadRanking(page = rankingPage, sort = rankingSort) {
     const offset = (page - 1) * 20;
 
     if (!players.length) {
-      tbody.innerHTML = '<tr><td colspan="5" class="empty-text">Одоогоор мэдээлэл байхгүй</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7" class="empty-text">Одоогоор мэдээлэл байхгүй</td></tr>';
       pagDiv.classList.add('hidden');
       return;
     }
@@ -2602,9 +3023,13 @@ async function loadRanking(page = rankingPage, sort = rankingSort) {
       const rank = offset + i + 1;
       const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : rank;
       const isSelf = currentUser && String(p.id) === String(currentUser.id);
+      const tier = p.tierbot_tier || '-';
+      const rating = Number(p.tierbot_rating || 0);
       return `<tr class="ranking-row${isSelf ? ' ranking-self' : ''}" data-userid="${p.id}" data-username="${p.username}" style="cursor:pointer">
         <td>${medal}</td>
-        <td>${p.username}</td>
+        <td>${escHtml(p.username)}</td>
+        <td>${escHtml(tier)}</td>
+        <td>${rating ? rating.toLocaleString() : '-'}</td>
         <td style="color:var(--green)">${p.wins}</td>
         <td style="color:var(--red)">${p.losses}</td>
         <td>${p.winrate}%</td>
@@ -2624,7 +3049,7 @@ async function loadRanking(page = rankingPage, sort = rankingSort) {
       row.addEventListener('click', () => openUserProfile(Number(row.dataset.userid)));
     });
   } catch {
-    tbody.innerHTML = '<tr><td colspan="5" class="empty-text">Серверт холбогдож чадсангүй</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" class="empty-text">Серверт холбогдож чадсангүй</td></tr>';
     pagDiv.classList.add('hidden');
   }
 }
@@ -2725,11 +3150,11 @@ let gameHistoryPage = 1;
 
 // ── Rank систем ───────────────────────────────────────────
 function getRank(wins) {
-  if (wins >= 50) return { name: 'Diamond',  icon: '⚡', css: 'rank-diamond' };
-  if (wins >= 30) return { name: 'Platinum', icon: '💎', css: 'rank-platinum' };
-  if (wins >= 15) return { name: 'Gold',     icon: '👑', css: 'rank-gold' };
-  if (wins >= 5)  return { name: 'Silver',   icon: '🗡️', css: 'rank-silver' };
-  return              { name: 'Bronze',  icon: '⚔️', css: 'rank-bronze' };
+  if (wins >= 50) return { name: 'Diamond',  css: 'rank-diamond' };
+  if (wins >= 30) return { name: 'Platinum', css: 'rank-platinum' };
+  if (wins >= 15) return { name: 'Gold',     css: 'rank-gold' };
+  if (wins >= 5)  return { name: 'Silver',   css: 'rank-silver' };
+  return              { name: 'Bronze',   css: 'rank-bronze' };
 }
 
 async function loadProfile() {
@@ -2737,8 +3162,17 @@ async function loadProfile() {
     await window.api.refreshUser?.();
     const user = await window.api.getUser();
     if (!user) return;
-    document.getElementById('profile-name').textContent  = user.username;
+    currentUser = { ...currentUser, ...user };
+    setUserUI(currentUser);
+    const displayName = userDisplayName(user) || user.username;
+    const discordName = String(user.discord_username || user.discord_display_name || user.discord_global_name || '').trim();
+    document.getElementById('profile-name').textContent  = displayName;
     document.getElementById('profile-email').textContent = user.email || '';
+    const nameSourceEl = document.getElementById('profile-name-source');
+    const nameNoteEl   = document.getElementById('profile-name-note');
+    const hasDiscord   = Boolean(user.discord_id);
+    nameSourceEl?.classList.toggle('hidden', !hasDiscord);
+    nameNoteEl?.classList.add('hidden');
     const avatarEl = document.getElementById('profile-avatar');
     if (user.avatar_url) {
       avatarEl.src = user.avatar_url;
@@ -2758,19 +3192,19 @@ async function loadProfile() {
     const rankEl = document.getElementById('profile-rank');
     if (rankEl) {
       rankEl.className = `rank-badge ${rank.css}`;
-      rankEl.textContent = `${rank.icon} ${rank.name}`;
+      rankEl.textContent = rank.name;
     }
 
     const linkedEl   = document.getElementById('discord-linked');
     const linkBtnEl  = document.getElementById('btn-link-discord');
     const discNameEl = document.getElementById('discord-username');
-    if (user.discord_id) {
+    if (hasDiscord) {
       linkedEl.style.display  = 'flex';
       linkBtnEl.style.display = 'none';
-      discNameEl.textContent  = `@${user.username}`;
+      discNameEl.textContent  = `@${discordName || displayName}`;
     } else {
       linkedEl.style.display  = 'none';
-      linkBtnEl.style.display = 'block';
+      linkBtnEl.style.display = 'inline-flex';
     }
 
     // Тоглоомын түүх ачааллах
@@ -2824,42 +3258,6 @@ async function loadGameHistory(userId, page) {
 
 document.getElementById('btn-link-discord').onclick = () => window.api.linkDiscord();
 
-// ── Username засах ────────────────────────────────────────
-document.getElementById('btn-edit-username').onclick = () => {
-  const form = document.getElementById('username-edit-form');
-  form.classList.toggle('hidden');
-  if (!form.classList.contains('hidden')) {
-    const input = document.getElementById('username-input');
-    input.value = document.getElementById('profile-name').textContent;
-    input.focus();
-  }
-};
-document.getElementById('btn-username-cancel').onclick = () => {
-  document.getElementById('username-edit-form').classList.add('hidden');
-  document.getElementById('username-edit-error').textContent = '';
-};
-document.getElementById('btn-username-save').onclick = async (e) => {
-  const btn   = e.currentTarget;
-  const val   = document.getElementById('username-input').value.trim();
-  const errEl = document.getElementById('username-edit-error');
-  errEl.textContent = '';
-  if (!val || val.length < 2 || val.length > 20) {
-    errEl.textContent = 'Username 2-20 тэмдэгт байх ёстой';
-    return;
-  }
-  btn.disabled = true; btn.textContent = '...';
-  try {
-    const data = await window.api.changeUsername(val);
-    document.getElementById('profile-name').textContent = data.username;
-    document.getElementById('user-name').textContent    = data.username;
-    document.getElementById('username-edit-form').classList.add('hidden');
-  } catch (err) {
-    errEl.textContent = err.message || 'Алдаа гарлаа';
-  } finally {
-    btn.disabled = false; btn.textContent = 'Хадгалах';
-  }
-};
-
 // ── Discord салгах ────────────────────────────────────────
 const btnUnlinkDiscord = document.getElementById('btn-unlink-discord');
 if (btnUnlinkDiscord) {
@@ -2903,10 +3301,15 @@ document.getElementById('btn-change-password').onclick = async (e) => {
 };
 
 // Профайл зураг оруулах
+const avatarUploadIconHtml = '<svg class="btn-icon-svg"><use href="#ico-camera"/></svg>';
+function setAvatarUploadBusy(btn, isBusy) {
+  btn.disabled = isBusy;
+  btn.innerHTML = isBusy ? '<span class="avatar-upload-spinner"></span>' : avatarUploadIconHtml;
+}
+
 document.getElementById('btn-upload-avatar').onclick = async () => {
   const btn = document.getElementById('btn-upload-avatar');
-  btn.disabled = true;
-  btn.textContent = '...';
+  setAvatarUploadBusy(btn, true);
   try {
     const result = await window.api.uploadAvatar();
     if (result?.avatar_url) {
@@ -2921,8 +3324,7 @@ document.getElementById('btn-upload-avatar').onclick = async () => {
   } catch (err) {
     if (err.message) showToast(`Зураг оруулахад алдаа: ${err.message}`, 'error');
   } finally {
-    btn.disabled = false;
-    btn.textContent = '📷';
+    setAvatarUploadBusy(btn, false);
   }
 };
 
@@ -2967,7 +3369,6 @@ async function loadSettings() {
     fwStatusEl.textContent = 'Тохируулга хийгдээгүй — LAN тоглоом харагдахгүй байж магадгүй';
     fwStatusEl.style.color = 'var(--yellow, orange)';
   }
-
   // Cache хэмжээ харуулах
   try {
     const size = await window.api.getCacheSize();
@@ -2983,7 +3384,92 @@ async function loadSettings() {
   const notifChk = document.getElementById('setting-desktop-notif');
   if (soundChk) soundChk.checked = localStorage.getItem('sound_enabled') !== 'false';
   if (notifChk) notifChk.checked = localStorage.getItem('desktop_notif_enabled') !== 'false';
+
+  const tierbotUrl = document.getElementById('tierbot-source-url');
+  if (tierbotUrl && !tierbotUrl.value) {
+    tierbotUrl.value = localStorage.getItem('tierbot_source_url') || '';
+  }
 }
+
+// Settings доторх category menu
+document.querySelectorAll('[data-settings-section]').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    const section = btn.dataset.settingsSection;
+    document.querySelectorAll('[data-settings-section]').forEach((item) => {
+      const active = item === btn;
+      item.classList.toggle('active', active);
+      item.setAttribute('aria-selected', active ? 'true' : 'false');
+    });
+    document.querySelectorAll('[data-settings-panel]').forEach((panel) => {
+      const active = panel.dataset.settingsPanel === section;
+      panel.classList.toggle('active', active);
+      panel.setAttribute('aria-hidden', active ? 'false' : 'true');
+    });
+  });
+});
+
+const TIERBOT_URL_KEY = 'tierbot_source_url';
+
+function getTierBotSourceUrl() {
+  const input = document.getElementById('tierbot-source-url');
+  const value = (input?.value || localStorage.getItem(TIERBOT_URL_KEY) || '').trim();
+  if (input && value) input.value = value;
+  return value;
+}
+
+function setTierBotStatus(message, kind = '') {
+  const el = document.getElementById('tierbot-sync-status');
+  if (!el) return;
+  el.textContent = message || '';
+  el.style.color = kind === 'success' ? 'var(--green)' : kind === 'error' ? 'var(--red)' : '';
+}
+
+async function syncTierBotData(triggerBtn = null) {
+  const sourceUrl = getTierBotSourceUrl();
+  const buttons = [
+    document.getElementById('btn-tierbot-sync'),
+    document.getElementById('btn-rank-tierbot-sync'),
+  ].filter(Boolean);
+  const originals = new Map(buttons.map((btn) => [btn, btn.innerHTML]));
+  buttons.forEach((btn) => {
+    btn.disabled = true;
+    btn.innerHTML = 'Татаж байна...';
+  });
+  setTierBotStatus('TierBot дата татаж байна...');
+
+  try {
+    if (sourceUrl) localStorage.setItem(TIERBOT_URL_KEY, sourceUrl);
+    const result = await window.api.syncTierBot({ source_url: sourceUrl || undefined });
+    const message = `Импорт: ${result.imported || 0}, шинэ: ${result.created || 0}, шинэчилсэн: ${result.updated || 0}, алгассан: ${result.skipped || 0}`;
+    setTierBotStatus(message, 'success');
+    showToast(`TierBot sync амжилттай. ${message}`, 'success');
+    await loadRanking(1, 'rating');
+  } catch (err) {
+    const message = err?.message || String(err);
+    setTierBotStatus(message, 'error');
+    showToast(`TierBot sync алдаа: ${message}`, 'error', 5000);
+  } finally {
+    buttons.forEach((btn) => {
+      btn.disabled = false;
+      btn.innerHTML = originals.get(btn);
+    });
+    if (triggerBtn) triggerBtn.focus();
+  }
+}
+
+document.getElementById('btn-tierbot-save-url')?.addEventListener('click', () => {
+  const sourceUrl = getTierBotSourceUrl();
+  if (sourceUrl) {
+    localStorage.setItem(TIERBOT_URL_KEY, sourceUrl);
+    setTierBotStatus('TierBot URL хадгалагдлаа.', 'success');
+    showToast('TierBot URL хадгалагдлаа', 'success');
+  } else {
+    localStorage.removeItem(TIERBOT_URL_KEY);
+    setTierBotStatus('URL хоосон тул server env TIERBOT_STATS_URL ашиглана.');
+  }
+});
+document.getElementById('btn-tierbot-sync')?.addEventListener('click', (e) => syncTierBotData(e.currentTarget));
+document.getElementById('btn-rank-tierbot-sync')?.addEventListener('click', (e) => syncTierBotData(e.currentTarget));
 
 // Мэдэгдлийн тохиргоо toggle
 document.getElementById('setting-sound')?.addEventListener('change', (e) => {
@@ -3023,7 +3509,7 @@ document.getElementById('btn-setup-firewall')?.addEventListener('click', async (
     if (statusEl) statusEl.textContent = `Алдаа: ${err.message}`;
   }
   btn.disabled = false;
-  btn.innerHTML = '<svg class="btn-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> Сүлжээ тохируулах';
+  btn.innerHTML = '<svg class="btn-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> LAN зөвшөөрөл тохируулах';
 });
 
 // Cache цэвэрлэх товч
@@ -3291,16 +3777,50 @@ function showToast(message, type = 'info', duration = 3000) {
 // ── Confirm modal ─────────────────────────────────────────
 function showConfirm(title, message) {
   return new Promise(resolve => {
-    document.getElementById('confirm-title').textContent   = title;
-    document.getElementById('confirm-message').textContent = message;
     const modal = document.getElementById('confirm-modal');
+    const titleEl = document.getElementById('confirm-title');
+    const messageEl = document.getElementById('confirm-message');
+    const okBtn = document.getElementById('confirm-ok');
+    const cancelBtn = document.getElementById('confirm-cancel');
+    if (!modal || !titleEl || !messageEl || !okBtn || !cancelBtn) {
+      resolve(window.confirm(message || title));
+      return;
+    }
+
+    titleEl.textContent   = title;
+    messageEl.textContent = message;
+    modal.classList.remove('hidden');
     modal.style.display = 'flex';
+
+    let settled = false;
     const cleanup = (result) => {
+      if (settled) return;
+      settled = true;
       modal.style.display = 'none';
+      modal.classList.add('hidden');
+      okBtn.removeEventListener('click', onOk);
+      cancelBtn.removeEventListener('click', onCancel);
+      modal.removeEventListener('click', onBackdrop);
+      document.removeEventListener('keydown', onKeydown, true);
       resolve(result);
     };
-    document.getElementById('confirm-ok').onclick     = () => cleanup(true);
-    document.getElementById('confirm-cancel').onclick = () => cleanup(false);
+    const onOk = () => cleanup(true);
+    const onCancel = () => cleanup(false);
+    const onBackdrop = (e) => {
+      if (e.target === modal) cleanup(false);
+    };
+    const onKeydown = (e) => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      e.stopPropagation();
+      cleanup(false);
+    };
+
+    okBtn.addEventListener('click', onOk);
+    cancelBtn.addEventListener('click', onCancel);
+    modal.addEventListener('click', onBackdrop);
+    document.addEventListener('keydown', onKeydown, true);
+    okBtn.focus({ preventScroll: true });
   });
 }
 
@@ -3324,9 +3844,26 @@ function withLoading(button, asyncFn) {
 
 // ── Skeleton helpers ──────────────────────────────────────
 function renderRoomsSkeleton() {
-  return Array(3).fill('').map(() => `
-    <div class="room-card skeleton" style="height:120px;margin-bottom:12px;"></div>
-  `).join('');
+  return `
+    <div class="room-data-grid">
+      <div class="room-grid-header">
+        <div>STA</div><div>Өрөө</div><div>Game</div><div>Mode</div>
+        <div>Host</div><div>Players</div><div>Net</div><div></div>
+      </div>
+      ${Array(3).fill('').map(() => `
+        <div class="room-grid-row">
+          <div class="room-cell"><span class="skeleton" style="display:block;height:20px;width:64px;"></span></div>
+          <div class="room-cell"><span class="skeleton" style="display:block;height:18px;width:82%;"></span></div>
+          <div class="room-cell"><span class="skeleton" style="display:block;height:18px;width:70px;"></span></div>
+          <div class="room-cell"><span class="skeleton" style="display:block;height:18px;width:42px;"></span></div>
+          <div class="room-cell"><span class="skeleton" style="display:block;height:18px;width:80px;"></span></div>
+          <div class="room-cell"><span class="skeleton" style="display:block;height:18px;width:52px;"></span></div>
+          <div class="room-cell"><span class="skeleton" style="display:block;height:18px;width:34px;"></span></div>
+          <div class="room-cell"><span class="skeleton" style="display:block;height:26px;width:72px;"></span></div>
+        </div>
+      `).join('')}
+    </div>
+  `;
 }
 
 // ── Холболтын төлөв ───────────────────────────────────────
@@ -3334,11 +3871,13 @@ function updateConnectionStatus(status) {
   const indicator = document.getElementById('connection-status');
   if (!indicator) return;
   indicator.className = `connection-status ${status}`;
-  indicator.textContent = {
+  const label = {
     online:       '🟢 Холбогдсон',
     offline:      '🔴 Салгагдсан',
     reconnecting: '🟡 Дахин холбогдож байна...',
-  }[status] || '';
+  }[status] || 'Холболтын төлөв тодорхойгүй';
+  indicator.title = label;
+  indicator.setAttribute('aria-label', label);
 }
 
 // ── Хэрэгслүүд ───────────────────────────────────────────
@@ -3621,7 +4160,7 @@ if (_scrollTopBtn) {
 // ── Onboarding Tour ──────────────────────────────────────
 const ONBOARDING_STEPS = [
   // ── Үндсэн бүтэц ──
-  { target: '[data-tab="lobby"]',    title: 'Lobby',          text: 'Энд бүх өрөөнүүдийг харж, нэгдэж болно. Энэ бол платформын үндсэн хуудас.', category: 'Үндсэн', icon: '🏠' },
+  { target: '[data-tab="lobby"]',    title: 'Өрөөнүүд',       text: 'Энд бүх өрөөнүүдийг харж, нэгдэж болно. Энэ бол платформын үндсэн хуудас.', category: 'Үндсэн', icon: '🏠' },
   { target: '.online-bar',           title: 'Онлайн тоглогчид', text: 'Одоо хэдэн тоглогч онлайн байгааг энд харна.', category: 'Үндсэн', icon: '👥' },
   { target: '#connection-status',    title: 'Холболтын төлөв', text: 'Сервертэй холболтын төлөв. 🟢 = Холбогдсон, 🔴 = Салсан.', category: 'Үндсэн', icon: '📡' },
 
@@ -3635,14 +4174,14 @@ const ONBOARDING_STEPS = [
   { target: '#lobby-chat-input',     title: 'Нийтийн чат',    text: 'Бүх хэрэглэгчидтэй чатлах боломжтой. @нэр бичвэл mention хийнэ.', category: 'Чат', icon: '🌐' },
 
   // ── Бусад табууд ──
-  { target: '[data-tab="ranking"]',  title: 'Ranking',        text: 'Тоглогчдын чансаа, хожил/хожигдол, win% зэрэг статистикийг энд харна.', category: 'Табууд', icon: '🏆' },
+  { target: '[data-tab="ranking"]',  title: 'Rank',           text: 'Тоглогчдын TierBot rating, хожил/хожигдол, win% зэрэг статистикийг энд харна.', category: 'Табууд', icon: '🏆' },
   { target: '[data-tab="discord"]',  title: 'Discord серверүүд', text: 'Монголын Warcraft Discord серверүүдийн жагсаалт. Өөрийн серверээ нэмж болно.', category: 'Табууд', icon: '🎙️' },
-  { target: '[data-tab="streamers"]', title: 'Streamers',     text: 'Стримерүүдийн Twitch/YouTube холбоосууд. Шууд үзэх боломжтой.', category: 'Табууд', icon: '📺' },
+  { target: '[data-tab="streamers"]', title: 'Стримерүүд',    text: 'Стримерүүдийн Twitch/YouTube холбоосууд. Шууд үзэх боломжтой.', category: 'Табууд', icon: '📺' },
   { target: '[data-tab="profile"]',  title: 'Профайл',        text: 'Өөрийн статистик, тоглоомын түүх, аватар зураг зэргийг энд харж засварлана.', category: 'Табууд', icon: '👤' },
 
   // ── Тохиргоо ──
   { target: '[data-tab="settings"]', title: 'Тохиргоо',       text: 'Тоглоом нэмэх, ZeroTier сүлжээ, нууц үг солих зэрэг бүх тохиргоо энд.', category: 'Тохиргоо', icon: '⚙️' },
-  { target: '#btn-theme',            title: 'Загвар солих',   text: 'Гэрэл/харанхуй горим сольж болно. Нүдэнд тохирох загвараа сонгоорой.', category: 'Тохиргоо', icon: '🎨' },
+  { target: '#btn-sidebar-toggle',   title: 'Sidebar',        text: 'Цэсийг нарийсгаж дэлгэцийн зай гаргах эсвэл буцааж бүтнээр нь нээнэ.', category: 'Тохиргоо', icon: '☰' },
   { target: '.user-info',            title: 'Хэрэглэгчийн мэдээлэл', text: 'Таны профайл зураг, нэр энд харагдана. Гарах товч мөн энд байна.', category: 'Тохиргоо', icon: '🔑' },
 ];
 

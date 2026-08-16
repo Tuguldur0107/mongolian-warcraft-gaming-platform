@@ -34,7 +34,7 @@ async function ztCreateNetwork(roomName) {
     const { data } = await axios.post(`${ZT_API}/network`, {
       config: {
         name: `WC3-${roomName}`.slice(0, 64),
-        private: false,
+        private: true,
         enableBroadcast: true,
         v4AssignMode: { zt: true },
         ipAssignmentPools: [{ ipRangeStart: '10.147.20.1', ipRangeEnd: '10.147.20.254' }],
@@ -95,6 +95,7 @@ function roomToPublic(room) {
     game_mode: room.game_mode || '',
     status: room.status,
     has_password: room.has_password,
+    zerotier_network_id: room.zerotier_network_id || null,
     player_count: room.players.size,
     members,
   };
@@ -234,6 +235,7 @@ router.post('/', strictAuth, async (req, res) => {
     status: 'waiting',
     has_password: hasPassword,
     password_hash: passwordHash,
+    zerotier_network_id: process.env.ZEROTIER_DEFAULT_NETWORK || null,
     description: descTrimmed,
     game_mode: game_mode || '',
     players: new Map([[userId, hostName]]),
@@ -583,6 +585,17 @@ router.post('/quickmatch', strictAuth, async (req, res) => {
 
   if (await dbOk()) {
     try {
+      const existing = await db.query(
+        `SELECT r.id FROM rooms r
+         JOIN room_players rp ON r.id = rp.room_id
+         WHERE rp.user_id = $1 AND r.status IN ('waiting','playing')
+         LIMIT 1`,
+        [userId]
+      );
+      if (existing.rows[0]) {
+        return res.status(409).json({ error: 'Leave your current room first' });
+      }
+
       const available = await db.query(`
         SELECT r.id, COUNT(rp.user_id) AS player_count
         FROM rooms r
@@ -599,7 +612,7 @@ router.post('/quickmatch', strictAuth, async (req, res) => {
         await db.query('INSERT INTO room_players (room_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [roomId, userId]);
         const roomResult = await db.query(`
           SELECT r.id, r.name, r.host_id, u.username AS host_name,
-            r.max_players, r.game_type, r.status, r.has_password,
+            r.max_players, r.game_type, r.status, r.has_password, r.zerotier_network_id,
             COUNT(rp.user_id) AS player_count,
             JSON_AGG(JSON_BUILD_OBJECT('id', u2.id::text, 'name', u2.username)
               ORDER BY rp.joined_at) FILTER (WHERE u2.username IS NOT NULL) AS members
@@ -610,16 +623,19 @@ router.post('/quickmatch', strictAuth, async (req, res) => {
           WHERE r.id=$1
           GROUP BY r.id, u.username
         `, [roomId]);
+        emitRoomsUpdated();
         return res.json({ joined: true, room: { ...roomResult.rows[0], members: roomResult.rows[0].members || [] } });
       }
 
       const qname = `Quick Match #${Math.floor(Math.random() * 9000) + 1000}`;
+      const ztNetId = process.env.ZEROTIER_DEFAULT_NETWORK || null;
       const result = await db.query(
-        'INSERT INTO rooms (name, host_id, max_players, game_type, has_password) VALUES ($1, $2, 10, $3, FALSE) RETURNING *',
-        [qname, userId, game_type]
+        'INSERT INTO rooms (name, host_id, max_players, game_type, has_password, zerotier_network_id) VALUES ($1, $2, 10, $3, FALSE, $4) RETURNING *',
+        [qname, userId, game_type, ztNetId]
       );
       const room = result.rows[0];
       await db.query('INSERT INTO room_players (room_id, user_id) VALUES ($1, $2)', [room.id, userId]);
+      emitRoomsUpdated();
       return res.status(201).json({
         joined: false,
         room: { ...room, host_name: hostName, members: [{ id: String(userId), name: hostName }], player_count: 1 },
@@ -632,6 +648,27 @@ router.post('/quickmatch', strictAuth, async (req, res) => {
 
   return requireOperationalDb(res);
 });
+
+async function getRoomNetworkId(roomId) {
+  if (!roomId) return null;
+
+  if (await dbOk()) {
+    try {
+      const result = await db.query(
+        "SELECT zerotier_network_id FROM rooms WHERE id = $1 AND status IN ('waiting', 'playing')",
+        [roomId]
+      );
+      return result.rows[0]?.zerotier_network_id || null;
+    } catch (e) {
+      console.error('[RoomNetwork]', e.message);
+      return null;
+    }
+  }
+
+  if (!allowInMemoryFallback) return null;
+  const room = memRooms.get(String(roomId)) || memRooms.get(roomId);
+  return room?.zerotier_network_id || null;
+}
 
 router.patch('/:id/team', strictAuth, async (req, res) => {
   const { id } = req.params;
@@ -699,3 +736,4 @@ module.exports.setIO = setIO;
 module.exports.setRoomCleanup = setRoomCleanup;
 module.exports.memRooms = memRooms;
 module.exports.isUserInRoom = isUserInRoom;
+module.exports.getRoomNetworkId = getRoomNetworkId;

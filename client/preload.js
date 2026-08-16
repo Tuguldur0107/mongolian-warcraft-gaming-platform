@@ -32,6 +32,7 @@ contextBridge.exposeInMainWorld('api', {
   getPlayerStatsById: (userId)  => ipcRenderer.invoke('stats:playerById', userId),
   getGameHistory:   (userId, page) => ipcRenderer.invoke('stats:history', userId, page),
   getRanking:       (opts)      => ipcRenderer.invoke('stats:ranking', opts),
+  syncTierBot:      (payload)   => ipcRenderer.invoke('stats:tierbotSync', payload),
 
   // Тоглоом дуусах event
   onGameResult: (cb) => ipcRenderer.on('game:result', (_, data) => cb(data)),
@@ -92,7 +93,6 @@ contextBridge.exposeInMainWorld('api', {
   changePassword:  (oldPassword, newPassword) => ipcRenderer.invoke('auth:changePassword', { oldPassword, newPassword }),
   forgotPassword:  (email) => ipcRenderer.invoke('auth:forgotPassword', email),
   resetPassword:   (token, newPassword) => ipcRenderer.invoke('auth:resetPassword', token, newPassword),
-  changeUsername:  (username) => ipcRenderer.invoke('auth:changeUsername', username),
   unlinkDiscord:   () => ipcRenderer.invoke('auth:unlinkDiscord'),
 
   // Нийгмийн функцүүд (friends / block)
