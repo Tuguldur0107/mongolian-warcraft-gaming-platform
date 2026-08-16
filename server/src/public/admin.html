@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="mn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Admin — WC3 Platform</title>
+<style>
+  :root {
+    --bg: #0d0d1a; --panel: #16162a; --panel2: #1e1e38; --border: #2a2a48;
+    --text: #e6e6f0; --dim: #9a9ab5; --accent: #5865F2; --ok: #43b581;
+    --warn: #faa61a; --game: #f04747;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font-family: 'Segoe UI', system-ui, sans-serif; }
+  a { color: var(--accent); }
+  .hidden { display: none !important; }
+
+  /* Login / gate screens */
+  .center { min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    flex-direction: column; gap: 18px; text-align: center; padding: 24px; }
+  .btn { border: none; border-radius: 8px; padding: 12px 20px; font-size: 15px; font-weight: 600;
+    cursor: pointer; color: #fff; background: var(--accent); text-decoration: none; display: inline-flex;
+    align-items: center; gap: 10px; }
+  .btn.ghost { background: var(--panel2); color: var(--dim); }
+  .btn:hover { filter: brightness(1.1); }
+  .muted { color: var(--dim); font-size: 14px; max-width: 360px; }
+
+  /* App shell */
+  header { display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 22px; background: var(--panel); border-bottom: 1px solid var(--border); }
+  header .title { font-weight: 700; font-size: 17px; }
+  header .title span { color: var(--accent); }
+  header .who { display: flex; align-items: center; gap: 12px; font-size: 14px; color: var(--dim); }
+  main { padding: 22px; max-width: 1100px; margin: 0 auto; }
+
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; }
+  .card .label { color: var(--dim); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+  .card .value { font-size: 30px; font-weight: 700; margin-top: 6px; }
+  .card .value.ok { color: var(--ok); }
+  .card .value.game { color: var(--game); }
+
+  .section { margin-top: 26px; }
+  .section h2 { font-size: 15px; margin: 0 0 12px; display: flex; align-items: center; gap: 8px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .dot.live { background: var(--ok); box-shadow: 0 0 0 0 rgba(67,181,129,.6); animation: pulse 2s infinite; }
+  @keyframes pulse { 0%{box-shadow:0 0 0 0 rgba(67,181,129,.5)} 70%{box-shadow:0 0 0 7px rgba(67,181,129,0)} 100%{box-shadow:0 0 0 0 rgba(67,181,129,0)} }
+
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+  th { color: var(--dim); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .03em; }
+  tr:last-child td { border-bottom: none; }
+  tbody tr:hover { background: var(--panel2); }
+  .u { display: flex; align-items: center; gap: 10px; }
+  .avatar { width: 28px; height: 28px; border-radius: 50%; background: var(--panel2); object-fit: cover; flex: none; }
+  .badge { font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 20px; white-space: nowrap; }
+  .badge.online { background: rgba(67,181,129,.15); color: var(--ok); }
+  .badge.in_room { background: rgba(250,166,26,.15); color: var(--warn); }
+  .badge.in_game { background: rgba(240,71,71,.15); color: var(--game); }
+  .badge.offline { background: rgba(154,154,181,.12); color: var(--dim); }
+  .mono { font-family: 'Consolas', monospace; color: var(--dim); font-size: 12px; }
+
+  .toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+  input[type=search] { flex: 1; min-width: 180px; background: var(--panel2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 9px 12px; color: var(--text); font-size: 14px; }
+  .pager { display: flex; align-items: center; gap: 10px; margin-top: 12px; color: var(--dim); font-size: 13px; }
+  .empty { padding: 26px; text-align: center; color: var(--dim); }
+</style>
+</head>
+<body>
+  <!-- Login gate -->
+  <div id="login" class="center hidden">
+    <div style="font-size:44px">🛡️</div>
+    <div class="title" style="font-size:22px">WC3 Platform — <span style="color:var(--accent)">Admin</span></div>
+    <p class="muted">Хянах самбарт нэвтрэхийн тулд админ эрхтэй Discord акаунтаараа нэвтэрнэ үү.</p>
+    <a class="btn" href="/admin/login">
+      <svg width="18" height="18" viewBox="0 0 127 96" fill="#fff"><path d="M107.7 8.07A105.15 105.15 0 0 0 81.47 0a72.06 72.06 0 0 0-3.36 6.83 97.68 97.68 0 0 0-29.11 0A72.37 72.37 0 0 0 45.64 0a105.89 105.89 0 0 0-26.25 8.09C2.79 32.65-1.71 56.6.54 80.21a105.73 105.73 0 0 0 32.17 16.15 77.7 77.7 0 0 0 6.89-11.11 68.42 68.42 0 0 1-10.85-5.18c.91-.66 1.8-1.34 2.66-2a75.57 75.57 0 0 0 64.32 0c.87.71 1.76 1.39 2.66 2a68.68 68.68 0 0 1-10.87 5.19 77 77 0 0 0 6.89 11.1 105.25 105.25 0 0 0 32.19-16.14c2.64-27.38-4.51-51.11-18.9-72.15ZM42.45 65.69C36.18 65.69 31 60 31 53s5-12.74 11.43-12.74S54 46 53.89 53s-5.05 12.69-11.44 12.69Zm42.24 0C78.41 65.69 73.25 60 73.25 53s5-12.74 11.44-12.74S96.23 46 96.12 53s-5.04 12.69-11.43 12.69Z"/></svg>
+      Discord-оор нэвтрэх
+    </a>
+  </div>
+
+  <!-- Not authorized -->
+  <div id="denied" class="center hidden">
+    <div style="font-size:44px">⛔</div>
+    <div class="title" style="font-size:20px">Хандах эрхгүй</div>
+    <p class="muted">Энэ Discord акаунт админ жагсаалтад алга.</p>
+    <p class="muted" id="deniedId" style="display:none">Таны Discord ID: <span class="mono" id="deniedIdVal"></span><br>Үүнийг серверийн <span class="mono">ADMIN_DISCORD_IDS</span>-д нэмнэ үү.</p>
+    <button class="btn ghost" onclick="logout()">Гарах</button>
+  </div>
+
+  <!-- Dashboard -->
+  <div id="app" class="hidden">
+    <header>
+      <div class="title">WC3 Platform <span>Admin</span></div>
+      <div class="who">
+        <span id="whoName"></span>
+        <button class="btn ghost" style="padding:7px 14px;font-size:13px" onclick="logout()">Гарах</button>
+      </div>
+    </header>
+    <main>
+      <div class="cards">
+        <div class="card"><div class="label">Онлайн</div><div class="value ok" id="cOnline">–</div></div>
+        <div class="card"><div class="label">Тоглож байгаа</div><div class="value game" id="cInGame">–</div></div>
+        <div class="card"><div class="label">Өрөөнд</div><div class="value" id="cInRoom">–</div></div>
+        <div class="card"><div class="label">Нийт хэрэглэгч</div><div class="value" id="cUsers">–</div></div>
+        <div class="card"><div class="label">Идэвхтэй өрөө</div><div class="value" id="cRooms">–</div></div>
+      </div>
+
+      <div class="section">
+        <h2><span class="dot live"></span> Одоо онлайн <span id="onlineCount" class="mono"></span></h2>
+        <div class="panel">
+          <table>
+            <thead><tr><th>Хэрэглэгч</th><th>Төлөв</th></tr></thead>
+            <tbody id="onlineBody"><tr><td colspan="2" class="empty">Ачааллаж байна…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>Бүх хэрэглэгч</h2>
+        <div class="toolbar">
+          <input type="search" id="search" placeholder="Нэр, и-мэйл эсвэл Discord ID-аар хайх…">
+        </div>
+        <div class="panel">
+          <table>
+            <thead><tr>
+              <th>Хэрэглэгч</th><th>Discord ID</th><th>Хож/Хож</th><th>Тоглолт</th><th>Бүртгүүлсэн</th><th>Төлөв</th>
+            </tr></thead>
+            <tbody id="usersBody"><tr><td colspan="6" class="empty">Ачааллаж байна…</td></tr></tbody>
+          </table>
+        </div>
+        <div class="pager">
+          <button class="btn ghost" style="padding:6px 12px;font-size:13px" id="prev" onclick="changePage(-1)">‹ Өмнөх</button>
+          <span id="pageInfo"></span>
+          <button class="btn ghost" style="padding:6px 12px;font-size:13px" id="next" onclick="changePage(1)">Дараах ›</button>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>🛡️ Админ эрх</h2>
+        <div class="toolbar">
+          <input type="search" id="newAdminId" placeholder="Discord ID (жишээ: 123456789012345678)" style="max-width:280px">
+          <input type="search" id="newAdminNote" placeholder="Тэмдэглэл (заавал биш)" style="max-width:200px">
+          <button class="btn" style="padding:9px 16px;font-size:14px" onclick="addAdmin()">+ Админ нэмэх</button>
+        </div>
+        <div id="adminMsg" class="muted" style="margin:0 0 10px;display:none"></div>
+        <div class="panel">
+          <table>
+            <thead><tr><th>Discord ID</th><th>Тэмдэглэл</th><th>Төрөл</th><th></th></tr></thead>
+            <tbody id="adminsBody"><tr><td colspan="4" class="empty">Ачааллаж байна…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+  </div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  let token = localStorage.getItem('admin_token') || '';
+  let page = 1, totalPages = 1, searchTerm = '';
+
+  // OAuth callback: токен URL fragment-аар ирнэ → хадгалаад hash-ыг цэвэрлэнэ.
+  (function grabTokenFromHash() {
+    const m = location.hash.match(/token=([^&]+)/);
+    if (m) {
+      token = decodeURIComponent(m[1]);
+      localStorage.setItem('admin_token', token);
+      history.replaceState(null, '', location.pathname);
+    }
+  })();
+
+  function show(which) {
+    for (const id of ['login', 'denied', 'app']) $(id).classList.toggle('hidden', id !== which);
+  }
+  function showDenied(discordId) {
+    if (discordId) {
+      $('deniedIdVal').textContent = discordId;
+      $('deniedId').style.display = '';
+    }
+    show('denied');
+  }
+  function logout() {
+    localStorage.removeItem('admin_token');
+    token = '';
+    show('login');
+  }
+
+  async function api(path) {
+    const res = await fetch(path, { headers: { Authorization: 'Bearer ' + token } });
+    return res;
+  }
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, (c) =>
+      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+  function statusBadge(s) {
+    const label = { online: 'Онлайн', in_room: 'Өрөөнд', in_game: 'Тоглож байна', offline: 'Офлайн' }[s] || s;
+    return `<span class="badge ${esc(s)}">${esc(label)}</span>`;
+  }
+  function userCell(u) {
+    const av = u.avatar_url
+      ? `<img class="avatar" src="${esc(u.avatar_url)}" onerror="this.style.visibility='hidden'">`
+      : `<span class="avatar"></span>`;
+    return `<div class="u">${av}<span>${esc(u.username)}</span></div>`;
+  }
+  function fmtDate(d) {
+    if (!d) return '–';
+    try { return new Date(d).toLocaleDateString('mn-MN'); } catch { return '–'; }
+  }
+
+  async function loadSummary() {
+    const res = await api('/admin/api/summary');
+    if (!res.ok) return handleAuth(res);
+    const s = await res.json();
+    $('cOnline').textContent = s.online;
+    $('cInGame').textContent = s.inGame;
+    $('cInRoom').textContent = s.inRoom;
+    $('cUsers').textContent = s.totalUsers ?? '–';
+    $('cRooms').textContent = s.activeRooms ?? '–';
+  }
+
+  async function loadOnline() {
+    const res = await api('/admin/api/online');
+    if (!res.ok) return handleAuth(res);
+    const { count, users } = await res.json();
+    $('onlineCount').textContent = `(${count})`;
+    $('onlineBody').innerHTML = users.length
+      ? users.map((u) => `<tr><td>${esc(u.username)}</td><td>${statusBadge(u.status)}</td></tr>`).join('')
+      : `<tr><td colspan="2" class="empty">Одоогоор онлайн хэрэглэгч алга</td></tr>`;
+  }
+
+  async function loadUsers() {
+    const q = new URLSearchParams({ page: String(page), limit: '25' });
+    if (searchTerm) q.set('search', searchTerm);
+    const res = await api('/admin/api/users?' + q.toString());
+    if (!res.ok) {
+      if (res.status === 401 || res.status === 403) return handleAuth(res);
+      $('usersBody').innerHTML = `<tr><td colspan="6" class="empty">Ачаалж чадсангүй</td></tr>`;
+      return;
+    }
+    const data = await res.json();
+    totalPages = Math.max(1, Math.ceil(data.total / data.limit));
+    $('usersBody').innerHTML = data.users.length
+      ? data.users.map((u) => `<tr>
+          <td>${userCell(u)}</td>
+          <td class="mono">${esc(u.discord_id || '–')}</td>
+          <td>${u.wins || 0} / ${u.losses || 0}</td>
+          <td>${u.games || 0}</td>
+          <td>${fmtDate(u.created_at)}</td>
+          <td>${statusBadge(u.status)}</td>
+        </tr>`).join('')
+      : `<tr><td colspan="6" class="empty">Хэрэглэгч олдсонгүй</td></tr>`;
+    $('pageInfo').textContent = `${page} / ${totalPages} — нийт ${data.total}`;
+    $('prev').disabled = page <= 1;
+    $('next').disabled = page >= totalPages;
+  }
+
+  function handleAuth(res) {
+    if (res.status === 403) show('denied');
+    else if (res.status === 401) logout();
+  }
+
+  async function apiSend(method, path, body) {
+    return fetch(path, {
+      method,
+      headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  }
+
+  function adminNote(text, isError) {
+    const el = $('adminMsg');
+    el.textContent = text;
+    el.style.color = isError ? 'var(--game)' : 'var(--ok)';
+    el.style.display = text ? '' : 'none';
+  }
+
+  async function loadAdmins() {
+    const res = await api('/admin/api/admins');
+    if (!res.ok) return handleAuth(res);
+    const { admins } = await res.json();
+    $('adminsBody').innerHTML = admins.length
+      ? admins.map((a) => `<tr>
+          <td class="mono">${esc(a.discord_id)}</td>
+          <td>${esc(a.note || '')}</td>
+          <td>${a.locked ? '<span class="badge in_room">Үндсэн</span>' : '<span class="badge online">Нэмсэн</span>'}</td>
+          <td style="text-align:right">${a.locked
+            ? '<span class="muted" style="font-size:12px">env</span>'
+            : `<button class="btn ghost" style="padding:5px 12px;font-size:12px" onclick="removeAdmin('${esc(a.discord_id)}')">Хасах</button>`}</td>
+        </tr>`).join('')
+      : `<tr><td colspan="4" class="empty">Админ алга</td></tr>`;
+  }
+
+  async function addAdmin() {
+    const discord_id = $('newAdminId').value.trim();
+    const note = $('newAdminNote').value.trim();
+    if (!/^\d{5,25}$/.test(discord_id)) {
+      adminNote('Discord ID нь 5-25 оронтой тоо байх ёстой', true);
+      return;
+    }
+    const res = await apiSend('POST', '/admin/api/admins', { discord_id, note });
+    if (res.ok) {
+      $('newAdminId').value = ''; $('newAdminNote').value = '';
+      adminNote('Админ нэмэгдлээ ✓', false);
+      loadAdmins();
+    } else {
+      const j = await res.json().catch(() => ({}));
+      adminNote(j.error || 'Нэмж чадсангүй', true);
+    }
+  }
+
+  async function removeAdmin(discordId) {
+    if (!confirm(`${discordId} — админ эрхийг хасах уу?`)) return;
+    const res = await apiSend('DELETE', '/admin/api/admins/' + encodeURIComponent(discordId));
+    if (res.ok) {
+      adminNote('Хасагдлаа ✓', false);
+      loadAdmins();
+    } else {
+      const j = await res.json().catch(() => ({}));
+      adminNote(j.error || 'Хасаж чадсангүй', true);
+    }
+  }
+
+  function changePage(delta) {
+    const next = page + delta;
+    if (next < 1 || next > totalPages) return;
+    page = next;
+    loadUsers();
+  }
+
+  let searchTimer;
+  $('search').addEventListener('input', (e) => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => { searchTerm = e.target.value.trim(); page = 1; loadUsers(); }, 300);
+  });
+
+  let refreshTimer;
+  async function boot() {
+    if (!token) { show('login'); return; }
+    const me = await api('/admin/api/me');
+    if (me.status === 403) {
+      const body = await me.json().catch(() => ({}));
+      showDenied(body.your_discord_id);
+      return;
+    }
+    if (!me.ok) { logout(); return; }
+    const admin = await me.json();
+    $('whoName').textContent = admin.username || 'Admin';
+    show('app');
+    loadSummary(); loadOnline(); loadUsers(); loadAdmins();
+    // Онлайн төлөв, тоон үзүүлэлтийг 5 секунд тутам сэргээнэ.
+    clearInterval(refreshTimer);
+    refreshTimer = setInterval(() => { loadSummary(); loadOnline(); }, 5000);
+  }
+
+  boot();
+</script>
+</body>
+</html>

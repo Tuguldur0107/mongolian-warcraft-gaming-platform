@@ -347,8 +347,137 @@ async function testDbBackedBlockCheck() {
   }
 }
 
+async function testAdminDashboardAccess() {
+  const server = await startServer({ ADMIN_DISCORD_IDS: '999,888' });
+  try {
+    // The dashboard shell is public; the API behind it is gated.
+    const pageRes = await fetch(`${server.baseUrl}/admin`);
+    assert.equal(pageRes.status, 200);
+    const html = await pageRes.text();
+    assert.ok(html.includes('Admin'));
+
+    // Login kicks off Discord OAuth in admin mode.
+    const loginRes = await fetch(`${server.baseUrl}/admin/login`, { redirect: 'manual' });
+    assert.equal(loginRes.status, 302);
+    assert.equal(loginRes.headers.get('location'), '/auth/discord?admin=1');
+
+    // No token → 401.
+    const noTokenRes = await fetch(`${server.baseUrl}/admin/api/me`);
+    assert.equal(noTokenRes.status, 401);
+
+    // Valid token but Discord ID not whitelisted → 403.
+    const nonAdmin = makeAuthToken({ id: 5, username: 'Nobody', discord_id: '111' });
+    const deniedRes = await fetch(`${server.baseUrl}/admin/api/me`, {
+      headers: { Authorization: `Bearer ${nonAdmin}` },
+    });
+    assert.equal(deniedRes.status, 403);
+
+    // Whitelisted Discord ID → 200.
+    const admin = makeAuthToken({ id: 1, username: 'Boss', discord_id: '999' });
+    const meRes = await fetch(`${server.baseUrl}/admin/api/me`, {
+      headers: { Authorization: `Bearer ${admin}` },
+    });
+    assert.equal(meRes.status, 200);
+    const me = await meRes.json();
+    assert.equal(me.discord_id, '999');
+
+    // Online list is admin-gated and returns a shape the dashboard expects.
+    const onlineRes = await fetch(`${server.baseUrl}/admin/api/online`, {
+      headers: { Authorization: `Bearer ${admin}` },
+    });
+    assert.equal(onlineRes.status, 200);
+    const online = await onlineRes.json();
+    assert.ok(Array.isArray(online.users));
+    assert.equal(typeof online.count, 'number');
+  } finally {
+    await server.stop();
+  }
+}
+
+async function testAdminEmptyWhitelistDeniesEveryone() {
+  const server = await startServer({ ADMIN_DISCORD_IDS: '' });
+  try {
+    const anyone = makeAuthToken({ id: 1, username: 'Boss', discord_id: '999' });
+    const res = await fetch(`${server.baseUrl}/admin/api/me`, {
+      headers: { Authorization: `Bearer ${anyone}` },
+    });
+    assert.equal(res.status, 403);
+  } finally {
+    await server.stop();
+  }
+}
+
+async function testAdminManagement() {
+  const store = new Set(); // dynamically-added admin Discord IDs
+  const mockDb = {
+    query: async (sql, params = []) => {
+      const s = sql.replace(/\s+/g, ' ').trim();
+      if (s === 'SELECT 1') return { rows: [{ '?column?': 1 }] };
+      if (s.includes('SELECT 1 FROM admin_whitelist')) {
+        return { rows: store.has(String(params[0])) ? [{ x: 1 }] : [] };
+      }
+      if (s.startsWith('SELECT discord_id, note, added_by, created_at FROM admin_whitelist')) {
+        return { rows: [...store].map((id) => ({ discord_id: id, note: '', added_by: '999', created_at: new Date() })) };
+      }
+      if (s.startsWith('INSERT INTO admin_whitelist')) { store.add(String(params[0])); return { rows: [], rowCount: 1 }; }
+      if (s.startsWith('DELETE FROM admin_whitelist')) {
+        const had = store.delete(String(params[0]));
+        return { rows: [], rowCount: had ? 1 : 0 };
+      }
+      return { rows: [], rowCount: 0 };
+    },
+  };
+
+  const server = await startServer({ ADMIN_DISCORD_IDS: '999' }, { mockDb });
+  const boss = makeAuthToken({ id: 1, username: 'Boss', discord_id: '999' });
+  const hdr = { Authorization: `Bearer ${boss}` };
+  try {
+    // Env superadmin appears, locked.
+    let res = await fetch(`${server.baseUrl}/admin/api/admins`, { headers: hdr });
+    assert.equal(res.status, 200);
+    let list = (await res.json()).admins;
+    assert.equal(list.length, 1);
+    assert.equal(list[0].discord_id, '999');
+    assert.equal(list[0].locked, true);
+
+    // Add a dynamic admin by Discord ID.
+    res = await fetch(`${server.baseUrl}/admin/api/admins`, {
+      method: 'POST', headers: { ...hdr, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ discord_id: '123456789012345678', note: 'friend' }),
+    });
+    assert.equal(res.status, 201);
+
+    // The newly-added Discord ID can now reach the admin API.
+    const friend = makeAuthToken({ id: 2, username: 'Friend', discord_id: '123456789012345678' });
+    res = await fetch(`${server.baseUrl}/admin/api/me`, { headers: { Authorization: `Bearer ${friend}` } });
+    assert.equal(res.status, 200);
+
+    // Invalid Discord ID is rejected.
+    res = await fetch(`${server.baseUrl}/admin/api/admins`, {
+      method: 'POST', headers: { ...hdr, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ discord_id: 'not-a-number' }),
+    });
+    assert.equal(res.status, 400);
+
+    // The env superadmin cannot be removed via the dashboard.
+    res = await fetch(`${server.baseUrl}/admin/api/admins/999`, { method: 'DELETE', headers: hdr });
+    assert.equal(res.status, 400);
+
+    // Removing the dynamic admin revokes their access.
+    res = await fetch(`${server.baseUrl}/admin/api/admins/123456789012345678`, { method: 'DELETE', headers: hdr });
+    assert.equal(res.status, 200);
+    res = await fetch(`${server.baseUrl}/admin/api/me`, { headers: { Authorization: `Bearer ${friend}` } });
+    assert.equal(res.status, 403);
+  } finally {
+    await server.stop();
+  }
+}
+
 (async () => {
   await runTest('server smoke flow supports register/login/me and guarded auth endpoints', testSmokeFlow);
+  await runTest('admin dashboard gates its API behind a Discord ID whitelist', testAdminDashboardAccess);
+  await runTest('admin whitelist that is empty denies everyone', testAdminEmptyWhitelistDeniesEveryone);
+  await runTest('admins can be added and removed by Discord ID from the dashboard', testAdminManagement);
   await runTest('production mode rejects DB-backed room listing when DB is unavailable', testProductionRoomGuard);
   await runTest('rooms/start rejects non-host users', testRoomStartRequiresHost);
   await runTest('rooms/team rejects users who are not room members', testRoomTeamRequiresMembership);

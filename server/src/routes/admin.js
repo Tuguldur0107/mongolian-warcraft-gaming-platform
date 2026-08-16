@@ -1,0 +1,188 @@
+const express = require('express');
+const path = require('path');
+const adminMW = require('../middleware/admin');
+const { adminDiscordIds, isEnvAdmin } = adminMW;
+
+const DISCORD_ID_RE = /^\d{5,25}$/;
+
+let db;
+try { db = require('../config/db'); } catch { db = null; }
+
+const router = express.Router();
+
+// index.js энд лобби дахь онлайн хэрэглэгчдийн жагсаалт авагчийг (onlineUsersList)
+// оруулна — socket төлөв index.js-ийн scope-д амьдардаг тул шууд авах боломжгүй.
+let presenceAccessor = () => [];
+router.setPresence = (fn) => { presenceAccessor = typeof fn === 'function' ? fn : () => []; };
+
+async function dbOk() {
+  if (!db) return false;
+  try { await db.query('SELECT 1'); return true; } catch { return false; }
+}
+
+function livePresence() {
+  try { return presenceAccessor() || []; } catch { return []; }
+}
+
+// Dashboard HTML — нээлттэй бүрхүүл; ард нь байгаа API нь admin-gated.
+router.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'public', 'admin.html'));
+});
+
+// Discord OAuth-г admin горимоор эхлүүлэх (whitelist шалгалт callback дээр).
+router.get('/login', (req, res) => {
+  res.redirect('/auth/discord?admin=1');
+});
+
+// Би хэн бэ (admin эсэхийг баталгаажуулна).
+router.get('/api/me', adminMW, (req, res) => {
+  res.json({ id: req.user.id, username: req.user.username, discord_id: req.user.discord_id });
+});
+
+// Одоо онлайн байгаа хэрэглэгчид (real-time лоббиос).
+router.get('/api/online', adminMW, (req, res) => {
+  const users = livePresence();
+  res.json({ count: users.length, users });
+});
+
+// Дээд талын тоон үзүүлэлтүүд.
+router.get('/api/summary', adminMW, async (req, res) => {
+  const online = livePresence();
+  const summary = {
+    online: online.length,
+    inGame: online.filter((u) => u.status === 'in_game').length,
+    inRoom: online.filter((u) => u.status === 'in_room').length,
+    totalUsers: null,
+    activeRooms: null,
+  };
+  if (await dbOk()) {
+    try {
+      const u = await db.query('SELECT COUNT(*)::int AS c FROM users');
+      summary.totalUsers = u.rows[0].c;
+      const r = await db.query("SELECT COUNT(*)::int AS c FROM rooms WHERE status IN ('waiting','playing')");
+      summary.activeRooms = r.rows[0].c;
+    } catch (e) {
+      console.error('[Admin] summary:', e.message);
+    }
+  }
+  res.json(summary);
+});
+
+// Бүх бүртгэлтэй хэрэглэгч + статистик, амьд онлайн төлөвтэй нэгтгэсэн.
+router.get('/api/users', adminMW, async (req, res) => {
+  const search = String(req.query.search || '').trim();
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);
+  const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+  const offset = (page - 1) * limit;
+
+  if (!(await dbOk())) {
+    return res.status(503).json({ error: 'Service temporarily unavailable' });
+  }
+
+  try {
+    const params = [];
+    let where = '';
+    if (search) {
+      params.push(`%${search}%`);
+      where = 'WHERE username ILIKE $1 OR email ILIKE $1 OR discord_id ILIKE $1';
+    }
+
+    const totalRes = await db.query(`SELECT COUNT(*)::int AS c FROM users ${where}`, params);
+    const rowsRes = await db.query(
+      `SELECT id, username, email, discord_id, avatar_url, wins, losses, created_at
+       FROM users ${where}
+       ORDER BY created_at DESC NULLS LAST
+       LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+      [...params, limit, offset]
+    );
+
+    const statusByUser = new Map(livePresence().map((u) => [String(u.userId), u.status]));
+    const users = rowsRes.rows.map((u) => ({
+      ...u,
+      games: (u.wins || 0) + (u.losses || 0),
+      status: statusByUser.get(String(u.id)) || 'offline',
+    }));
+
+    res.json({ total: totalRes.rows[0].c, page, limit, users });
+  } catch (e) {
+    console.error('[Admin] users:', e.message);
+    res.status(500).json({ error: 'Failed to load users' });
+  }
+});
+
+// ── Админ эрх удирдах ─────────────────────────────────────────────────────
+// env-ийн үндсэн админууд (locked) + DB-ийн динамик админуудыг нэгтгэж жагсаана.
+router.get('/api/admins', adminMW, async (req, res) => {
+  const envAdmins = adminDiscordIds().map((discord_id) => ({
+    discord_id, note: 'ADMIN_DISCORD_IDS (env)', source: 'env', locked: true,
+  }));
+
+  let dbAdmins = [];
+  if (await dbOk()) {
+    try {
+      const r = await db.query(
+        'SELECT discord_id, note, added_by, created_at FROM admin_whitelist ORDER BY created_at DESC'
+      );
+      // env-д давхардсаныг DB талаас нуух (env нь дийлдэнэ)
+      const envSet = new Set(adminDiscordIds());
+      dbAdmins = r.rows
+        .filter((a) => !envSet.has(String(a.discord_id)))
+        .map((a) => ({ ...a, source: 'db', locked: false }));
+    } catch (e) {
+      console.error('[Admin] list admins:', e.message);
+    }
+  }
+
+  res.json({ admins: [...envAdmins, ...dbAdmins] });
+});
+
+// Discord ID-аар шинэ админ нэмэх.
+router.post('/api/admins', adminMW, async (req, res) => {
+  const discordId = String(req.body?.discord_id || '').trim();
+  const note = String(req.body?.note || '').trim().slice(0, 200);
+
+  if (!DISCORD_ID_RE.test(discordId)) {
+    return res.status(400).json({ error: 'Discord ID нь 5-25 оронтой тоо байх ёстой' });
+  }
+  if (isEnvAdmin(discordId)) {
+    return res.status(409).json({ error: 'Энэ ID аль хэдийн env үндсэн админ байна' });
+  }
+  if (!(await dbOk())) {
+    return res.status(503).json({ error: 'Service temporarily unavailable' });
+  }
+
+  try {
+    await db.query(
+      `INSERT INTO admin_whitelist (discord_id, note, added_by)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (discord_id) DO UPDATE SET note = EXCLUDED.note`,
+      [discordId, note, req.user.discord_id || null]
+    );
+    res.status(201).json({ ok: true, discord_id: discordId });
+  } catch (e) {
+    console.error('[Admin] add admin:', e.message);
+    res.status(500).json({ error: 'Failed to add admin' });
+  }
+});
+
+// Динамик админыг хасах (env үндсэн админыг хасах боломжгүй).
+router.delete('/api/admins/:discordId', adminMW, async (req, res) => {
+  const discordId = String(req.params.discordId || '').trim();
+
+  if (isEnvAdmin(discordId)) {
+    return res.status(400).json({ error: 'Үндсэн (env) админыг энд хасах боломжгүй — серверийн ADMIN_DISCORD_IDS-ээс хасна' });
+  }
+  if (!(await dbOk())) {
+    return res.status(503).json({ error: 'Service temporarily unavailable' });
+  }
+
+  try {
+    const r = await db.query('DELETE FROM admin_whitelist WHERE discord_id = $1', [discordId]);
+    res.json({ ok: true, removed: r.rowCount });
+  } catch (e) {
+    console.error('[Admin] remove admin:', e.message);
+    res.status(500).json({ error: 'Failed to remove admin' });
+  }
+});
+
+module.exports = router;

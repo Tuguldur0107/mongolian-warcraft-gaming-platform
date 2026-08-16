@@ -167,7 +167,11 @@ router.post('/login', async (req, res) => {
 router.get('/discord', (req, res) => {
   let stateVal = req.query.state || '';
 
-  if (req.query.link) {
+  // Админ веб dashboard-ийн нэвтрэлт: callback хэрэглэгчийн апп руу биш,
+  // browser дээрх /admin руу буцаана. Whitelist шалгалт callback дээр хийгдэнэ.
+  if (req.query.admin) {
+    stateVal = 'admin';
+  } else if (req.query.link) {
     const token = req.query.token;
     if (!token || typeof token !== 'string') {
       return res.status(401).send('Unauthorized');
@@ -196,14 +200,17 @@ router.get('/discord/callback', async (req, res) => {
   const { code, state: rawState } = req.query;
   if (!code) return res.status(400).send('Missing code');
 
+  const isAdminFlow = rawState === 'admin';
   let linkUserId = null;
   let qrState = '';
-  try {
-    const parsedState = parseDiscordState(rawState);
-    linkUserId = parsedState.linkUserId;
-    qrState = parsedState.qrState;
-  } catch {
-    return res.status(400).send('Invalid state');
+  if (!isAdminFlow) {
+    try {
+      const parsedState = parseDiscordState(rawState);
+      linkUserId = parsedState.linkUserId;
+      qrState = parsedState.qrState;
+    } catch {
+      return res.status(400).send('Invalid state');
+    }
   }
 
   try {
@@ -298,6 +305,12 @@ router.get('/discord/callback', async (req, res) => {
       }
 
       jwtToken = makeJWT(user || { id: discordId, discord_id: discordId, username });
+    }
+
+    // Админ dashboard руу токеныг URL fragment-аар буцаана. Fragment сервер рүү
+    // илгээгддэггүй тул access log-д ордоггүй; browser талд localStorage-д хадгална.
+    if (isAdminFlow) {
+      return res.redirect(`/admin#token=${jwtToken}`);
     }
 
     if (qrState) {

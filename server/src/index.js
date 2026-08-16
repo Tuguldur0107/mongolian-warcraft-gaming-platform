@@ -12,6 +12,7 @@ const statsRoutes         = require('./routes/stats');
 const socialRoutes        = require('./routes/social');
 const discordServerRoutes = require('./routes/discord_servers');
 const streamerRoutes      = require('./routes/streamers');
+const adminRoutes         = require('./routes/admin');
 const { setIO } = roomRoutes;
 const { runMigrations } = require('./db/migrate');
 
@@ -50,6 +51,7 @@ app.use('/stats', statsRoutes);
 app.use('/social', socialRoutes);
 app.use('/discord-servers', discordServerRoutes);
 app.use('/streamers', streamerRoutes);
+app.use('/admin', adminRoutes);
 
 app.get('/', (req, res) => {
   res.json({ status: 'ok', message: 'Mongolian Warcraft Gaming Platform Server ажиллаж байна' });
@@ -116,6 +118,8 @@ setIO(io);
 roomRoutes.setRoomCleanup((roomId) => cleanupRoomState(roomId));
 // Social router-т io дамжуулах (friend request мэдэгдэлд хэрэг)
 socialRoutes.setIO(io);
+// Admin router-т лоббийн онлайн жагсаалт авагч дамжуулах (onlineUsersList hoisted)
+adminRoutes.setPresence(onlineUsersList);
 
 // XSS хамгаалалт: escape-ыг client render үед хийдэг (escHtml) —
 // энд давхар escape хийвэл хэрэглэгчид "&lt;" гэх мэт зүйл харагдана

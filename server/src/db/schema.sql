@@ -114,3 +114,12 @@ CREATE TABLE IF NOT EXISTS password_resets (
   created_at TIMESTAMP DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_password_resets_token ON password_resets(token);
+
+-- Админ эрхтэй Discord ID-ууд. ADMIN_DISCORD_IDS env нь устгаж болохгүй үндсэн
+-- (bootstrap) админ; энэ хүснэгт нь dashboard-оос динамикаар нэмж/хассан админууд.
+CREATE TABLE IF NOT EXISTS admin_whitelist (
+  discord_id VARCHAR(255) PRIMARY KEY,
+  note       TEXT DEFAULT '',
+  added_by   VARCHAR(255),
+  created_at TIMESTAMP DEFAULT NOW()
+);
