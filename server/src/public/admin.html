@@ -5,6 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <title>Admin — WC3 Platform</title>
+<!-- AG Grid Community (the same grid engine the Entry Accounting DataGrid wraps) -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-community@32.3.3/styles/ag-grid.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-community@32.3.3/styles/ag-theme-quartz.css">
+<script src="https://cdn.jsdelivr.net/npm/ag-grid-community@32.3.3/dist/ag-grid-community.min.js"></script>
 <style>
   :root {
     --bg: #0d0d1a; --panel: #16162a; --panel2: #1e1e38; --border: #2a2a48;
@@ -68,6 +72,36 @@
     border-radius: 8px; padding: 9px 12px; color: var(--text); font-size: 14px; }
   .pager { display: flex; align-items: center; gap: 10px; margin-top: 12px; color: var(--dim); font-size: 13px; }
   .empty { padding: 26px; text-align: center; color: var(--dim); }
+
+  /* AG Grid — dark theme mapped to the dashboard palette, compact rows */
+  .ea-grid {
+    --ag-background-color: var(--panel);
+    --ag-foreground-color: var(--text);
+    --ag-header-background-color: #12121f;
+    --ag-header-foreground-color: var(--dim);
+    --ag-border-color: var(--border);
+    --ag-row-border-color: #23233a;
+    --ag-row-hover-color: rgba(88,101,242,.10);
+    --ag-selected-row-background-color: rgba(88,101,242,.16);
+    --ag-odd-row-background-color: transparent;
+    --ag-control-panel-background-color: var(--panel2);
+    --ag-input-background-color: var(--panel2);
+    --ag-font-family: inherit;
+    --ag-font-size: 12px;
+    --ag-grid-size: 3px;            /* master spacing — crushes vertical padding */
+    --ag-cell-horizontal-padding: 8px;
+    --ag-borders: none;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .ea-grid .ag-header-cell-text { text-transform: uppercase; letter-spacing: .03em; font-size: 10px; }
+  .ea-grid .ag-cell { display: flex; align-items: center; }
+  .ea-grid .ag-row { border-bottom: 1px solid #20203400; }
+  .ea-grid .u { display: flex; align-items: center; gap: 8px; }
+  .ea-grid .u .avatar { width: 16px; height: 16px; }
+  .ea-grid .badge { font-size: 10px; padding: 2px 7px; }
+  .ea-grid .iconbtn { font-size: 12px; padding: 1px 4px; }
 
   /* Row action buttons */
   .iconbtn { background: transparent; border: none; cursor: pointer; font-size: 14px; padding: 4px 6px;
@@ -138,19 +172,7 @@
         <div class="toolbar">
           <input type="search" id="wkSearch" placeholder="Нэр эсвэл Discord ID-аар хайх…">
         </div>
-        <div class="panel">
-          <table>
-            <thead><tr>
-              <th>Хэрэглэгч</th><th>Discord ID</th><th>Хувилбар</th><th>Анх орсон</th><th>Сүүлд идэвхтэй</th><th>Төлөв</th><th></th>
-            </tr></thead>
-            <tbody id="wkBody"><tr><td colspan="7" class="empty">Ачааллаж байна…</td></tr></tbody>
-          </table>
-        </div>
-        <div class="pager">
-          <button class="btn ghost" style="padding:6px 12px;font-size:13px" id="wkPrev" onclick="changeWkPage(-1)">‹ Өмнөх</button>
-          <span id="wkPageInfo"></span>
-          <button class="btn ghost" style="padding:6px 12px;font-size:13px" id="wkNext" onclick="changeWkPage(1)">Дараах ›</button>
-        </div>
+        <div id="wkGrid" class="ag-theme-quartz ea-grid" style="height:340px"></div>
       </div>
 
       <div class="section">
@@ -168,19 +190,7 @@
         <div class="toolbar">
           <input type="search" id="search" placeholder="Нэр, и-мэйл эсвэл Discord ID-аар хайх…">
         </div>
-        <div class="panel">
-          <table>
-            <thead><tr>
-              <th>Хэрэглэгч</th><th>Discord ID</th><th>Хож / Ялагдал</th><th>Тоглолт</th><th>Бүртгүүлсэн</th><th>Төлөв</th><th></th>
-            </tr></thead>
-            <tbody id="usersBody"><tr><td colspan="7" class="empty">Ачааллаж байна…</td></tr></tbody>
-          </table>
-        </div>
-        <div class="pager">
-          <button class="btn ghost" style="padding:6px 12px;font-size:13px" id="prev" onclick="changePage(-1)">‹ Өмнөх</button>
-          <span id="pageInfo"></span>
-          <button class="btn ghost" style="padding:6px 12px;font-size:13px" id="next" onclick="changePage(1)">Дараах ›</button>
-        </div>
+        <div id="usersGrid" class="ag-theme-quartz ea-grid" style="height:460px"></div>
       </div>
 
       <div class="section">
@@ -222,7 +232,7 @@
 <script>
   const $ = (id) => document.getElementById(id);
   let token = localStorage.getItem('admin_token') || '';
-  let page = 1, totalPages = 1, searchTerm = '';
+  let usersGridApi = null, wkGridApi = null;
 
   // OAuth callback: токен URL fragment-аар ирнэ → хадгалаад hash-ыг цэвэрлэнэ.
   (function grabTokenFromHash() {
@@ -297,35 +307,64 @@
 
   const usersById = {};
 
+  // AG Grid v32 only renders custom HTML via a component (getGui). `comp(build)` wraps a function
+  // that builds a DOM node into that component form.
+  const el = (html) => { const t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstElementChild; };
+  const comp = (build) => class {
+    init(p) { this.eGui = build(p) || document.createElement('span'); }
+    getGui() { return this.eGui; }
+    refresh() { return false; }
+  };
+  const userRenderer = (p) => {
+    const u = p.data || {};
+    const av = u.avatar_url
+      ? `<img class="avatar" src="${esc(u.avatar_url)}" onerror="this.style.visibility='hidden'">`
+      : `<span class="avatar"></span>`;
+    return el(`<div class="u">${av}<span>${esc(u.username || '')}</span></div>`);
+  };
+
+  const USERS_COLS = [
+    { headerName: 'Хэрэглэгч', field: 'username', flex: 2, cellRenderer: comp(userRenderer) },
+    { headerName: 'Discord ID', field: 'discord_id', flex: 1.4, cellClass: 'mono' },
+    { headerName: 'Хож', field: 'wins', width: 78, filter: 'agNumberColumnFilter' },
+    { headerName: 'Ялагдал', field: 'losses', width: 88, filter: 'agNumberColumnFilter' },
+    { headerName: 'Тоглолт', field: 'games', width: 88, filter: 'agNumberColumnFilter' },
+    { headerName: 'Бүртгүүлсэн', field: 'created_at', width: 116, valueFormatter: (p) => fmtDate(p.value) },
+    { headerName: 'Төлөв', field: 'status', width: 104, cellRenderer: comp((p) => el(statusBadge(p.value))) },
+    { headerName: '', colId: 'actions', width: 82, sortable: false, filter: false,
+      cellRenderer: comp((p) => el(
+        `<span><button class="iconbtn" title="Засах" onclick="openEditUser(${p.data.id})">✏️</button>` +
+        `<button class="iconbtn danger" title="Устгах" onclick="deleteUser(${p.data.id})">🗑</button></span>`)) },
+  ];
+
+  function initUsersGrid() {
+    if (usersGridApi) return;
+    usersGridApi = agGrid.createGrid(document.getElementById('usersGrid'), {
+      rowHeight: 24,
+      headerHeight: 26,
+      pagination: true,
+      paginationPageSize: 50,
+      paginationPageSizeSelector: false,
+      suppressCellFocus: true,
+      suppressColumnVirtualisation: true,   // always render every column (incl. the action buttons)
+      getRowId: (p) => String(p.data.id),
+      defaultColDef: { sortable: true, filter: true, resizable: true, minWidth: 80 },
+      columnDefs: USERS_COLS,
+      rowData: [],
+    });
+  }
+
   async function loadUsers() {
-    const q = new URLSearchParams({ page: String(page), limit: '25' });
-    if (searchTerm) q.set('search', searchTerm);
-    const res = await api('/admin/api/users?' + q.toString());
-    if (!res.ok) {
-      if (res.status === 401 || res.status === 403) return handleAuth(res);
-      $('usersBody').innerHTML = `<tr><td colspan="7" class="empty">Ачаалж чадсангүй</td></tr>`;
-      return;
-    }
+    initUsersGrid();
+    const res = await api('/admin/api/users?' + new URLSearchParams({ page: '1', limit: '200' }));
+    if (!res.ok) return handleAuth(res);
     const data = await res.json();
-    totalPages = Math.max(1, Math.ceil(data.total / data.limit));
+    for (const k in usersById) delete usersById[k];
     for (const u of data.users) usersById[u.id] = u;
-    $('usersBody').innerHTML = data.users.length
-      ? data.users.map((u) => `<tr>
-          <td>${userCell(u)}</td>
-          <td class="mono">${esc(u.discord_id || '–')}</td>
-          <td>${u.wins || 0} / ${u.losses || 0}</td>
-          <td>${u.games || 0}</td>
-          <td>${fmtDate(u.created_at)}</td>
-          <td>${statusBadge(u.status)}</td>
-          <td style="text-align:right;white-space:nowrap">
-            <button class="iconbtn" title="Засах" onclick="openEditUser(${u.id})">✏️</button>
-            <button class="iconbtn danger" title="Устгах" onclick="deleteUser(${u.id})">🗑</button>
-          </td>
-        </tr>`).join('')
-      : `<tr><td colspan="7" class="empty">Хэрэглэгч олдсонгүй</td></tr>`;
-    $('pageInfo').textContent = `${page} / ${totalPages} — нийт ${data.total}`;
-    $('prev').disabled = page <= 1;
-    $('next').disabled = page >= totalPages;
+    usersGridApi.setGridOption('rowData', data.users);
+    // AG Grid v32 doesn't run component cell renderers on a bare setRowData after an empty create;
+    // re-applying the column defs forces a full render with the data present.
+    usersGridApi.setGridOption('columnDefs', USERS_COLS);
   }
 
   // ── Хэрэглэгч засах / устгах ──
@@ -382,7 +421,35 @@
   }
 
   // ── WarKey хэрэглэгчид ──
-  let wkPage = 1, wkTotalPages = 1, wkSearchTerm = '';
+  const wkById = {};
+
+  const WK_COLS = [
+    { headerName: 'Хэрэглэгч', field: 'username', flex: 2, cellRenderer: comp(userRenderer) },
+    { headerName: 'Discord ID', field: 'discord_id', flex: 1.4, cellClass: 'mono' },
+    { headerName: 'Хувилбар', field: 'version', width: 96, cellClass: 'mono' },
+    { headerName: 'Анх орсон', field: 'first_seen', width: 116, valueFormatter: (p) => fmtDate(p.value) },
+    { headerName: 'Сүүлд идэвхтэй', field: 'last_seen', width: 150, valueFormatter: (p) => fmtTime(p.value) },
+    { headerName: 'Төлөв', field: 'online', width: 100, cellRenderer: comp((p) => el(statusBadge(p.value ? 'online' : 'offline'))) },
+    { headerName: '', colId: 'actions', width: 54, sortable: false, filter: false,
+      cellRenderer: comp((p) => el(`<span><button class="iconbtn danger" title="Хяналтаас устгах" onclick="deleteWarkeyUser('${p.data.discord_id}')">🗑</button></span>`)) },
+  ];
+
+  function initWkGrid() {
+    if (wkGridApi) return;
+    wkGridApi = agGrid.createGrid(document.getElementById('wkGrid'), {
+      rowHeight: 24,
+      headerHeight: 26,
+      pagination: true,
+      paginationPageSize: 50,
+      paginationPageSizeSelector: false,
+      suppressCellFocus: true,
+      suppressColumnVirtualisation: true,   // always render every column (incl. the action buttons)
+      getRowId: (p) => String(p.data.discord_id),
+      defaultColDef: { sortable: true, filter: true, resizable: true, minWidth: 80 },
+      columnDefs: WK_COLS,
+      rowData: [],
+    });
+  }
 
   async function loadWarkeySummary() {
     const res = await api('/admin/api/warkey/summary');
@@ -394,36 +461,19 @@
   }
 
   async function loadWarkeyUsers() {
-    const q = new URLSearchParams({ page: String(wkPage), limit: '25' });
-    if (wkSearchTerm) q.set('search', wkSearchTerm);
-    const res = await api('/admin/api/warkey/users?' + q.toString());
-    if (!res.ok) {
-      if (res.status === 401 || res.status === 403) return handleAuth(res);
-      $('wkBody').innerHTML = `<tr><td colspan="6" class="empty">Ачаалж чадсангүй</td></tr>`;
-      return;
-    }
+    initWkGrid();
+    const res = await api('/admin/api/warkey/users?' + new URLSearchParams({ page: '1', limit: '200' }));
+    if (!res.ok) return handleAuth(res);
     const data = await res.json();
-    wkTotalPages = Math.max(1, Math.ceil(data.total / data.limit));
-    $('wkBody').innerHTML = data.users.length
-      ? data.users.map((u) => `<tr>
-          <td>${userCell(u)}</td>
-          <td class="mono">${esc(u.discord_id)}</td>
-          <td class="mono">${esc(u.version || '–')}</td>
-          <td>${fmtDate(u.first_seen)}</td>
-          <td>${fmtTime(u.last_seen)}</td>
-          <td>${statusBadge(u.online ? 'online' : 'offline')}</td>
-          <td style="text-align:right">
-            <button class="iconbtn danger" title="Хяналтаас устгах"
-                    onclick="deleteWarkeyUser('${esc(u.discord_id)}','${esc(u.username || u.discord_id)}')">🗑</button>
-          </td>
-        </tr>`).join('')
-      : `<tr><td colspan="7" class="empty">WarKey хэрэглэгч алга</td></tr>`;
-    $('wkPageInfo').textContent = `${wkPage} / ${wkTotalPages} — нийт ${data.total}`;
-    $('wkPrev').disabled = wkPage <= 1;
-    $('wkNext').disabled = wkPage >= wkTotalPages;
+    for (const k in wkById) delete wkById[k];
+    for (const u of data.users) wkById[u.discord_id] = u;
+    wkGridApi.setGridOption('rowData', data.users);
+    wkGridApi.setGridOption('columnDefs', WK_COLS);   // force component renderers to run (see loadUsers)
   }
 
-  async function deleteWarkeyUser(discordId, name) {
+  async function deleteWarkeyUser(discordId) {
+    const u = wkById[discordId];
+    const name = u ? (u.username || discordId) : discordId;
     if (!confirm(`"${name}" WarKey хэрэглэгчийг хяналтаас устгах уу?\n(Апп-аа дахин нээвэл дахин бүртгэгдэнэ.)`)) return;
     const res = await apiSend('DELETE', '/admin/api/warkey/users/' + encodeURIComponent(discordId));
     if (res.ok) loadWarkeyUsers();
@@ -431,13 +481,6 @@
       const j = await res.json().catch(() => ({}));
       alert(j.error || 'Устгаж чадсангүй');
     }
-  }
-
-  function changeWkPage(delta) {
-    const next = wkPage + delta;
-    if (next < 1 || next > wkTotalPages) return;
-    wkPage = next;
-    loadWarkeyUsers();
   }
 
   async function apiSend(method, path, body) {
@@ -501,24 +544,9 @@
     }
   }
 
-  function changePage(delta) {
-    const next = page + delta;
-    if (next < 1 || next > totalPages) return;
-    page = next;
-    loadUsers();
-  }
-
-  let searchTimer;
-  $('search').addEventListener('input', (e) => {
-    clearTimeout(searchTimer);
-    searchTimer = setTimeout(() => { searchTerm = e.target.value.trim(); page = 1; loadUsers(); }, 300);
-  });
-
-  let wkSearchTimer;
-  $('wkSearch').addEventListener('input', (e) => {
-    clearTimeout(wkSearchTimer);
-    wkSearchTimer = setTimeout(() => { wkSearchTerm = e.target.value.trim(); wkPage = 1; loadWarkeyUsers(); }, 300);
-  });
+  // Search boxes drive AG Grid's quick filter (searches every column).
+  $('search').addEventListener('input', (e) => usersGridApi && usersGridApi.setGridOption('quickFilterText', e.target.value));
+  $('wkSearch').addEventListener('input', (e) => wkGridApi && wkGridApi.setGridOption('quickFilterText', e.target.value));
 
   let refreshTimer;
   async function boot() {
@@ -535,9 +563,10 @@
     show('app');
     loadSummary(); loadOnline(); loadUsers(); loadAdmins();
     loadWarkeySummary(); loadWarkeyUsers();
-    // Онлайн төлөв, тоон үзүүлэлтийг 5 секунд тутам сэргээнэ.
+    // Cards + online жагсаалтыг 5 сек тутам сэргээнэ; хүснэгтүүдийг тогтвортой
+    // байлгахын тулд давтан татахгүй (хуудаслалт/гүйлгээ эвдэхгүй).
     clearInterval(refreshTimer);
-    refreshTimer = setInterval(() => { loadSummary(); loadOnline(); loadWarkeySummary(); loadWarkeyUsers(); }, 5000);
+    refreshTimer = setInterval(() => { loadSummary(); loadOnline(); loadWarkeySummary(); }, 5000);
   }
 
   boot();
