@@ -595,9 +595,69 @@ async function testAdminUserEditDelete() {
   }
 }
 
+async function testWarkeyBanRestore() {
+  const users = new Map();
+  const bans = new Map();
+  const mockDb = {
+    query: async (sql, params = []) => {
+      const s = sql.replace(/\s+/g, ' ').trim();
+      if (s === 'SELECT 1') return { rows: [{ '?column?': 1 }] };
+      if (s === 'SELECT 1 FROM warkey_bans WHERE discord_id = $1')
+        return { rows: bans.has(String(params[0])) ? [{ x: 1 }] : [] };
+      if (s.startsWith('INSERT INTO warkey_users')) { users.set(String(params[0]), { username: params[1], version: params[2] }); return { rows: [], rowCount: 1 }; }
+      if (s.startsWith('SELECT username, version FROM warkey_users')) { const u = users.get(String(params[0])) || {}; return { rows: [{ username: u.username, version: u.version }] }; }
+      if (s.startsWith('INSERT INTO warkey_bans')) { bans.set(String(params[0]), { discord_id: String(params[0]), username: params[1], version: params[2], banned_at: new Date() }); return { rows: [], rowCount: 1 }; }
+      if (s.startsWith('DELETE FROM warkey_users WHERE discord_id')) { users.delete(String(params[0])); return { rows: [], rowCount: 1 }; }
+      if (s.startsWith('SELECT b.discord_id')) { return { rows: [...bans.values()].map((b) => ({ discord_id: b.discord_id, username: b.username, avatar_url: null, version: b.version, banned_by: '999', banned_at: b.banned_at })) }; }
+      if (s.startsWith('DELETE FROM warkey_bans WHERE discord_id')) { const had = bans.delete(String(params[0])); return { rows: [], rowCount: had ? 1 : 0 }; }
+      return { rows: [], rowCount: 0 };
+    },
+  };
+
+  const server = await startServer({ ADMIN_DISCORD_IDS: '999' }, { mockDb });
+  const ah = { Authorization: `Bearer ${makeAuthToken({ id: 1, username: 'Boss', discord_id: '999' })}` };
+  const gh = { Authorization: `Bearer ${makeAuthToken({ id: 7, username: 'Gamer', discord_id: '777' })}`, 'Content-Type': 'application/json' };
+  const beat = () => fetch(`${server.baseUrl}/warkey/heartbeat`, { method: 'POST', headers: gh, body: JSON.stringify({ version: '2.4.0' }) });
+  try {
+    // Works before the ban.
+    let res = await beat();
+    assert.equal(res.status, 200);
+    assert.ok(users.has('777'));
+
+    // Admin "deletes" (bans) the user → moved to the banned list.
+    res = await fetch(`${server.baseUrl}/admin/api/warkey/users/777`, { method: 'DELETE', headers: ah });
+    assert.equal(res.status, 200);
+    assert.ok(bans.has('777'));
+    assert.ok(!users.has('777'));
+
+    res = await fetch(`${server.baseUrl}/admin/api/warkey/banned`, { headers: ah });
+    const bl = await res.json();
+    assert.equal(bl.users.length, 1);
+    assert.equal(bl.users[0].discord_id, '777');
+
+    // The banned user can no longer use WarKey.
+    res = await beat();
+    assert.equal(res.status, 403);
+    assert.equal((await res.json()).error, 'banned');
+    assert.ok(!users.has('777'));
+
+    // Restore → able to use it again.
+    res = await fetch(`${server.baseUrl}/admin/api/warkey/banned/777`, { method: 'DELETE', headers: ah });
+    assert.equal(res.status, 200);
+    assert.ok(!bans.has('777'));
+
+    res = await beat();
+    assert.equal(res.status, 200);
+    assert.ok(users.has('777'));
+  } finally {
+    await server.stop();
+  }
+}
+
 (async () => {
   await runTest('server smoke flow supports register/login/me and guarded auth endpoints', testSmokeFlow);
   await runTest('admin can edit and delete platform users', testAdminUserEditDelete);
+  await runTest('warkey users can be banned, listed, blocked, and restored', testWarkeyBanRestore);
   await runTest('admin dashboard gates its API behind a Discord ID whitelist', testAdminDashboardAccess);
   await runTest('admin whitelist that is empty denies everyone', testAdminEmptyWhitelistDeniesEveryone);
   await runTest('admins can be added and removed by Discord ID from the dashboard', testAdminManagement);

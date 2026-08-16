@@ -108,6 +108,8 @@
     border-radius: 6px; opacity: .75; }
   .iconbtn:hover { opacity: 1; background: var(--panel2); }
   .iconbtn.danger:hover { background: rgba(240,71,71,.18); }
+  .ea-grid .iconbtn.ok { color: var(--ok); font-size: 11px; font-weight: 600; padding: 2px 6px; }
+  .ea-grid .iconbtn.ok:hover { background: rgba(67,181,129,.16); }
 
   /* Modal */
   .modalBg { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: flex; align-items: center;
@@ -176,6 +178,11 @@
       </div>
 
       <div class="section">
+        <h2>🚫 Устгасан (хориглосон) WarKey хэрэглэгчид <span id="bannedCount" class="mono"></span></h2>
+        <div id="bannedGrid" class="ag-theme-quartz ea-grid" style="height:260px"></div>
+      </div>
+
+      <div class="section">
         <h2><span class="dot live"></span> Платформ — одоо онлайн <span id="onlineCount" class="mono"></span></h2>
         <div class="panel">
           <table>
@@ -232,7 +239,7 @@
 <script>
   const $ = (id) => document.getElementById(id);
   let token = localStorage.getItem('admin_token') || '';
-  let usersGridApi = null, wkGridApi = null;
+  let usersGridApi = null, wkGridApi = null, bannedGridApi = null;
 
   // OAuth callback: токен URL fragment-аар ирнэ → хадгалаад hash-ыг цэвэрлэнэ.
   (function grabTokenFromHash() {
@@ -474,12 +481,59 @@
   async function deleteWarkeyUser(discordId) {
     const u = wkById[discordId];
     const name = u ? (u.username || discordId) : discordId;
-    if (!confirm(`"${name}" WarKey хэрэглэгчийг хяналтаас устгах уу?\n(Апп-аа дахин нээвэл дахин бүртгэгдэнэ.)`)) return;
+    if (!confirm(`"${name}"-г устгах (хориглох) уу?\nТэр WarKey ашиглах боломжгүй болно. Доорх "Устгасан" жагсаалтаас сэргээж болно.`)) return;
     const res = await apiSend('DELETE', '/admin/api/warkey/users/' + encodeURIComponent(discordId));
-    if (res.ok) loadWarkeyUsers();
+    if (res.ok) { loadWarkeyUsers(); loadBannedUsers(); }
     else {
       const j = await res.json().catch(() => ({}));
       alert(j.error || 'Устгаж чадсангүй');
+    }
+  }
+
+  // ── Устгасан (хориглосон) WarKey хэрэглэгчид ──
+  const BANNED_COLS = [
+    { headerName: 'Хэрэглэгч', field: 'username', flex: 2, cellRenderer: comp(userRenderer) },
+    { headerName: 'Discord ID', field: 'discord_id', flex: 1.4, cellClass: 'mono' },
+    { headerName: 'Хувилбар', field: 'version', width: 96, cellClass: 'mono' },
+    { headerName: 'Устгасан огноо', field: 'banned_at', width: 150, valueFormatter: (p) => fmtTime(p.value) },
+    { headerName: '', colId: 'actions', width: 96, sortable: false, filter: false,
+      cellRenderer: comp((p) => el(`<span><button class="iconbtn ok" title="Сэргээх" onclick="restoreWarkeyUser('${p.data.discord_id}')">↩ Сэргээх</button></span>`)) },
+  ];
+
+  function initBannedGrid() {
+    if (bannedGridApi) return;
+    bannedGridApi = agGrid.createGrid(document.getElementById('bannedGrid'), {
+      rowHeight: 24,
+      headerHeight: 26,
+      pagination: true,
+      paginationPageSize: 50,
+      paginationPageSizeSelector: false,
+      suppressCellFocus: true,
+      suppressColumnVirtualisation: true,
+      getRowId: (p) => String(p.data.discord_id),
+      defaultColDef: { sortable: true, filter: true, resizable: true, minWidth: 80 },
+      columnDefs: BANNED_COLS,
+      rowData: [],
+    });
+  }
+
+  async function loadBannedUsers() {
+    initBannedGrid();
+    const res = await api('/admin/api/warkey/banned');
+    if (!res.ok) return handleAuth(res);
+    const data = await res.json();
+    bannedGridApi.setGridOption('rowData', data.users);
+    bannedGridApi.setGridOption('columnDefs', BANNED_COLS);
+    $('bannedCount').textContent = `(${data.users.length})`;
+  }
+
+  async function restoreWarkeyUser(discordId) {
+    if (!confirm('Энэ хэрэглэгчийг сэргээх үү? Дахин WarKey ашиглах боломжтой болно.')) return;
+    const res = await apiSend('DELETE', '/admin/api/warkey/banned/' + encodeURIComponent(discordId));
+    if (res.ok) { loadBannedUsers(); loadWarkeyUsers(); }
+    else {
+      const j = await res.json().catch(() => ({}));
+      alert(j.error || 'Сэргээж чадсангүй');
     }
   }
 
@@ -562,7 +616,7 @@
     $('whoName').textContent = admin.username || 'Admin';
     show('app');
     loadSummary(); loadOnline(); loadUsers(); loadAdmins();
-    loadWarkeySummary(); loadWarkeyUsers();
+    loadWarkeySummary(); loadWarkeyUsers(); loadBannedUsers();
     // Cards + online жагсаалтыг 5 сек тутам сэргээнэ; хүснэгтүүдийг тогтвортой
     // байлгахын тулд давтан татахгүй (хуудаслалт/гүйлгээ эвдэхгүй).
     clearInterval(refreshTimer);

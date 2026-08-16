@@ -134,3 +134,13 @@ CREATE TABLE IF NOT EXISTS warkey_users (
   last_seen  TIMESTAMP DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_warkey_users_last_seen ON warkey_users(last_seen DESC);
+
+-- Хориглосон (устгасан) WarKey хэрэглэгчид. Эдгээр Discord ID-ийн heartbeat-ыг татгалзаж,
+-- апп ашиглах боломжгүй болгоно. Dashboard-оос сэргээвэл (устгавал) дахин ашиглана.
+CREATE TABLE IF NOT EXISTS warkey_bans (
+  discord_id VARCHAR(255) PRIMARY KEY,
+  username   VARCHAR(255),
+  version    VARCHAR(50),
+  banned_by  VARCHAR(255),
+  banned_at  TIMESTAMP DEFAULT NOW()
+);

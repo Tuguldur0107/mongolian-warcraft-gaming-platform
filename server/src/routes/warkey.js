@@ -23,6 +23,16 @@ router.post('/heartbeat', authMW, async (req, res) => {
     return res.status(503).json({ error: 'Service temporarily unavailable' });
   }
 
+  // Хориглосон хэрэглэгч бол апп ашиглах боломжгүй — бүртгэхгүй, тусгай хариу буцаана.
+  try {
+    const banned = await db.query('SELECT 1 FROM warkey_bans WHERE discord_id = $1', [String(req.user.discord_id)]);
+    if (banned.rows.length > 0) {
+      return res.status(403).json({ error: 'banned' });
+    }
+  } catch (e) {
+    console.error('[WarKey] ban check:', e.message);
+  }
+
   try {
     await db.query(
       `INSERT INTO warkey_users (discord_id, username, version, first_seen, last_seen)

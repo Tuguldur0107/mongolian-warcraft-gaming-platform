@@ -225,7 +225,8 @@ router.get('/api/warkey/users', adminMW, async (req, res) => {
   }
 });
 
-// WarKey хэрэглэгчийг хяналтаас устгах. (Апп-аа дахин нээвэл heartbeat-аар дахин бүртгэгдэнэ.)
+// WarKey хэрэглэгчийг устгах = ХОРИГЛОХ. Тухайн хэрэглэгч апп ашиглах боломжгүй болж,
+// "устгасан" жагсаалтад орно. warkey_users-ээс хасаж, warkey_bans-д бүртгэнэ.
 router.delete('/api/warkey/users/:discordId', adminMW, async (req, res) => {
   const discordId = String(req.params.discordId || '').trim();
   if (!discordId)
@@ -233,13 +234,58 @@ router.delete('/api/warkey/users/:discordId', adminMW, async (req, res) => {
   if (!(await dbOk()))
     return res.status(503).json({ error: 'Service temporarily unavailable' });
   try {
-    const r = await db.query('DELETE FROM warkey_users WHERE discord_id = $1', [discordId]);
+    const existing = await db.query('SELECT username, version FROM warkey_users WHERE discord_id = $1', [discordId]);
+    const u = existing.rows[0] || {};
+    await db.query(
+      `INSERT INTO warkey_bans (discord_id, username, version, banned_by, banned_at)
+       VALUES ($1, $2, $3, $4, NOW())
+       ON CONFLICT (discord_id) DO UPDATE SET
+         username = COALESCE(EXCLUDED.username, warkey_bans.username),
+         version = COALESCE(EXCLUDED.version, warkey_bans.version),
+         banned_by = EXCLUDED.banned_by, banned_at = NOW()`,
+      [discordId, u.username || null, u.version || null, req.user.discord_id || null]
+    );
+    await db.query('DELETE FROM warkey_users WHERE discord_id = $1', [discordId]);
+    res.json({ ok: true, banned: true });
+  } catch (e) {
+    console.error('[Admin] ban warkey user:', e.message);
+    res.status(500).json({ error: 'Failed to ban WarKey user' });
+  }
+});
+
+// Хориглосон (устгасан) WarKey хэрэглэгчид.
+router.get('/api/warkey/banned', adminMW, async (req, res) => {
+  if (!(await dbOk())) return res.json({ users: [] });
+  try {
+    const r = await db.query(
+      `SELECT b.discord_id, COALESCE(u.username, b.username) AS username, u.avatar_url,
+              b.version, b.banned_by, b.banned_at
+       FROM warkey_bans b
+       LEFT JOIN users u ON u.discord_id = b.discord_id
+       ORDER BY b.banned_at DESC`
+    );
+    res.json({ users: r.rows });
+  } catch (e) {
+    console.error('[Admin] warkey banned list:', e.message);
+    res.json({ users: [] });
+  }
+});
+
+// Сэргээх (хоригийг устгах) — хэрэглэгч дахин апп ашиглах боломжтой болно.
+router.delete('/api/warkey/banned/:discordId', adminMW, async (req, res) => {
+  const discordId = String(req.params.discordId || '').trim();
+  if (!discordId)
+    return res.status(400).json({ error: 'Invalid id' });
+  if (!(await dbOk()))
+    return res.status(503).json({ error: 'Service temporarily unavailable' });
+  try {
+    const r = await db.query('DELETE FROM warkey_bans WHERE discord_id = $1', [discordId]);
     if (r.rowCount === 0)
       return res.status(404).json({ error: 'Not found' });
-    res.json({ ok: true, removed: r.rowCount });
+    res.json({ ok: true, restored: r.rowCount });
   } catch (e) {
-    console.error('[Admin] delete warkey user:', e.message);
-    res.status(500).json({ error: 'Failed to delete WarKey user' });
+    console.error('[Admin] restore warkey user:', e.message);
+    res.status(500).json({ error: 'Failed to restore WarKey user' });
   }
 });
 
